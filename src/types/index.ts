@@ -27,6 +27,8 @@ export interface Restaurante {
   plan: Plan
   plan_expira: string
   idioma: string
+  color_principal: string
+  tema: 'claro' | 'oscuro' | 'natural' | 'premium'
   created_at: string
 }
 
