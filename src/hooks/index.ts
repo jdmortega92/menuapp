@@ -81,6 +81,8 @@ export function usePlan(plan: Plan) {
       verHorariosPico: esBasico || esPro,
       marcarAgotado: esBasico || esPro,
       menuPorHorario: esBasico || esPro,
+      personalizarColor: esBasico || esPro,
+      personalizarBanner: esBasico || esPro,
       crearCombos: esPro,
       crearPromos: esPro,
       platoDia: esPro,
