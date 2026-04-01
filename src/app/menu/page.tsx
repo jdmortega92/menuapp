@@ -23,6 +23,33 @@ export default function MiMenuPage() {
   const [nombreEditCategoria, setNombreEditCategoria] = useState('')
   const [platoExpandido, setPlatoExpandido] = useState<string | null>(null)
   const [editPlato, setEditPlato] = useState({ nombre: '', precio: '', descripcion: '' })
+  const [subTab, setSubTab] = useState<'combos' | 'promos' | 'plato-dia'>('combos')
+  const [mostrarFormCombo, setMostrarFormCombo] = useState(false)
+  const [mostrarFormPromo, setMostrarFormPromo] = useState(false)
+  const [nuevoCombo, setNuevoCombo] = useState({ nombre: '', platoIds: [] as string[], precio: '' })
+  const [nuevaPromo, setNuevaPromo] = useState({ nombre: '', tipo: '', valor: '', dias: [] as string[] })
+  const [platoDiaConfig, setPlatoDiaConfig] = useState({ platoId: '', precioEspecial: '', horaInicio: '11:00', horaFin: '15:00' })
+
+  const [combos, setCombos] = useState([
+    { id: 'cb1', nombre: 'Combo paisa', platos: ['Bandeja paisa', 'Limonada de coco'], precio: 22000, precioIndividual: 24000, activo: true },
+  ])
+  const [promos, setPromos] = useState([
+    { id: 'pr1', nombre: 'Happy Hour Bebidas', tipo: 'dos_por_uno', valor: '', dias: ['vie', 'sab'], activo: true },
+  ])
+
+  
+
+  function agregarPromo() {
+    if (!nuevaPromo.nombre || !nuevaPromo.tipo || nuevaPromo.dias.length === 0) return
+    setPromos([...promos, {
+      id: Date.now().toString(), nombre: nuevaPromo.nombre, tipo: nuevaPromo.tipo,
+      valor: nuevaPromo.valor, dias: nuevaPromo.dias, activo: true,
+    }])
+    setNuevaPromo({ nombre: '', tipo: '', valor: '', dias: [] })
+    setMostrarFormPromo(false)
+  }
+  function togglePromo(id: string) { setPromos(promos.map(p => p.id === id ? { ...p, activo: !p.activo } : p)) }
+  function eliminarPromo(id: string) { setPromos(promos.filter(p => p.id !== id)) }
 
   const MAX_DESC = 150
 
@@ -43,6 +70,22 @@ export default function MiMenuPage() {
       ],
     },
   ])
+  const precioIndividualCombo = nuevoCombo.platoIds.reduce((sum, id) => {
+    const plato = categorias.flatMap(c => c.platos).find(p => p.id === id)
+    return sum + (plato?.precio || 0)
+  }, 0)
+  function agregarCombo() {
+    if (!nuevoCombo.nombre || nuevoCombo.platoIds.length < 2 || !nuevoCombo.precio) return
+    const platosNombres = nuevoCombo.platoIds.map(id => categorias.flatMap(c => c.platos).find(p => p.id === id)?.nombre || '')
+    setCombos([...combos, {
+      id: Date.now().toString(), nombre: nuevoCombo.nombre, platos: platosNombres,
+      precio: parseInt(nuevoCombo.precio), precioIndividual: precioIndividualCombo, activo: true,
+    }])
+    setNuevoCombo({ nombre: '', platoIds: [], precio: '' })
+    setMostrarFormCombo(false)
+  }
+  function toggleCombo(id: string) { setCombos(combos.map(c => c.id === id ? { ...c, activo: !c.activo } : c)) }
+  function eliminarCombo(id: string) { setCombos(combos.filter(c => c.id !== id)) }
 
   // ── Categorías ──
   function agregarCategoria() {
@@ -158,10 +201,12 @@ export default function MiMenuPage() {
         {/* Header */}
         <div style={{ padding: '16px 20px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ fontSize: '18px', fontWeight: 500 }}>Mi menú</div>
-          <button onClick={() => tabActiva === 'platos' ? setMostrarFormCategoria(true) : null}
-            className="btn-primary" style={{ padding: '8px 14px', fontSize: '13px' }}>
-            {tabActiva === 'platos' ? '+ Categoría' : '+ Combo'}
-          </button>
+          {tabActiva === 'platos' && (
+            <button onClick={() => setMostrarFormCategoria(true)}
+              className="btn-primary" style={{ padding: '8px 14px', fontSize: '13px' }}>
+              + Categoría
+            </button>
+          )}
         </div>
 
         {/* Tabs */}
@@ -374,11 +419,263 @@ export default function MiMenuPage() {
         )}
 
         {tabActiva === 'combos' && (
-          <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-tertiary)' }}>
-            <div style={{ fontSize: '40px', marginBottom: '12px' }}>🏷️</div>
-            <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '4px' }}>Combos y promos</div>
-            <div style={{ fontSize: '13px' }}>Próximamente</div>
-          </div>
+          <>
+            {/* Sub-tabs */}
+            <div style={{ padding: '12px 20px 0', display: 'flex', gap: '8px' }}>
+              {['combos', 'promos', 'plato-dia'].map((sub) => (
+                <div key={sub} onClick={() => setSubTab(sub as typeof subTab)}
+                  style={{
+                    padding: '7px 14px', borderRadius: '20px', fontSize: '12px', cursor: 'pointer',
+                    background: subTab === sub ? 'var(--text-primary)' : 'var(--bg-secondary)',
+                    color: subTab === sub ? 'var(--bg-secondary)' : 'var(--text-secondary)',
+                    border: subTab === sub ? 'none' : '1px solid var(--border-light)',
+                  }}>
+                  {sub === 'combos' ? 'Combos' : sub === 'promos' ? 'Promos' : 'Plato del día'}
+                </div>
+              ))}
+            </div>
+
+            {/* === COMBOS === */}
+            {subTab === 'combos' && (
+              <div style={{ padding: '14px 20px' }}>
+                {combos.length === 0 && !mostrarFormCombo ? (
+                  <div style={{ textAlign: 'center', padding: '30px 0' }}>
+                    <div style={{ fontSize: '32px', marginBottom: '8px' }}>🍱</div>
+                    <div style={{ fontSize: '14px', fontWeight: 500, marginBottom: '4px' }}>Sin combos</div>
+                    <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '16px' }}>Crea paquetes de platos con descuento</div>
+                    <button onClick={() => setMostrarFormCombo(true)} className="btn-primary" style={{ padding: '10px 20px', fontSize: '13px' }}>+ Crear combo</button>
+                  </div>
+                ) : (
+                  <>
+                    {!mostrarFormCombo && (
+                      <button onClick={() => setMostrarFormCombo(true)} className="btn-primary" style={{ padding: '8px 14px', fontSize: '13px', marginBottom: '14px' }}>+ Crear combo</button>
+                    )}
+                  </>
+                )}
+
+                {mostrarFormCombo && (
+                  <div className="card" style={{ padding: '14px', marginBottom: '14px' }}>
+                    <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '10px' }}>Nuevo combo</div>
+                    <input className="input" placeholder="Nombre del combo (ej: Combo paisa)" value={nuevoCombo.nombre}
+                      onChange={(e) => setNuevoCombo({ ...nuevoCombo, nombre: e.target.value })} style={{ marginBottom: '8px' }} />
+                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Selecciona los platos:</div>
+                    <div style={{ maxHeight: '160px', overflowY: 'auto', marginBottom: '8px' }}>
+                      {categorias.flatMap(c => c.platos).map(p => (
+                        <div key={p.id} onClick={() => {
+                          const sel = nuevoCombo.platoIds.includes(p.id)
+                            ? nuevoCombo.platoIds.filter(id => id !== p.id)
+                            : [...nuevoCombo.platoIds, p.id]
+                          setNuevoCombo({ ...nuevoCombo, platoIds: sel })
+                        }} style={{
+                          padding: '8px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                          borderBottom: '1px solid var(--border-light)', cursor: 'pointer',
+                          background: nuevoCombo.platoIds.includes(p.id) ? 'var(--color-info-light)' : 'transparent',
+                        }}>
+                          <span style={{ fontSize: '12px' }}>{p.nombre}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>${p.precio.toLocaleString('es-CO')}</span>
+                            {nuevoCombo.platoIds.includes(p.id) && <span style={{ color: 'var(--color-info)', fontSize: '12px' }}>✓</span>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <input className="input" type="number" placeholder="Precio del combo" value={nuevoCombo.precio}
+                      onChange={(e) => setNuevoCombo({ ...nuevoCombo, precio: e.target.value })} style={{ marginBottom: '8px' }} />
+                    {nuevoCombo.platoIds.length > 0 && nuevoCombo.precio && (
+                      <div style={{ fontSize: '12px', color: 'var(--color-green)', marginBottom: '8px' }}>
+                        Ahorro: ${(precioIndividualCombo - parseInt(nuevoCombo.precio || '0')).toLocaleString('es-CO')} ({Math.round(((precioIndividualCombo - parseInt(nuevoCombo.precio || '0')) / precioIndividualCombo) * 100)}% descuento)
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button onClick={agregarCombo} className="btn-primary" style={{ flex: 1, padding: '10px', fontSize: '13px' }}>Crear</button>
+                      <button onClick={() => setMostrarFormCombo(false)} className="btn-outline" style={{ flex: 1, padding: '10px', fontSize: '13px' }}>Cancelar</button>
+                    </div>
+                  </div>
+                )}
+
+                {combos.map((combo) => (
+                  <div key={combo.id} className="card" style={{ padding: '14px', marginBottom: '8px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
+                      <div>
+                        <div style={{ fontSize: '14px', fontWeight: 500 }}>{combo.nombre}</div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>{combo.platos.join(' + ')}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
+                          <span style={{ fontSize: '14px', fontWeight: 500 }}>${combo.precio.toLocaleString('es-CO')}</span>
+                          <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', textDecoration: 'line-through' }}>${combo.precioIndividual.toLocaleString('es-CO')}</span>
+                          <span className="badge badge-success">Ahorras ${(combo.precioIndividual - combo.precio).toLocaleString('es-CO')}</span>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div onClick={() => toggleCombo(combo.id)} style={{
+                          width: '36px', height: '20px', borderRadius: '10px',
+                          background: combo.activo ? 'var(--color-info)' : 'var(--border-light)',
+                          position: 'relative', cursor: 'pointer',
+                        }}>
+                          <div style={{ width: '16px', height: '16px', borderRadius: '50%', background: 'white', position: 'absolute', top: '2px', left: combo.activo ? '18px' : '2px', transition: 'left 0.2s' }} />
+                        </div>
+                        <span onClick={() => eliminarCombo(combo.id)} style={{ fontSize: '12px', color: 'var(--color-danger)', cursor: 'pointer' }}>✕</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* === PROMOS === */}
+            {subTab === 'promos' && (
+              <div style={{ padding: '14px 20px' }}>
+                {promos.length === 0 && !mostrarFormPromo ? (
+                  <div style={{ textAlign: 'center', padding: '30px 0' }}>
+                    <div style={{ fontSize: '32px', marginBottom: '8px' }}>🏷️</div>
+                    <div style={{ fontSize: '14px', fontWeight: 500, marginBottom: '4px' }}>Sin promociones</div>
+                    <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '16px' }}>Crea ofertas para atraer más clientes</div>
+                    <button onClick={() => setMostrarFormPromo(true)} className="btn-primary" style={{ padding: '10px 20px', fontSize: '13px' }}>+ Crear promo</button>
+                  </div>
+                ) : (
+                  <>
+                    {!mostrarFormPromo && (
+                      <button onClick={() => setMostrarFormPromo(true)} className="btn-primary" style={{ padding: '8px 14px', fontSize: '13px', marginBottom: '14px' }}>+ Crear promo</button>
+                    )}
+                  </>
+                )}
+
+                {mostrarFormPromo && (
+                  <div className="card" style={{ padding: '14px', marginBottom: '14px' }}>
+                    <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '10px' }}>Nueva promoción</div>
+                    <input className="input" placeholder="Nombre (ej: Happy Hour)" value={nuevaPromo.nombre}
+                      onChange={(e) => setNuevaPromo({ ...nuevaPromo, nombre: e.target.value })} style={{ marginBottom: '8px' }} />
+                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Tipo de promo:</div>
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '10px' }}>
+                      {[
+                        { id: 'dos_por_uno', label: '2x1' },
+                        { id: 'descuento', label: '% Descuento' },
+                        { id: 'precio_especial', label: 'Precio especial' },
+                      ].map(t => (
+                        <div key={t.id} onClick={() => setNuevaPromo({ ...nuevaPromo, tipo: t.id })} style={{
+                          padding: '7px 12px', borderRadius: '8px', fontSize: '12px', cursor: 'pointer',
+                          background: nuevaPromo.tipo === t.id ? 'var(--text-primary)' : 'var(--bg-secondary)',
+                          color: nuevaPromo.tipo === t.id ? 'white' : 'var(--text-secondary)',
+                          border: nuevaPromo.tipo === t.id ? 'none' : '1px solid var(--border-light)',
+                        }}>{t.label}</div>
+                      ))}
+                    </div>
+                    {nuevaPromo.tipo === 'descuento' && (
+                      <input className="input" type="number" placeholder="Porcentaje (ej: 20)" value={nuevaPromo.valor}
+                        onChange={(e) => setNuevaPromo({ ...nuevaPromo, valor: e.target.value })} style={{ marginBottom: '8px' }} />
+                    )}
+                    {nuevaPromo.tipo === 'precio_especial' && (
+                      <input className="input" type="number" placeholder="Precio especial" value={nuevaPromo.valor}
+                        onChange={(e) => setNuevaPromo({ ...nuevaPromo, valor: e.target.value })} style={{ marginBottom: '8px' }} />
+                    )}
+                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Días activos:</div>
+                    <div style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}>
+                      {['L', 'M', 'Mi', 'J', 'V', 'S', 'D'].map((d, i) => {
+                        const dias = ['lun', 'mar', 'mie', 'jue', 'vie', 'sab', 'dom']
+                        const sel = nuevaPromo.dias.includes(dias[i])
+                        return (
+                          <div key={d} onClick={() => {
+                            setNuevaPromo({ ...nuevaPromo, dias: sel ? nuevaPromo.dias.filter(x => x !== dias[i]) : [...nuevaPromo.dias, dias[i]] })
+                          }} style={{
+                            width: '32px', height: '32px', borderRadius: '50%', display: 'flex',
+                            alignItems: 'center', justifyContent: 'center', fontSize: '11px', cursor: 'pointer',
+                            background: sel ? 'var(--text-primary)' : 'var(--bg-secondary)',
+                            color: sel ? 'white' : 'var(--text-secondary)',
+                            border: sel ? 'none' : '1px solid var(--border-light)',
+                          }}>{d}</div>
+                        )
+                      })}
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button onClick={agregarPromo} className="btn-primary" style={{ flex: 1, padding: '10px', fontSize: '13px' }}>Crear</button>
+                      <button onClick={() => setMostrarFormPromo(false)} className="btn-outline" style={{ flex: 1, padding: '10px', fontSize: '13px' }}>Cancelar</button>
+                    </div>
+                  </div>
+                )}
+
+                {promos.map((promo) => (
+                  <div key={promo.id} className="card" style={{ padding: '14px', marginBottom: '8px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
+                      <div>
+                        <div style={{ fontSize: '14px', fontWeight: 500 }}>{promo.nombre}</div>
+                        <div style={{ display: 'flex', gap: '6px', marginTop: '6px', flexWrap: 'wrap' }}>
+                          <span className="badge badge-warning">{promo.tipo === 'dos_por_uno' ? '2x1' : promo.tipo === 'descuento' ? `${promo.valor}% off` : `$${parseInt(promo.valor || '0').toLocaleString('es-CO')}`}</span>
+                          <span className="badge badge-neutral">{promo.dias.join(', ')}</span>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div onClick={() => togglePromo(promo.id)} style={{
+                          width: '36px', height: '20px', borderRadius: '10px',
+                          background: promo.activo ? 'var(--color-info)' : 'var(--border-light)',
+                          position: 'relative', cursor: 'pointer',
+                        }}>
+                          <div style={{ width: '16px', height: '16px', borderRadius: '50%', background: 'white', position: 'absolute', top: '2px', left: promo.activo ? '18px' : '2px', transition: 'left 0.2s' }} />
+                        </div>
+                        <span onClick={() => eliminarPromo(promo.id)} style={{ fontSize: '12px', color: 'var(--color-danger)', cursor: 'pointer' }}>✕</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* === PLATO DEL DÍA === */}
+            {subTab === 'plato-dia' && (
+              <div style={{ padding: '14px 20px' }}>
+                <div className="card" style={{ padding: '14px', marginBottom: '14px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '10px' }}>Configurar plato del día</div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px' }}>Selecciona un plato:</div>
+                  <select className="input" value={platoDiaConfig.platoId}
+                    onChange={(e) => setPlatoDiaConfig({ ...platoDiaConfig, platoId: e.target.value })}
+                    style={{ appearance: 'none', marginBottom: '8px' }}>
+                    <option value="">Seleccionar plato</option>
+                    {categorias.flatMap(c => c.platos).map(p => (
+                      <option key={p.id} value={p.id}>{p.nombre} — ${p.precio.toLocaleString('es-CO')}</option>
+                    ))}
+                  </select>
+                  <input className="input" type="number" placeholder="Precio especial" value={platoDiaConfig.precioEspecial}
+                    onChange={(e) => setPlatoDiaConfig({ ...platoDiaConfig, precioEspecial: e.target.value })} style={{ marginBottom: '8px' }} />
+                  <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                    <div style={{ flex: 1 }}>
+                      <label className="label">Desde</label>
+                      <input className="input" type="time" value={platoDiaConfig.horaInicio}
+                        onChange={(e) => setPlatoDiaConfig({ ...platoDiaConfig, horaInicio: e.target.value })} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <label className="label">Hasta</label>
+                      <input className="input" type="time" value={platoDiaConfig.horaFin}
+                        onChange={(e) => setPlatoDiaConfig({ ...platoDiaConfig, horaFin: e.target.value })} />
+                    </div>
+                  </div>
+
+                  {platoDiaConfig.platoId && platoDiaConfig.precioEspecial && (
+                    <div style={{
+                      background: 'var(--color-accent-light)', borderRadius: '8px', padding: '12px', marginBottom: '10px',
+                    }}>
+                      <div style={{ fontSize: '11px', fontWeight: 500, color: 'var(--color-accent)', marginBottom: '4px' }}>Vista previa</div>
+                      <div style={{ fontSize: '14px', fontWeight: 500 }}>
+                        {categorias.flatMap(c => c.platos).find(p => p.id === platoDiaConfig.platoId)?.nombre}
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px' }}>
+                        <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', textDecoration: 'line-through' }}>
+                          ${categorias.flatMap(c => c.platos).find(p => p.id === platoDiaConfig.platoId)?.precio.toLocaleString('es-CO')}
+                        </span>
+                        <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--color-accent)' }}>
+                          ${parseInt(platoDiaConfig.precioEspecial).toLocaleString('es-CO')}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                        {platoDiaConfig.horaInicio} — {platoDiaConfig.horaFin}
+                      </div>
+                    </div>
+                  )}
+
+                  <button onClick={() => { if (platoDiaConfig.platoId) alert('Plato del día guardado') }} className="btn-primary" style={{ width: '100%', padding: '12px', fontSize: '13px' }}>
+                    Guardar plato del día
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
 
         {/* Bottom nav */}
