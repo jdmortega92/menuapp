@@ -17,6 +17,11 @@ export default function MenuPublicoPage() {
   const [mostrarPedido, setMostrarPedido] = useState(false)
   const [mostrarSorpresa, setMostrarSorpresa] = useState(false)
   const [platoDetalle, setPlatoDetalle] = useState<string | null>(null)
+  const [platoCalificar, setPlatoCalificar] = useState<string | null>(null)
+  const [calEstrellas, setCalEstrellas] = useState(0)
+  const [calTags, setCalTags] = useState<string[]>([])
+  const [calComentario, setCalComentario] = useState('')
+  const [calEnviada, setCalEnviada] = useState(false)
 
   const restaurante = {
     nombre: 'La Parrilla de Juan', tipo: 'Restaurante', ciudad: 'Medellín',
@@ -330,7 +335,132 @@ export default function MenuPublicoPage() {
             </div>
           </>
         )}
+        {/* Modal calificar plato */}
+        {platoCalificar && (() => {
+          const plato = todosLosPlatos.find(p => p.id === platoCalificar)
+          if (!plato) return null
+          const tagsDisponibles = [
+            { id: 'buena_porcion', label: 'Buena porción' },
+            { id: 'buen_sabor', label: 'Buen sabor' },
+            { id: 'buena_presentacion', label: 'Buena presentación' },
+            { id: 'buen_precio', label: 'Buen precio' },
+            { id: 'rapido', label: 'Rápido' },
+            { id: 'fresco', label: 'Fresco' },
+          ]
+          const textoEstrellas = ['', 'Malo', 'Regular', 'Bueno', 'Muy bueno', 'Excelente']
 
+          function toggleTag(id: string) {
+            setCalTags(calTags.includes(id) ? calTags.filter(t => t !== id) : [...calTags, id])
+          }
+
+          function enviarCalificacion() {
+            if (calEstrellas === 0) return
+            setCalEnviada(true)
+            setTimeout(() => { setPlatoCalificar(null); setCalEnviada(false) }, 2000)
+          }
+
+          if (calEnviada) {
+            return (
+              <>
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 60 }} />
+                <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 70, background: 'var(--bg-secondary)', borderRadius: '16px 16px 0 0', padding: '40px 20px', textAlign: 'center', animation: 'slideUp 0.3s ease' }}>
+                  <div style={{ fontSize: '40px', marginBottom: '12px' }}>✓</div>
+                  <div style={{ fontSize: '18px', fontWeight: 500, marginBottom: '6px' }}>¡Gracias!</div>
+                  <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Tu calificación ayuda a otros comensales</div>
+                </div>
+              </>
+            )
+          }
+
+          return (
+            <>
+              <div onClick={() => setPlatoCalificar(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 60 }} />
+              <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 70, background: 'var(--bg-secondary)', borderRadius: '16px 16px 0 0', maxHeight: '85vh', overflowY: 'auto', animation: 'slideUp 0.3s ease' }}>
+
+                {/* Header */}
+                <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-light)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '16px', fontWeight: 500 }}>Calificar plato</span>
+                  <span onClick={() => setPlatoCalificar(null)} style={{ fontSize: '18px', color: 'var(--text-tertiary)', cursor: 'pointer' }}>✕</span>
+                </div>
+
+                <div style={{ padding: '16px 20px' }}>
+
+                  {/* Plato que va a calificar */}
+                  <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-light)', borderRadius: '10px', padding: '12px', display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+                    <div style={{ width: '48px', height: '48px', borderRadius: '8px', background: `${color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', fontWeight: 500, color: color, flexShrink: 0 }}>{plato.nombre.charAt(0)}</div>
+                    <div>
+                      <div style={{ fontSize: '14px', fontWeight: 500 }}>{plato.nombre}</div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>{restaurante.nombre}</div>
+                    </div>
+                  </div>
+
+                  {/* Estrellas */}
+                  <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+                    <div style={{ fontSize: '14px', fontWeight: 500, marginBottom: '12px' }}>¿Qué te pareció?</div>
+                    <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', marginBottom: '8px' }}>
+                      {[1, 2, 3, 4, 5].map(n => (
+                        <span key={n} onClick={() => setCalEstrellas(n)} style={{
+                          fontSize: '36px', cursor: 'pointer',
+                          color: n <= calEstrellas ? '#F2A623' : 'var(--border-light)',
+                          transition: 'transform 0.15s',
+                          transform: n <= calEstrellas ? 'scale(1.1)' : 'scale(1)',
+                        }}>★</span>
+                      ))}
+                    </div>
+                    {calEstrellas > 0 && <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{textoEstrellas[calEstrellas]}</div>}
+                  </div>
+
+                  {/* Tags rápidos */}
+                  <div style={{ marginBottom: '20px' }}>
+                    <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '10px' }}>¿Qué destacas? (opcional)</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                      {tagsDisponibles.map(tag => (
+                        <div key={tag.id} onClick={() => toggleTag(tag.id)} style={{
+                          padding: '8px 14px', borderRadius: '20px', fontSize: '12px', cursor: 'pointer',
+                          background: calTags.includes(tag.id) ? 'var(--text-primary)' : 'var(--bg-secondary)',
+                          color: calTags.includes(tag.id) ? 'white' : 'var(--text-secondary)',
+                          border: calTags.includes(tag.id) ? '1px solid var(--text-primary)' : '1px solid var(--border-light)',
+                          transition: 'all 0.15s',
+                        }}>{tag.label}</div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Comentario */}
+                  <div style={{ marginBottom: '20px' }}>
+                    <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '6px' }}>Comentario (opcional)</div>
+                    <div style={{ position: 'relative' }}>
+                      <textarea value={calComentario} onChange={(e) => { if (e.target.value.length <= 200) setCalComentario(e.target.value) }}
+                        placeholder="Cuéntanos más sobre tu experiencia..."
+                        style={{
+                          width: '100%', padding: '12px', border: '1px solid var(--border-light)', borderRadius: '10px',
+                          fontSize: '13px', fontFamily: 'var(--font-body)', outline: 'none', resize: 'none', minHeight: '80px',
+                        }} />
+                      <span style={{ position: 'absolute', right: '12px', bottom: '8px', fontSize: '10px', color: calComentario.length > 180 ? 'var(--color-warning)' : 'var(--text-tertiary)' }}>
+                        {calComentario.length}/200
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Enviar */}
+                  <div onClick={enviarCalificacion} style={{
+                    background: calEstrellas > 0 ? 'var(--text-primary)' : 'var(--border-light)',
+                    color: calEstrellas > 0 ? 'white' : 'var(--text-tertiary)',
+                    borderRadius: '12px', padding: '16px', textAlign: 'center',
+                    fontSize: '15px', fontWeight: 500, cursor: calEstrellas > 0 ? 'pointer' : 'default',
+                    marginBottom: '12px',
+                  }}>
+                    Enviar calificación
+                  </div>
+
+                  <div style={{ textAlign: 'center', fontSize: '11px', color: 'var(--text-tertiary)' }}>
+                    Tu reseña es anónima y ayuda a otros comensales
+                  </div>
+                </div>
+              </div>
+            </>
+          )
+        })()}
         {/* Modal detalle plato */}
         {platoDetalle && (() => {
           const plato = todosLosPlatos.find(p => p.id === platoDetalle)
@@ -378,7 +508,7 @@ export default function MenuPublicoPage() {
                           </div>
                         ))}
                       </div>
-                      <div style={{ border: '1px dashed var(--border-medium)', borderRadius: '10px', padding: '14px', textAlign: 'center', cursor: 'pointer', marginBottom: '16px' }}>
+                     <div onClick={() => { setPlatoCalificar(plato.id); setPlatoDetalle(null); setCalEstrellas(0); setCalTags([]); setCalComentario(''); setCalEnviada(false) }} style={{ border: '1px dashed var(--border-medium)', borderRadius: '10px', padding: '14px', textAlign: 'center', cursor: 'pointer', marginBottom: '16px' }}>
                         <div style={{ fontSize: '13px', fontWeight: 500 }}>Calificar este plato</div>
                         <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>Comparte tu experiencia</div>
                       </div>
