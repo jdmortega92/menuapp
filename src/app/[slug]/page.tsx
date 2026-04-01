@@ -15,29 +15,19 @@ export default function MenuPublicoPage() {
   const [pedido, setPedido] = useState<Record<string, number>>({})
   const [nota, setNota] = useState('')
   const [mostrarPedido, setMostrarPedido] = useState(false)
-  const [sorpresaPlatos, setSorpresaPlatos] = useState<typeof todosLosPlatos>([])
   const [mostrarSorpresa, setMostrarSorpresa] = useState(false)
+  const [platoDetalle, setPlatoDetalle] = useState<string | null>(null)
 
   const restaurante = {
-    nombre: 'La Parrilla de Juan',
-    tipo: 'Restaurante',
-    ciudad: 'Medellín',
-    whatsapp: '3001234567',
-    color_principal: '#C0392B',
-    tema: 'claro',
-    logo_url: null,
-    foto_portada_url: null,
+    nombre: 'La Parrilla de Juan', tipo: 'Restaurante', ciudad: 'Medellín',
+    whatsapp: '3001234567', color_principal: '#C0392B', tema: 'claro',
+    logo_url: null, foto_portada_url: null,
     descripcion: 'El mejor sabor paisa desde 1998.',
-    horario: 'Lun-Sáb 11am — 9pm · Dom 11am — 4pm',
   }
 
   const config = {
-    whatsapp_activo: true,
-    combos_activo: true,
-    promos_activo: true,
-    plato_dia_activo: true,
-    calificaciones_activo: true,
-    sorprendeme_activo: true,
+    whatsapp_activo: true, combos_activo: true, promos_activo: true,
+    plato_dia_activo: true, calificaciones_activo: true, sorprendeme_activo: true,
   }
 
   const platoDia = {
@@ -46,37 +36,25 @@ export default function MenuPublicoPage() {
   }
 
   const categorias = [
-    {
-      id: 'c1', nombre: 'Platos fuertes',
-      platos: [
-        { id: 'p1', nombre: 'Bandeja paisa', precio: 18000, descripcion: 'Frijoles, arroz, carne, chicharrón, huevo, tajada, arepa', disponible: true, estrellas: 4.8, resenas: 24, foto_url: null },
-        { id: 'p2', nombre: 'Arroz con pollo', precio: 15000, descripcion: 'Arroz, pollo desmechado, verduras, papa criolla', disponible: true, estrellas: 4.5, resenas: 18, foto_url: null },
-        { id: 'p3', nombre: 'Cazuela de frijoles', precio: 14000, descripcion: 'Frijoles rojos, arroz, chicharrón, aguacate', disponible: true, estrellas: 4.2, resenas: 12, foto_url: null },
-        { id: 'p4', nombre: 'Churrasco', precio: 22000, descripcion: 'Carne a la brasa con papas y ensalada', disponible: false, estrellas: 4.9, resenas: 31, foto_url: null },
-      ],
-    },
-    {
-      id: 'c2', nombre: 'Sopas',
-      platos: [
-        { id: 'p5', nombre: 'Ajiaco', precio: 16000, descripcion: 'Pollo, papa criolla, guascas, mazorca', disponible: true, estrellas: 4.7, resenas: 15, foto_url: null },
-        { id: 'p6', nombre: 'Sancocho de res', precio: 15000, descripcion: 'Res, yuca, plátano, papa, cilantro', disponible: true, estrellas: 4.4, resenas: 9, foto_url: null },
-      ],
-    },
-    {
-      id: 'c3', nombre: 'Bebidas',
-      platos: [
-        { id: 'p7', nombre: 'Limonada de coco', precio: 6000, descripcion: 'Limonada con leche de coco y hielo', disponible: true, estrellas: 4.6, resenas: 20, foto_url: null },
-        { id: 'p8', nombre: 'Jugo natural', precio: 5000, descripcion: 'Fruta fresca del día', disponible: true, estrellas: 4.3, resenas: 8, foto_url: null },
-        { id: 'p9', nombre: 'Agua panela con limón', precio: 3500, descripcion: 'Panela artesanal con limón', disponible: true, estrellas: 4.1, resenas: 5, foto_url: null },
-      ],
-    },
-    {
-      id: 'c4', nombre: 'Postres',
-      platos: [
-        { id: 'p10', nombre: 'Arroz con leche', precio: 5000, descripcion: 'Receta de la abuela con canela', disponible: true, estrellas: 4.5, resenas: 11, foto_url: null },
-        { id: 'p11', nombre: 'Natilla', precio: 4500, descripcion: 'Natilla artesanal con coco rallado', disponible: true, estrellas: 4.0, resenas: 6, foto_url: null },
-      ],
-    },
+    { id: 'c1', nombre: 'Platos fuertes', platos: [
+      { id: 'p1', nombre: 'Bandeja paisa', precio: 18000, descripcion: 'Frijoles, arroz, carne, chicharrón, huevo, tajada, arepa', disponible: true, estrellas: 4.8, resenas: 24 },
+      { id: 'p2', nombre: 'Arroz con pollo', precio: 15000, descripcion: 'Arroz, pollo desmechado, verduras, papa criolla', disponible: true, estrellas: 4.5, resenas: 18 },
+      { id: 'p3', nombre: 'Cazuela de frijoles', precio: 14000, descripcion: 'Frijoles rojos, arroz, chicharrón, aguacate', disponible: true, estrellas: 4.2, resenas: 12 },
+      { id: 'p4', nombre: 'Churrasco', precio: 22000, descripcion: 'Carne a la brasa con papas y ensalada', disponible: false, estrellas: 4.9, resenas: 31 },
+    ]},
+    { id: 'c2', nombre: 'Sopas', platos: [
+      { id: 'p5', nombre: 'Ajiaco', precio: 16000, descripcion: 'Pollo, papa criolla, guascas, mazorca', disponible: true, estrellas: 4.7, resenas: 15 },
+      { id: 'p6', nombre: 'Sancocho de res', precio: 15000, descripcion: 'Res, yuca, plátano, papa, cilantro', disponible: true, estrellas: 4.4, resenas: 9 },
+    ]},
+    { id: 'c3', nombre: 'Bebidas', platos: [
+      { id: 'p7', nombre: 'Limonada de coco', precio: 6000, descripcion: 'Limonada con leche de coco y hielo', disponible: true, estrellas: 4.6, resenas: 20 },
+      { id: 'p8', nombre: 'Jugo natural', precio: 5000, descripcion: 'Fruta fresca del día', disponible: true, estrellas: 4.3, resenas: 8 },
+      { id: 'p9', nombre: 'Agua panela con limón', precio: 3500, descripcion: 'Panela artesanal con limón', disponible: true, estrellas: 4.1, resenas: 5 },
+    ]},
+    { id: 'c4', nombre: 'Postres', platos: [
+      { id: 'p10', nombre: 'Arroz con leche', precio: 5000, descripcion: 'Receta de la abuela con canela', disponible: true, estrellas: 4.5, resenas: 11 },
+      { id: 'p11', nombre: 'Natilla', precio: 4500, descripcion: 'Natilla artesanal con coco rallado', disponible: true, estrellas: 4.0, resenas: 6 },
+    ]},
   ]
 
   const color = restaurante.color_principal
@@ -88,66 +66,63 @@ export default function MenuPublicoPage() {
 
   function agregarAlPedido(platoId: string) { setPedido({ ...pedido, [platoId]: (pedido[platoId] || 0) + 1 }) }
   function quitarDelPedido(platoId: string) {
-    const cantidad = (pedido[platoId] || 0) - 1
-    if (cantidad <= 0) { const nuevo = { ...pedido }; delete nuevo[platoId]; setPedido(nuevo) }
-    else { setPedido({ ...pedido, [platoId]: cantidad }) }
+    const c = (pedido[platoId] || 0) - 1
+    if (c <= 0) { const n = { ...pedido }; delete n[platoId]; setPedido(n) } else { setPedido({ ...pedido, [platoId]: c }) }
   }
 
   const itemsPedido = Object.entries(pedido).map(([id, cantidad]) => ({ plato: todosLosPlatos.find(p => p.id === id)!, cantidad })).filter(i => i.plato)
   const totalPedido = itemsPedido.reduce((sum, i) => sum + i.plato.precio * i.cantidad, 0)
   const totalProductos = itemsPedido.reduce((sum, i) => sum + i.cantidad, 0)
 
+  const [sorpresaPlatos, setSorpresaPlatos] = useState<typeof todosLosPlatos>([])
   function sorprendeme() {
-    const disponibles = todosLosPlatos.filter(p => p.disponible)
-    if (disponibles.length < 3) return
-    const shuffled = [...disponibles].sort(() => Math.random() - 0.5)
-    setSorpresaPlatos(shuffled.slice(0, 3))
+    const d = todosLosPlatos.filter(p => p.disponible)
+    if (d.length < 3) return
+    setSorpresaPlatos([...d].sort(() => Math.random() - 0.5).slice(0, 3))
     setMostrarSorpresa(true)
   }
 
   function pedirPorWhatsApp() {
     const lineas = itemsPedido.map(i => `- ${i.cantidad} ${i.plato.nombre} $${(i.plato.precio * i.cantidad).toLocaleString('es-CO')}`)
-    let mensaje = `Hola! Vi tu menú en ${restaurante.nombre} y quiero pedir:\n${lineas.join('\n')}`
-    if (nota) mensaje += `\nNota: ${nota}`
-    mensaje += `\nTotal: $${totalPedido.toLocaleString('es-CO')}`
-    window.open(`https://wa.me/57${restaurante.whatsapp}?text=${encodeURIComponent(mensaje)}`, '_blank')
+    let msg = `Hola! Vi tu menú en ${restaurante.nombre} y quiero pedir:\n${lineas.join('\n')}`
+    if (nota) msg += `\nNota: ${nota}`
+    msg += `\nTotal: $${totalPedido.toLocaleString('es-CO')}`
+    window.open(`https://wa.me/57${restaurante.whatsapp}?text=${encodeURIComponent(msg)}`, '_blank')
   }
 
-  // Componente para selector cantidad
-  function SelectorCantidad({ platoId }: { platoId: string }) {
-    const cantidad = pedido[platoId] || 0
-    if (cantidad > 0) {
-      return (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div onClick={() => quitarDelPedido(platoId)} style={{ width: '26px', height: '26px', borderRadius: '50%', border: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', cursor: 'pointer', color: 'var(--text-secondary)' }}>-</div>
-          <span style={{ fontSize: '14px', fontWeight: 500, minWidth: '16px', textAlign: 'center' }}>{cantidad}</span>
-          <div onClick={() => agregarAlPedido(platoId)} style={{ width: '26px', height: '26px', borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '14px', cursor: 'pointer' }}>+</div>
-        </div>
-      )
-    }
-    return (
-      <div onClick={() => agregarAlPedido(platoId)} style={{ width: '26px', height: '26px', borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '14px', cursor: 'pointer' }}>+</div>
+  function Qty({ id }: { id: string }) {
+    const c = pedido[id] || 0
+    return c > 0 ? (
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div onClick={(e) => { e.stopPropagation(); quitarDelPedido(id) }} style={{ width: '26px', height: '26px', borderRadius: '50%', border: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', cursor: 'pointer', color: 'var(--text-secondary)' }}>-</div>
+        <span style={{ fontSize: '14px', fontWeight: 500, minWidth: '16px', textAlign: 'center' }}>{c}</span>
+        <div onClick={(e) => { e.stopPropagation(); agregarAlPedido(id) }} style={{ width: '26px', height: '26px', borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '14px', cursor: 'pointer' }}>+</div>
+      </div>
+    ) : (
+      <div onClick={(e) => { e.stopPropagation(); agregarAlPedido(id) }} style={{ width: '26px', height: '26px', borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '14px', cursor: 'pointer' }}>+</div>
     )
   }
 
+  const resenasDemo = [
+    { estrellas: 5, comentario: 'Excelente porción, muy completa', tiempo: 'Hace 2 horas' },
+    { estrellas: 4, comentario: 'Muy buena, le pondría más aguacate', tiempo: 'Ayer' },
+    { estrellas: 5, comentario: 'La mejor del barrio, siempre vengo por ella', tiempo: 'Hace 3 días' },
+  ]
+
   return (
-    <div style={{ background: restaurante.tema === 'oscuro' ? '#1A1A18' : '#FDFBF7', minHeight: '100vh' }}>
+    <div style={{ background: '#FDFBF7', minHeight: '100vh' }}>
       <div style={{ maxWidth: '500px', margin: '0 auto', paddingBottom: totalProductos > 0 ? '140px' : '20px' }}>
 
         {/* Banner */}
-        <div style={{
-          height: restaurante.foto_portada_url ? '160px' : '100px',
-          background: restaurante.foto_portada_url ? `url(${restaurante.foto_portada_url}) center/cover` : `linear-gradient(135deg, ${color} 0%, ${color}CC 100%)`,
-          position: 'relative', display: 'flex', alignItems: 'flex-end',
-        }}>
-          <div style={{ position: 'absolute', inset: 0, background: restaurante.foto_portada_url ? 'linear-gradient(to top, rgba(0,0,0,0.5) 0%, transparent 60%)' : `linear-gradient(to top, ${restaurante.tema === 'oscuro' ? 'rgba(26,26,24,1)' : 'rgba(253,251,247,1)'} 0%, transparent 80%)` }} />
+        <div style={{ height: '100px', background: `linear-gradient(135deg, ${color} 0%, ${color}CC 100%)`, position: 'relative', display: 'flex', alignItems: 'flex-end' }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(253,251,247,1) 0%, transparent 80%)' }} />
           <div style={{ position: 'relative', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '12px', width: '100%' }}>
             <div style={{ width: '52px', height: '52px', borderRadius: '12px', flexShrink: 0, background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', fontWeight: 600, color: color, boxShadow: '0 2px 8px rgba(0,0,0,0.15)' }}>
               {restaurante.nombre.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
             </div>
             <div>
-              <div style={{ fontSize: '17px', fontWeight: 600, color: restaurante.foto_portada_url ? 'white' : 'var(--text-primary)' }}>{restaurante.nombre}</div>
-              <div style={{ fontSize: '12px', color: restaurante.foto_portada_url ? 'rgba(255,255,255,0.85)' : 'var(--text-secondary)' }}>{restaurante.tipo} · {restaurante.ciudad}</div>
+              <div style={{ fontSize: '17px', fontWeight: 600 }}>{restaurante.nombre}</div>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{restaurante.tipo} · {restaurante.ciudad}</div>
             </div>
           </div>
         </div>
@@ -155,7 +130,7 @@ export default function MenuPublicoPage() {
         {/* Buscador */}
         <div style={{ padding: '12px 16px 8px' }}>
           <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar en el menú..."
-            style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border-light)', borderRadius: '8px', fontSize: '13px', fontFamily: 'var(--font-body)', background: 'var(--bg-secondary)', outline: 'none', color: 'var(--text-primary)' }} />
+            style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border-light)', borderRadius: '8px', fontSize: '13px', fontFamily: 'var(--font-body)', background: 'var(--bg-secondary)', outline: 'none' }} />
           {busqueda.trim() && (
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px' }}>
               <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{categoriasFiltradas.reduce((s, c) => s + c.platos.length, 0)} resultados</span>
@@ -164,18 +139,11 @@ export default function MenuPublicoPage() {
           )}
         </div>
 
-        {/* Filtros (sin Sorpréndeme) */}
+        {/* Filtros */}
         <div style={{ padding: '4px 16px 10px', display: 'flex', gap: '6px', overflowX: 'auto' }}>
-          <div onClick={() => setCategoriaAbierta(categoriaAbierta ? null : 'open')}
-            style={{ padding: '6px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 500, background: color, color: 'white', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-            Categorías ↓
-          </div>
-          {config.combos_activo && (
-            <div style={{ padding: '6px 12px', borderRadius: '20px', fontSize: '11px', border: '1px solid var(--border-light)', color: 'var(--text-secondary)', background: 'var(--bg-secondary)', cursor: 'pointer', whiteSpace: 'nowrap' }}>Combos</div>
-          )}
-          {config.promos_activo && (
-            <div style={{ padding: '6px 12px', borderRadius: '20px', fontSize: '11px', border: '1px solid var(--border-light)', color: 'var(--text-secondary)', background: 'var(--bg-secondary)', cursor: 'pointer', whiteSpace: 'nowrap' }}>Promos</div>
-          )}
+          <div onClick={() => setCategoriaAbierta(categoriaAbierta ? null : 'open')} style={{ padding: '6px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 500, background: color, color: 'white', cursor: 'pointer', whiteSpace: 'nowrap' }}>Categorías ↓</div>
+          {config.combos_activo && <div style={{ padding: '6px 12px', borderRadius: '20px', fontSize: '11px', border: '1px solid var(--border-light)', color: 'var(--text-secondary)', background: 'var(--bg-secondary)', cursor: 'pointer', whiteSpace: 'nowrap' }}>Combos</div>}
+          {config.promos_activo && <div style={{ padding: '6px 12px', borderRadius: '20px', fontSize: '11px', border: '1px solid var(--border-light)', color: 'var(--text-secondary)', background: 'var(--bg-secondary)', cursor: 'pointer', whiteSpace: 'nowrap' }}>Promos</div>}
         </div>
 
         {/* Dropdown categorías */}
@@ -186,7 +154,7 @@ export default function MenuPublicoPage() {
                 <div key={cat.id} onClick={() => { setCategoriaAbierta(null); document.getElementById(cat.id)?.scrollIntoView({ behavior: 'smooth' }) }}
                   style={{ padding: '10px 14px', fontSize: '13px', cursor: 'pointer', borderBottom: i < categorias.length - 1 ? '1px solid var(--border-light)' : 'none', display: 'flex', justifyContent: 'space-between' }}>
                   <span>{cat.nombre}</span>
-                  <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{cat.platos.filter(p => p.disponible).length} platos</span>
+                  <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{cat.platos.filter(p => p.disponible).length}</span>
                 </div>
               ))}
             </div>
@@ -210,7 +178,7 @@ export default function MenuPublicoPage() {
                     <span style={{ fontSize: '14px', fontWeight: 500, color: color }}>${platoDia.precioEspecial.toLocaleString('es-CO')}</span>
                   </div>
                 </div>
-                <SelectorCantidad platoId={platoDia.id} />
+                <Qty id={platoDia.id} />
               </div>
             </div>
           </div>
@@ -223,7 +191,6 @@ export default function MenuPublicoPage() {
               border: mostrarSorpresa ? `1px solid ${color}` : '1px dashed var(--border-medium)',
               borderRadius: '10px', padding: '12px', textAlign: 'center', cursor: 'pointer',
               background: mostrarSorpresa ? `${color}08` : 'transparent',
-              transition: 'all 0.2s',
             }}>
               <span style={{ fontSize: '13px', color: mostrarSorpresa ? color : 'var(--text-secondary)' }}>
                 🎲 {mostrarSorpresa ? 'Generar otra combinación' : 'Sorpréndeme — ¿No sabes qué pedir?'}
@@ -241,9 +208,9 @@ export default function MenuPublicoPage() {
                 <span onClick={() => setMostrarSorpresa(false)} style={{ fontSize: '11px', color: 'var(--text-tertiary)', cursor: 'pointer' }}>✕ Cerrar</span>
               </div>
               {sorpresaPlatos.map((plato) => (
-                <div key={plato.id} style={{
+                <div key={plato.id} onClick={() => setPlatoDetalle(plato.id)} style={{
                   background: 'var(--bg-secondary)', borderRadius: '8px', padding: '10px',
-                  display: 'flex', gap: '10px', marginBottom: '6px', border: '1px solid var(--border-light)',
+                  display: 'flex', gap: '10px', marginBottom: '6px', border: '1px solid var(--border-light)', cursor: 'pointer',
                 }}>
                   <div style={{ width: '48px', height: '48px', borderRadius: '8px', flexShrink: 0, background: `${color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', fontWeight: 500, color: color }}>{plato.nombre.charAt(0)}</div>
                   <div style={{ flex: 1 }}>
@@ -251,7 +218,7 @@ export default function MenuPublicoPage() {
                     <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{plato.descripcion}</div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
                       <span style={{ fontSize: '13px', fontWeight: 500 }}>${plato.precio.toLocaleString('es-CO')}</span>
-                      <SelectorCantidad platoId={plato.id} />
+                      <Qty id={plato.id} />
                     </div>
                   </div>
                 </div>
@@ -270,16 +237,21 @@ export default function MenuPublicoPage() {
                 borderRadius: '10px', padding: '10px', display: 'flex', gap: '10px',
                 marginBottom: '8px', opacity: plato.disponible ? 1 : 0.4,
               }}>
-                <div style={{ width: '64px', height: '64px', borderRadius: '8px', flexShrink: 0, background: `${color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px', fontWeight: 500, color: color }}>{plato.nombre.charAt(0)}</div>
+                <div onClick={() => plato.disponible && setPlatoDetalle(plato.id)} style={{
+                  width: '64px', height: '64px', borderRadius: '8px', flexShrink: 0, cursor: plato.disponible ? 'pointer' : 'default',
+                  background: `${color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px', fontWeight: 500, color: color,
+                }}>{plato.nombre.charAt(0)}</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: '13px', fontWeight: 500 }}>{plato.nombre}</div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>{plato.descripcion}</div>
+                  <div onClick={() => plato.disponible && setPlatoDetalle(plato.id)} style={{ cursor: plato.disponible ? 'pointer' : 'default' }}>
+                    <div style={{ fontSize: '13px', fontWeight: 500 }}>{plato.nombre}</div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>{plato.descripcion}</div>
+                  </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <span style={{ fontSize: '13px', fontWeight: 500 }}>${plato.precio.toLocaleString('es-CO')}</span>
                       {config.calificaciones_activo && <span style={{ fontSize: '10px', color: '#F2A623' }}>★ {plato.estrellas}</span>}
                     </div>
-                    {plato.disponible ? <SelectorCantidad platoId={plato.id} /> : <span style={{ fontSize: '10px', color: 'var(--color-danger)', fontWeight: 500 }}>Agotado</span>}
+                    {plato.disponible ? <Qty id={plato.id} /> : <span style={{ fontSize: '10px', color: 'var(--color-danger)', fontWeight: 500 }}>Agotado</span>}
                   </div>
                 </div>
               </div>
@@ -288,14 +260,14 @@ export default function MenuPublicoPage() {
         ))}
 
         {/* Bandeja flotante */}
-        {totalProductos > 0 && (
+        {totalProductos > 0 && !mostrarPedido && !platoDetalle && (
           <div onClick={() => setMostrarPedido(true)} style={{
             position: 'fixed', bottom: '16px', left: '16px', right: '16px', maxWidth: '468px', margin: '0 auto',
             background: 'var(--text-primary)', borderRadius: '14px', padding: '14px 16px',
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
             zIndex: 40, cursor: 'pointer', boxShadow: '0 8px 30px rgba(0,0,0,0.2)',
           }}>
-          <div style={{ color: 'white' }}>
+            <div style={{ color: 'white' }}>
               <div style={{ fontSize: '14px', fontWeight: 500 }}>{totalProductos} producto{totalProductos > 1 ? 's' : ''}</div>
               <div style={{ fontSize: '10px', opacity: 0.6 }}>{itemsPedido.map(i => `${i.cantidad} ${i.plato.nombre}`).join(' + ')}</div>
             </div>
@@ -310,28 +282,15 @@ export default function MenuPublicoPage() {
         {mostrarPedido && (
           <>
             <div onClick={() => setMostrarPedido(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 60 }} />
-            <div style={{
-              position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 70,
-              background: 'var(--bg-secondary)', borderRadius: '16px 16px 0 0',
-              maxHeight: '80vh', overflowY: 'auto', animation: 'slideUp 0.3s ease',
-            }}>
+            <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 70, background: 'var(--bg-secondary)', borderRadius: '16px 16px 0 0', maxHeight: '80vh', overflowY: 'auto', animation: 'slideUp 0.3s ease' }}>
               <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-light)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: '16px', fontWeight: 500 }}>Tu pedido</span>
                 <span onClick={() => setMostrarPedido(false)} style={{ fontSize: '18px', color: 'var(--text-tertiary)', cursor: 'pointer' }}>✕</span>
               </div>
-
-              {esQR && (
-                <div style={{ padding: '12px 20px', background: 'var(--color-info-light)', fontSize: '12px', color: 'var(--color-info)' }}>
-                  Mesa {qrMesa?.replace('mesa', '')} · Muéstrale este resumen al mesero
-                </div>
-              )}
-
+              {esQR && <div style={{ padding: '12px 20px', background: 'var(--color-info-light)', fontSize: '12px', color: 'var(--color-info)' }}>Mesa {qrMesa?.replace('mesa', '')} · Muéstrale este resumen al mesero</div>}
               <div style={{ padding: '16px 20px' }}>
                 {itemsPedido.map((item) => (
-                  <div key={item.plato.id} style={{
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    padding: '10px 0', borderBottom: '1px solid var(--border-light)',
-                  }}>
+                  <div key={item.plato.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--border-light)' }}>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: '13px', fontWeight: 500 }}>{item.plato.nombre}</div>
                       <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>${item.plato.precio.toLocaleString('es-CO')} c/u</div>
@@ -344,18 +303,14 @@ export default function MenuPublicoPage() {
                     <div style={{ fontSize: '13px', fontWeight: 500, minWidth: '70px', textAlign: 'right' }}>${(item.plato.precio * item.cantidad).toLocaleString('es-CO')}</div>
                   </div>
                 ))}
-
                 <div style={{ marginTop: '14px' }}>
-                  <input value={nota} onChange={(e) => setNota(e.target.value)}
-                    placeholder={esQR ? 'Nota para el mesero (opcional)' : 'Nota para el restaurante (opcional)'}
+                  <input value={nota} onChange={(e) => setNota(e.target.value)} placeholder={esQR ? 'Nota para el mesero (opcional)' : 'Nota para el restaurante (opcional)'}
                     style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border-light)', borderRadius: '8px', fontSize: '13px', fontFamily: 'var(--font-body)', outline: 'none' }} />
                 </div>
-
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', paddingTop: '14px', borderTop: '1px solid var(--border-light)' }}>
                   <span style={{ fontSize: '15px', fontWeight: 500 }}>Total</span>
                   <span style={{ fontSize: '20px', fontWeight: 500 }}>${totalPedido.toLocaleString('es-CO')}</span>
                 </div>
-
                 {esQR ? (
                   <div style={{ marginTop: '16px', textAlign: 'center' }}>
                     <div style={{ background: 'var(--text-primary)', color: 'white', borderRadius: '12px', padding: '16px', fontSize: '15px', fontWeight: 500, cursor: 'pointer' }}>Mostrar al mesero</div>
@@ -376,13 +331,90 @@ export default function MenuPublicoPage() {
           </>
         )}
 
+        {/* Modal detalle plato */}
+        {platoDetalle && (() => {
+          const plato = todosLosPlatos.find(p => p.id === platoDetalle)
+          if (!plato) return null
+          const cantidadActual = pedido[plato.id] || 0
+          const cantidadMostrar = cantidadActual || 1
+          return (
+            <>
+              <div onClick={() => setPlatoDetalle(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 60 }} />
+              <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 70, background: 'var(--bg-secondary)', borderRadius: '16px 16px 0 0', maxHeight: '85vh', overflowY: 'auto', animation: 'slideUp 0.3s ease' }}>
+                {/* Foto grande */}
+                <div style={{ height: '200px', background: `${color}15`, borderRadius: '16px 16px 0 0', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+                  <span style={{ fontSize: '60px', fontWeight: 500, color: color, opacity: 0.3 }}>{plato.nombre.charAt(0)}</span>
+                  <div onClick={() => setPlatoDetalle(null)} style={{ position: 'absolute', top: '12px', right: '12px', width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '16px', cursor: 'pointer' }}>✕</div>
+                </div>
+
+                <div style={{ padding: '16px 20px' }}>
+                  {/* Nombre y calificación */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '8px' }}>
+                    <div style={{ fontSize: '20px', fontWeight: 500 }}>{plato.nombre}</div>
+                    {config.calificaciones_activo && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span style={{ fontSize: '13px', color: '#F2A623' }}>★</span>
+                        <span style={{ fontSize: '14px', fontWeight: 500 }}>{plato.estrellas}</span>
+                        <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>({plato.resenas})</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: '14px' }}>{plato.descripcion}</div>
+                  <div style={{ fontSize: '22px', fontWeight: 500, marginBottom: '16px' }}>${plato.precio.toLocaleString('es-CO')}</div>
+
+                  {/* Reseñas */}
+                  {config.calificaciones_activo && (
+                    <>
+                      <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '10px' }}>Reseñas</div>
+                      <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-light)', borderRadius: '10px', overflow: 'hidden', marginBottom: '14px' }}>
+                        {resenasDemo.map((r, i) => (
+                          <div key={i} style={{ padding: '12px 14px', borderBottom: i < resenasDemo.length - 1 ? '1px solid var(--border-light)' : 'none' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                              <div style={{ fontSize: '11px', color: '#F2A623' }}>{'★'.repeat(r.estrellas)}{'☆'.repeat(5 - r.estrellas)}</div>
+                              <div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{r.tiempo}</div>
+                            </div>
+                            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{r.comentario}</div>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{ border: '1px dashed var(--border-medium)', borderRadius: '10px', padding: '14px', textAlign: 'center', cursor: 'pointer', marginBottom: '16px' }}>
+                        <div style={{ fontSize: '13px', fontWeight: 500 }}>Calificar este plato</div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>Comparte tu experiencia</div>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Agregar al pedido */}
+                  <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'var(--bg-primary)', border: '1px solid var(--border-light)', borderRadius: '10px', padding: '10px 14px' }}>
+                      <div onClick={() => { if (cantidadActual > 0) quitarDelPedido(plato.id) }} style={{
+                        width: '28px', height: '28px', borderRadius: '50%', border: '1px solid var(--border-light)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', cursor: 'pointer',
+                        color: cantidadActual > 0 ? 'var(--text-secondary)' : 'var(--border-light)',
+                      }}>-</div>
+                      <span style={{ fontSize: '16px', fontWeight: 500, minWidth: '20px', textAlign: 'center' }}>{cantidadMostrar}</span>
+                      <div onClick={() => agregarAlPedido(plato.id)} style={{ width: '28px', height: '28px', borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '16px', cursor: 'pointer' }}>+</div>
+                    </div>
+                    <div onClick={() => { if (cantidadActual === 0) agregarAlPedido(plato.id); setPlatoDetalle(null) }} style={{
+                      flex: 1, background: color, color: 'white', borderRadius: '10px',
+                      padding: '14px', textAlign: 'center', fontSize: '14px', fontWeight: 500, cursor: 'pointer',
+                    }}>
+                      Agregar ${(cantidadMostrar * plato.precio).toLocaleString('es-CO')}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </>
+          )
+        })()}
+
         {/* Powered by */}
         {!busqueda.trim() && totalProductos === 0 && (
           <div style={{ textAlign: 'center', padding: '20px', fontSize: '11px', color: 'var(--text-tertiary)' }}>
             Menú creado con <span style={{ fontWeight: 500 }}>MenuApp</span>
           </div>
         )}
-
       </div>
     </div>
   )
