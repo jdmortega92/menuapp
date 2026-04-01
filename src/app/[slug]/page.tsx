@@ -16,6 +16,7 @@ export default function MenuPublicoPage() {
   const [nota, setNota] = useState('')
   const [mostrarPedido, setMostrarPedido] = useState(false)
   const [mostrarSorpresa, setMostrarSorpresa] = useState(false)
+  const [mostrarMenu, setMostrarMenu] = useState(esQR)
   const [platoDetalle, setPlatoDetalle] = useState<string | null>(null)
   const [platoCalificar, setPlatoCalificar] = useState<string | null>(null)
   const [calEstrellas, setCalEstrellas] = useState(0)
@@ -117,7 +118,102 @@ export default function MenuPublicoPage() {
   return (
     <div style={{ background: '#FDFBF7', minHeight: '100vh' }}>
       <div style={{ maxWidth: '500px', margin: '0 auto', paddingBottom: totalProductos > 0 ? '140px' : '20px' }}>
+        {/* Presentación del restaurante (solo enlace web) */}
+        {!mostrarMenu && (
+          <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+            {/* Portada */}
+            <div style={{
+              height: '240px', background: `linear-gradient(135deg, ${color} 0%, ${color}AA 50%, ${color}66 100%)`,
+              position: 'relative', display: 'flex', alignItems: 'flex-end',
+            }}>
+              <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.5) 0%, transparent 50%)' }} />
+              <div style={{ position: 'relative', padding: '20px', width: '100%' }}>
+                <div style={{
+                  width: '64px', height: '64px', borderRadius: '16px', background: 'white',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '22px', fontWeight: 600, color: color, marginBottom: '12px',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+                }}>
+                  {restaurante.nombre.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
+                </div>
+                <div style={{ fontSize: '24px', fontWeight: 600, color: 'white', marginBottom: '4px' }}>{restaurante.nombre}</div>
+                <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.8)' }}>{restaurante.tipo} · {restaurante.ciudad}</div>
+              </div>
+            </div>
 
+            {/* Info */}
+            <div style={{ padding: '20px', flex: 1 }}>
+              {/* Descripción */}
+              <div style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: '20px' }}>
+                {restaurante.descripcion}
+              </div>
+
+              {/* Horario */}
+              <div style={{ marginBottom: '20px' }}>
+                <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '10px' }}>Horario</div>
+                <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-light)', borderRadius: '10px', overflow: 'hidden' }}>
+                  {[
+                    { dia: 'Lunes a Viernes', hora: '11:00 am — 9:00 pm' },
+                    { dia: 'Sábado', hora: '11:00 am — 10:00 pm' },
+                    { dia: 'Domingo', hora: '11:00 am — 4:00 pm' },
+                  ].map((h, i) => (
+                    <div key={i} style={{
+                      padding: '10px 14px', display: 'flex', justifyContent: 'space-between',
+                      borderBottom: i < 2 ? '1px solid var(--border-light)' : 'none',
+                      fontSize: '13px',
+                    }}>
+                      <span>{h.dia}</span>
+                      <span style={{ color: 'var(--text-secondary)' }}>{h.hora}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Dirección */}
+              <div style={{ marginBottom: '20px' }}>
+                <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '10px' }}>Ubicación</div>
+                <div style={{
+                  background: 'var(--bg-secondary)', border: '1px solid var(--border-light)',
+                  borderRadius: '10px', padding: '14px',
+                }}>
+                  <div style={{ fontSize: '13px' }}>Cra 70 #45-12, Laureles</div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>{restaurante.ciudad}</div>
+                </div>
+              </div>
+
+              {/* WhatsApp info */}
+              {config.whatsapp_activo && (
+                <div style={{ marginBottom: '24px' }}>
+                  <div style={{
+                    background: 'var(--bg-secondary)', border: '1px solid var(--border-light)',
+                    borderRadius: '10px', padding: '14px', display: 'flex', alignItems: 'center', gap: '10px',
+                  }}>
+                    <span style={{ fontSize: '20px' }}>💬</span>
+                    <div>
+                      <div style={{ fontSize: '13px', fontWeight: 500 }}>Pedidos por WhatsApp</div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Arma tu pedido en el menú y envíalo directo</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Botón ver menú */}
+              <div onClick={() => setMostrarMenu(true)} style={{
+                background: color, color: 'white', borderRadius: '14px',
+                padding: '16px', textAlign: 'center', fontSize: '16px', fontWeight: 500,
+                cursor: 'pointer', boxShadow: `0 4px 20px ${color}40`,
+              }}>
+                Ver menú
+              </div>
+
+              {/* Powered by */}
+              <div style={{ textAlign: 'center', marginTop: '20px', fontSize: '11px', color: 'var(--text-tertiary)' }}>
+                Menú creado con <span style={{ fontWeight: 500 }}>MenuApp</span>
+              </div>
+            </div>
+          </div>
+        )}
+        {mostrarMenu && (<>
         {/* Banner */}
         <div style={{ height: '100px', background: `linear-gradient(135deg, ${color} 0%, ${color}CC 100%)`, position: 'relative', display: 'flex', alignItems: 'flex-end' }}>
           <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(253,251,247,1) 0%, transparent 80%)' }} />
@@ -545,6 +641,7 @@ export default function MenuPublicoPage() {
             Menú creado con <span style={{ fontWeight: 500 }}>MenuApp</span>
           </div>
         )}
+        </>)}
       </div>
     </div>
   )
