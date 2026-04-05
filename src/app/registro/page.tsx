@@ -152,14 +152,6 @@ export default function RegistroPage() {
               background: paso >= 2 ? 'var(--color-info)' : 'var(--border-light)',
             }}
           />
-          <div
-            style={{
-              flex: 1,
-              height: '3px',
-              borderRadius: '2px',
-              background: 'var(--border-light)',
-            }}
-          />
         </div>
 
         <form onSubmit={paso === 1 ? (e) => { e.preventDefault(); setPaso(2) } : handleRegistro}>

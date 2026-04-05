@@ -1,27 +1,25 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { useAuth } from '@/hooks'
+import { createClient } from '@/lib/supabase-browser'
 
 export default function ConfigPage() {
   const router = useRouter()
-  const plan = 'basico' // Demo: cambiar a 'gratis', 'basico', 'pro'
+  const { usuario, restaurante: rest, cargando: cargandoAuth } = useAuth()
+  const plan = (rest?.plan || 'gratis') as string
   const esBasico = plan === 'basico' || plan === 'pro'
   const esPro = plan === 'pro'
 
-  // Datos del negocio (demo)
-  const [nombre, setNombre] = useState('La Parrilla de Juan')
+  const [nombre, setNombre] = useState('')
   const [tipo, setTipo] = useState('restaurante')
-  const [ciudad, setCiudad] = useState('Medellín')
-  const [whatsapp, setWhatsapp] = useState('300 123 4567')
-  const [direccion, setDireccion] = useState('Cra 70 #45-12, Laureles')
-  const [descripcion, setDescripcion] = useState('El mejor sabor paisa desde 1998. Platos generosos con recetas de la abuela.')
-
-  // Personalización (solo básico y pro)
+  const [ciudad, setCiudad] = useState('')
+  const [whatsapp, setWhatsapp] = useState('')
+  const [direccion, setDireccion] = useState('')
+  const [descripcion, setDescripcion] = useState('')
   const [colorPrincipal, setColorPrincipal] = useState('#E85D24')
   const [tema, setTema] = useState('claro')
-
-  // Toggles de funciones
   const [toggles, setToggles] = useState({
     whatsapp_activo: true,
     combos_activo: false,
@@ -32,9 +30,54 @@ export default function ConfigPage() {
     sorprendeme_activo: true,
     menu_por_horario_activo: false,
   })
+  const [email, setEmail] = useState('')
+  const [cargandoConfig, setCargandoConfig] = useState(true)
 
-  // Cuenta
-  const [email] = useState('juan@gmail.com')
+  // Cargar datos reales
+  useEffect(() => {
+    if (!rest?.id || !usuario) return
+
+    async function cargar() {
+      const supabase = createClient()
+      setNombre(rest!.nombre || '')
+      setTipo(rest!.tipo || 'restaurante')
+      setCiudad(rest!.ciudad || '')
+      setWhatsapp(rest!.whatsapp || '')
+      setDireccion(rest!.direccion || '')
+      setDescripcion(rest!.descripcion || '')
+      setColorPrincipal(rest!.color_principal || '#E85D24')
+      setTema(rest!.tema || 'claro')
+      setEmail(usuario!.email || '')
+
+      const { data: conf } = await supabase
+        .from('config_restaurante')
+        .select('*')
+        .eq('restaurante_id', rest!.id)
+        .single()
+
+      if (conf) {
+        setToggles({
+          whatsapp_activo: conf.whatsapp_activo ?? true,
+          combos_activo: conf.combos_activo ?? false,
+          promos_activo: conf.promos_activo ?? false,
+          plato_dia_activo: conf.plato_dia_activo ?? false,
+          plato_ganador_activo: conf.plato_ganador_activo ?? false,
+          calificaciones_activo: conf.calificaciones_activo ?? true,
+          sorprendeme_activo: conf.sorprendeme_activo ?? true,
+          menu_por_horario_activo: false,
+        })
+      }
+      setCargandoConfig(false)
+    }
+    cargar()
+  }, [rest?.id, usuario])
+
+  // Proteger ruta
+  useEffect(() => {
+    if (!cargandoAuth && !usuario) {
+      router.push('/login')
+    }
+  }, [cargandoAuth, usuario, router])
 
   const [seccionActiva, setSeccionActiva] = useState<string | null>(null)
   const [guardando, setGuardando] = useState(false)
@@ -73,26 +116,47 @@ export default function ConfigPage() {
     setSeccionActiva(seccionActiva === id ? null : id)
   }
 
-  function handleToggle(key: keyof typeof toggles) {
-    // Verificar si la función requiere plan Pro
+  async function handleToggle(key: keyof typeof toggles) {
     const requierePro = ['combos_activo', 'promos_activo', 'plato_dia_activo', 'plato_ganador_activo'].includes(key)
     if (requierePro && !esPro) return
-
     const requiereBasico = ['menu_por_horario_activo'].includes(key)
     if (requiereBasico && !esBasico) return
 
-    setToggles({ ...toggles, [key]: !toggles[key] })
+    const nuevoValor = !toggles[key]
+    setToggles({ ...toggles, [key]: nuevoValor })
+
+    if (rest?.id) {
+      const supabase = createClient()
+      await supabase.from('config_restaurante').update({ [key]: nuevoValor }).eq('restaurante_id', rest.id)
+    }
   }
 
-  function guardarCambios() {
+  async function guardarCambios() {
+    if (!rest?.id) return
     setGuardando(true)
-    setTimeout(() => {
-      setGuardando(false)
-      setGuardado(true)
-      setTimeout(() => setGuardado(false), 2000)
-    }, 800)
+    const supabase = createClient()
+
+    await supabase.from('restaurantes').update({
+      nombre, tipo, ciudad, whatsapp, direccion, descripcion,
+      color_principal: colorPrincipal, tema,
+    }).eq('id', rest.id)
+
+    setGuardando(false)
+    setGuardado(true)
+    setTimeout(() => setGuardado(false), 2000)
+  }
+  if (cargandoAuth || cargandoConfig) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-primary)' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '24px', fontWeight: 500, fontFamily: 'var(--font-display)' }}>Menu<span style={{ color: 'var(--color-accent)' }}>App</span></div>
+          <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '8px' }}>Cargando...</div>
+        </div>
+      </div>
+    )
   }
 
+  if (!usuario) return null
   return (
     <div style={{ background: 'var(--bg-primary)', minHeight: '100vh' }}>
       <div style={{ maxWidth: '500px', margin: '0 auto', paddingBottom: '80px' }}>

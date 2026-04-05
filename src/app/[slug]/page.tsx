@@ -204,7 +204,7 @@ export default function MenuPublicoPage() {
             <div style={{ padding: '20px', flex: 1 }}>
               {/* Descripción */}
               <div style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: '20px' }}>
-                {restaurante.descripcion}
+                {restaurante?.descripcion || ''}
               </div>
 
               {/* Horario */}
@@ -231,22 +231,24 @@ export default function MenuPublicoPage() {
               {/* Dirección */}
               <div style={{ marginBottom: '20px' }}>
                 <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '10px' }}>Ubicación</div>
-                <div onClick={() => window.open(`https://maps.google.com/?q=${encodeURIComponent('Cra 70 #45-12, Laureles, ' + restaurante.ciudad)}`, '_blank')}
-                  style={{
-                    background: 'var(--bg-secondary)', border: '1px solid var(--border-light)',
-                    borderRadius: '10px', padding: '14px', cursor: 'pointer',
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  }}>
-                  <div>
-                    <div style={{ fontSize: '13px' }}>Cra 70 #45-12, Laureles</div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>{restaurante.ciudad}</div>
+                {restaurante.direccion && (
+                  <div onClick={() => window.open(`https://maps.google.com/?q=${encodeURIComponent(restaurante.direccion + ', ' + restaurante.ciudad)}`, '_blank')}
+                    style={{
+                      background: 'var(--bg-secondary)', border: '1px solid var(--border-light)',
+                      borderRadius: '10px', padding: '14px', cursor: 'pointer',
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    }}>
+                    <div>
+                      <div style={{ fontSize: '13px' }}>{restaurante.direccion}</div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>{restaurante.ciudad}</div>
+                    </div>
+                    <span style={{ fontSize: '12px', color: 'var(--color-info)' }}>Ver mapa →</span>
                   </div>
-                  <span style={{ fontSize: '12px', color: 'var(--color-info)' }}>Ver mapa →</span>
-                </div>
+                )}
               </div>
 
               {/* WhatsApp info */}
-              {config.whatsapp_activo && (
+              {config?.whatsapp_activo && (
                 <div style={{ marginBottom: '24px' }}>
                   <div style={{
                     background: 'var(--bg-secondary)', border: '1px solid var(--border-light)',
@@ -307,8 +309,8 @@ export default function MenuPublicoPage() {
         {/* Filtros */}
         <div style={{ padding: '4px 16px 10px', display: 'flex', gap: '6px', overflowX: 'auto' }}>
           <div onClick={() => setCategoriaAbierta(categoriaAbierta ? null : 'open')} style={{ padding: '6px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 500, background: color, color: 'white', cursor: 'pointer', whiteSpace: 'nowrap' }}>Categorías ↓</div>
-          {config.combos_activo && <div style={{ padding: '6px 12px', borderRadius: '20px', fontSize: '11px', border: '1px solid var(--border-light)', color: 'var(--text-secondary)', background: 'var(--bg-secondary)', cursor: 'pointer', whiteSpace: 'nowrap' }}>Combos</div>}
-          {config.promos_activo && <div style={{ padding: '6px 12px', borderRadius: '20px', fontSize: '11px', border: '1px solid var(--border-light)', color: 'var(--text-secondary)', background: 'var(--bg-secondary)', cursor: 'pointer', whiteSpace: 'nowrap' }}>Promos</div>}
+          {config?.combos_activo && <div style={{ padding: '6px 12px', borderRadius: '20px', fontSize: '11px', border: '1px solid var(--border-light)', color: 'var(--text-secondary)', background: 'var(--bg-secondary)', cursor: 'pointer', whiteSpace: 'nowrap' }}>Combos</div>}
+          {config?.promos_activo && <div style={{ padding: '6px 12px', borderRadius: '20px', fontSize: '11px', border: '1px solid var(--border-light)', color: 'var(--text-secondary)', background: 'var(--bg-secondary)', cursor: 'pointer', whiteSpace: 'nowrap' }}>Promos</div>}
         </div>
 
         {/* Dropdown categorías */}
@@ -327,7 +329,7 @@ export default function MenuPublicoPage() {
         )}
 
         {/* Plato del día */}
-        {config.plato_dia_activo && !busqueda.trim() && (
+        {config?.plato_dia_activo && !busqueda.trim() && (
           <div style={{ padding: '0 16px 10px' }}>
             <div style={{ background: `${color}10`, border: `1px solid ${color}30`, borderRadius: '10px', padding: '12px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
@@ -350,7 +352,7 @@ export default function MenuPublicoPage() {
         )}
 
         {/* Sorpréndeme botón */}
-        {config.sorprendeme_activo && !busqueda.trim() && (
+        {config?.sorprendeme_activo && !busqueda.trim() && (
           <div style={{ padding: '0 16px 10px' }}>
             <div onClick={sorprendeme} style={{
               border: mostrarSorpresa ? `1px solid ${color}` : '1px dashed var(--border-medium)',
@@ -414,7 +416,7 @@ export default function MenuPublicoPage() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <span style={{ fontSize: '13px', fontWeight: 500 }}>${plato.precio.toLocaleString('es-CO')}</span>
-                      {config.calificaciones_activo && <span style={{ fontSize: '10px', color: '#F2A623' }}>★ {plato.estrellas}</span>}
+                      {config?.calificaciones_activo && <span style={{ fontSize: '10px', color: '#F2A623' }}>★ {plato.estrellas}</span>}
                     </div>
                     {plato.disponible ? <Qty id={plato.id} /> : <span style={{ fontSize: '10px', color: 'var(--color-danger)', fontWeight: 500 }}>Agotado</span>}
                   </div>
@@ -481,7 +483,7 @@ export default function MenuPublicoPage() {
                     <div style={{ background: 'var(--text-primary)', color: 'white', borderRadius: '12px', padding: '16px', fontSize: '15px', fontWeight: 500, cursor: 'pointer' }}>Mostrar al mesero</div>
                     <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '8px' }}>El mesero tomará tu pedido desde esta pantalla</div>
                   </div>
-                ) : config.whatsapp_activo ? (
+                ) : config?.whatsapp_activo ? (
                   <div style={{ marginTop: '16px', textAlign: 'center' }}>
                     <div onClick={pedirPorWhatsApp} style={{ background: '#25D366', color: 'white', borderRadius: '12px', padding: '16px', fontSize: '15px', fontWeight: 500, cursor: 'pointer' }}>Pedir por WhatsApp</div>
                     <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '8px' }}>Se abrirá WhatsApp con tu pedido listo</div>
@@ -641,7 +643,7 @@ export default function MenuPublicoPage() {
                   {/* Nombre y calificación */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '8px' }}>
                     <div style={{ fontSize: '20px', fontWeight: 500 }}>{plato.nombre}</div>
-                    {config.calificaciones_activo && (
+                    {config?.calificaciones_activo && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                         <span style={{ fontSize: '13px', color: '#F2A623' }}>★</span>
                         <span style={{ fontSize: '14px', fontWeight: 500 }}>{plato.estrellas}</span>
@@ -654,7 +656,7 @@ export default function MenuPublicoPage() {
                   <div style={{ fontSize: '22px', fontWeight: 500, marginBottom: '16px' }}>${plato.precio.toLocaleString('es-CO')}</div>
 
                   {/* Reseñas */}
-                  {config.calificaciones_activo && (
+                  {config?.calificaciones_activo && (
                     <>
                       <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '10px' }}>Reseñas</div>
                       <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-light)', borderRadius: '10px', overflow: 'hidden', marginBottom: '14px' }}>
