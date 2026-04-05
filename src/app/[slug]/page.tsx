@@ -105,7 +105,7 @@ export default function MenuPublicoPage() {
   const todosLosPlatos = categorias.flatMap(c => c.platos)
 
   const categoriasFiltradas = busqueda.trim()
-    ? categorias.map(cat => ({ ...cat, platos: cat.platos.filter(p => p.nombre.toLowerCase().includes(busqueda.toLowerCase()) || p.descripcion?.toLowerCase().includes(busqueda.toLowerCase())) })).filter(cat => cat.platos.length > 0)
+    ? categorias.map((cat: any) => ({ ...cat, platos: cat.platos.filter((p: any) => p.nombre.toLowerCase().includes(busqueda.toLowerCase()) || p.descripcion?.toLowerCase().includes(busqueda.toLowerCase())) })).filter((cat: any) => cat.platos.length > 0)
     : categorias
 
   function agregarAlPedido(platoId: string) { setPedido({ ...pedido, [platoId]: (pedido[platoId] || 0) + 1 }) }
