@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
+import { createClient } from '@/lib/supabase-browser'
 
 export default function MenuPublicoPage() {
   const params = useParams()
@@ -24,46 +25,83 @@ export default function MenuPublicoPage() {
   const [calComentario, setCalComentario] = useState('')
   const [calEnviada, setCalEnviada] = useState(false)
 
-  const restaurante = {
-    nombre: 'La Parrilla de Juan', tipo: 'Restaurante', ciudad: 'Medellín',
-    whatsapp: '3001234567', color_principal: '#C0392B', tema: 'claro',
-    logo_url: null, foto_portada_url: null,
-    descripcion: 'El mejor sabor paisa desde 1998.',
-  }
+  const [restaurante, setRestaurante] = useState<any>(null)
+  const [config, setConfig] = useState<any>(null)
+  const [categorias, setCategorias] = useState<any[]>([])
+  const [platoDia, setPlatoDia] = useState<any>(null)
+  const [cargando, setCargando] = useState(true)
 
-  const config = {
-    whatsapp_activo: true, combos_activo: true, promos_activo: true,
-    plato_dia_activo: true, calificaciones_activo: true, sorprendeme_activo: true,
-  }
+  useEffect(() => {
+    async function cargar() {
+      const supabase = createClient()
 
-  const platoDia = {
-    id: 'p5', nombre: 'Ajiaco', precio: 16000, precioEspecial: 12000,
-    descripcion: 'Pollo, papa criolla, guascas, mazorca. Receta tradicional bogotana.', horaFin: '3:00 pm',
-  }
+      // Buscar restaurante por slug
+      const { data: rest } = await supabase
+        .from('restaurantes')
+        .select('*')
+        .eq('slug', slug)
+        .single()
 
-  const categorias = [
-    { id: 'c1', nombre: 'Platos fuertes', platos: [
-      { id: 'p1', nombre: 'Bandeja paisa', precio: 18000, descripcion: 'Frijoles, arroz, carne, chicharrón, huevo, tajada, arepa', disponible: true, estrellas: 4.8, resenas: 24 },
-      { id: 'p2', nombre: 'Arroz con pollo', precio: 15000, descripcion: 'Arroz, pollo desmechado, verduras, papa criolla', disponible: true, estrellas: 4.5, resenas: 18 },
-      { id: 'p3', nombre: 'Cazuela de frijoles', precio: 14000, descripcion: 'Frijoles rojos, arroz, chicharrón, aguacate', disponible: true, estrellas: 4.2, resenas: 12 },
-      { id: 'p4', nombre: 'Churrasco', precio: 22000, descripcion: 'Carne a la brasa con papas y ensalada', disponible: false, estrellas: 4.9, resenas: 31 },
-    ]},
-    { id: 'c2', nombre: 'Sopas', platos: [
-      { id: 'p5', nombre: 'Ajiaco', precio: 16000, descripcion: 'Pollo, papa criolla, guascas, mazorca', disponible: true, estrellas: 4.7, resenas: 15 },
-      { id: 'p6', nombre: 'Sancocho de res', precio: 15000, descripcion: 'Res, yuca, plátano, papa, cilantro', disponible: true, estrellas: 4.4, resenas: 9 },
-    ]},
-    { id: 'c3', nombre: 'Bebidas', platos: [
-      { id: 'p7', nombre: 'Limonada de coco', precio: 6000, descripcion: 'Limonada con leche de coco y hielo', disponible: true, estrellas: 4.6, resenas: 20 },
-      { id: 'p8', nombre: 'Jugo natural', precio: 5000, descripcion: 'Fruta fresca del día', disponible: true, estrellas: 4.3, resenas: 8 },
-      { id: 'p9', nombre: 'Agua panela con limón', precio: 3500, descripcion: 'Panela artesanal con limón', disponible: true, estrellas: 4.1, resenas: 5 },
-    ]},
-    { id: 'c4', nombre: 'Postres', platos: [
-      { id: 'p10', nombre: 'Arroz con leche', precio: 5000, descripcion: 'Receta de la abuela con canela', disponible: true, estrellas: 4.5, resenas: 11 },
-      { id: 'p11', nombre: 'Natilla', precio: 4500, descripcion: 'Natilla artesanal con coco rallado', disponible: true, estrellas: 4.0, resenas: 6 },
-    ]},
-  ]
+      if (!rest) { setCargando(false); return }
+      setRestaurante(rest)
 
-  const color = restaurante.color_principal
+      // Config
+      const { data: conf } = await supabase
+        .from('config_restaurante')
+        .select('*')
+        .eq('restaurante_id', rest.id)
+        .single()
+
+      if (conf) setConfig(conf)
+
+      // Categorías y platos
+      const { data: cats } = await supabase
+        .from('categorias')
+        .select('*')
+        .eq('restaurante_id', rest.id)
+        .order('orden', { ascending: true })
+
+      const { data: platos } = await supabase
+        .from('platos')
+        .select('*')
+        .eq('restaurante_id', rest.id)
+        .order('orden', { ascending: true })
+
+      if (cats && platos) {
+        setCategorias(cats.map(cat => ({
+          id: cat.id, nombre: cat.nombre,
+          platos: platos
+            .filter(p => p.categoria_id === cat.id)
+            .map(p => ({
+              id: p.id, nombre: p.nombre, precio: p.precio,
+              descripcion: p.descripcion || '', disponible: p.disponible,
+              estrellas: 0, resenas: 0,
+            })),
+        })))
+      }
+
+      // Plato del día
+      const { data: pd } = await supabase
+        .from('plato_del_dia')
+        .select('*, platos(*)')
+        .eq('restaurante_id', rest.id)
+        .eq('activo', true)
+        .single()
+
+      if (pd?.platos) {
+        setPlatoDia({
+          id: pd.platos.id, nombre: pd.platos.nombre,
+          precio: pd.platos.precio, precioEspecial: pd.precio_especial,
+          descripcion: pd.platos.descripcion, horaFin: pd.hora_fin || '3:00 pm',
+        })
+      }
+
+      setCargando(false)
+    }
+    cargar()
+  }, [slug])
+
+  const color = restaurante?.color_principal || '#E85D24'
   const todosLosPlatos = categorias.flatMap(c => c.platos)
 
   const categoriasFiltradas = busqueda.trim()
@@ -114,7 +152,28 @@ export default function MenuPublicoPage() {
     { estrellas: 4, comentario: 'Muy buena, le pondría más aguacate', tiempo: 'Ayer' },
     { estrellas: 5, comentario: 'La mejor del barrio, siempre vengo por ella', tiempo: 'Hace 3 días' },
   ]
+  if (cargando) {
+    return (
+      <div style={{ background: '#FDFBF7', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '24px', fontWeight: 500, fontFamily: 'var(--font-display)' }}>Menu<span style={{ color: '#E85D24' }}>App</span></div>
+          <div style={{ fontSize: '13px', color: '#999', marginTop: '8px' }}>Cargando menú...</div>
+        </div>
+      </div>
+    )
+  }
 
+  if (!restaurante) {
+    return (
+      <div style={{ background: '#FDFBF7', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '40px', marginBottom: '12px' }}>🍽️</div>
+          <div style={{ fontSize: '18px', fontWeight: 500 }}>Restaurante no encontrado</div>
+          <div style={{ fontSize: '13px', color: '#999', marginTop: '8px' }}>Verifica el enlace e intenta de nuevo</div>
+        </div>
+      </div>
+    )
+  }
   return (
     <div style={{ background: '#FDFBF7', minHeight: '100vh' }}>
       <div style={{ maxWidth: '500px', margin: '0 auto', paddingBottom: totalProductos > 0 ? '140px' : '20px' }}>
