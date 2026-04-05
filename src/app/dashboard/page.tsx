@@ -2,16 +2,18 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useAuth } from '@/hooks'
 
 export default function DashboardPage() {
   const router = useRouter()
   const [mostrarPerfil, setMostrarPerfil] = useState(false)
 
-  // Datos demo (después vendrán de Supabase)
-  const plan = 'pro' // Cambiar a 'gratis' o 'basico' o 'pro' para ver las diferencias
+  // Datos reales de Supabase
+  const { usuario, restaurante: rest, cargando } = useAuth()
+  const plan = (rest?.plan || 'gratis') as 'gratis' | 'basico' | 'pro'
   const restaurante = {
-    nombre: 'La Parrilla de Juan',
-    iniciales: 'JP',
+    nombre: rest?.nombre || 'Mi restaurante',
+    iniciales: rest?.nombre ? rest.nombre.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() : 'MR',
     plan: plan,
   }
 
@@ -65,7 +67,21 @@ export default function DashboardPage() {
   }
 
   const maxEscaneo = Math.max(...escaneosPorDia.map(d => Math.max(d.actual, d.anterior)))
+  if (cargando) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-primary)' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '24px', fontWeight: 500, fontFamily: 'var(--font-display)' }}>Menu<span style={{ color: 'var(--color-accent)' }}>App</span></div>
+          <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '8px' }}>Cargando...</div>
+        </div>
+      </div>
+    )
+  }
 
+  if (!usuario) {
+    router.push('/login')
+    return null
+  }
   return (
     <div style={{ background: 'var(--bg-primary)', minHeight: '100vh' }}>
       <div style={{ maxWidth: '500px', margin: '0 auto', paddingBottom: '80px' }}>
