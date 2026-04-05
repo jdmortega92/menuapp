@@ -53,7 +53,7 @@ export default function MenuPublicoPage() {
         .maybeSingle()
 
       if (conf) setConfig(conf)
-      console.log('CONFIG:', conf)
+
 
       // Categorías y platos
       const { data: cats } = await supabase
