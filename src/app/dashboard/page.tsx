@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks'
 
@@ -67,6 +67,13 @@ export default function DashboardPage() {
   }
 
   const maxEscaneo = Math.max(...escaneosPorDia.map(d => Math.max(d.actual, d.anterior)))
+
+  useEffect(() => {
+    if (!cargando && !usuario) {
+      router.push('/login')
+    }
+  }, [cargando, usuario, router])
+
   if (cargando) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-primary)' }}>
@@ -79,7 +86,6 @@ export default function DashboardPage() {
   }
 
   if (!usuario) {
-    router.push('/login')
     return null
   }
   return (
@@ -150,7 +156,12 @@ export default function DashboardPage() {
                   <span style={{ color: 'var(--text-tertiary)' }}>→</span>
                 </div>
               ))}
-              <div onClick={() => { setMostrarPerfil(false) }} style={{
+              <div onClick={async () => {
+                setMostrarPerfil(false)
+                const { cerrarSesion } = await import('@/lib/auth')
+                await cerrarSesion()
+                router.push('/login')
+              }} style={{
                 padding: '10px 14px', fontSize: '13px', color: 'var(--color-danger)', cursor: 'pointer',
               }}>
                 Cerrar sesión
