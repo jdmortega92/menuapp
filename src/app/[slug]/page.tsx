@@ -71,8 +71,8 @@ export default function MenuPublicoPage() {
         setCategorias(cats.map(cat => ({
           id: cat.id, nombre: cat.nombre,
           platos: platos
-            .filter(p => p.categoria_id === cat.id)
-            .map(p => ({
+            .filter((p: any) => p.categoria_id === cat.id)
+            .map((p: any) => ({
               id: p.id, nombre: p.nombre, precio: p.precio,
               descripcion: p.descripcion || '', disponible: p.disponible,
               estrellas: 0, resenas: 0,
@@ -114,13 +114,13 @@ export default function MenuPublicoPage() {
     if (c <= 0) { const n = { ...pedido }; delete n[platoId]; setPedido(n) } else { setPedido({ ...pedido, [platoId]: c }) }
   }
 
-  const itemsPedido = Object.entries(pedido).map(([id, cantidad]) => ({ plato: todosLosPlatos.find(p => p.id === id)!, cantidad })).filter(i => i.plato)
+  const itemsPedido = Object.entries(pedido).map(([id, cantidad]) => ({ plato: todosLosPlatos.find((p: any) => p.id === id)!, cantidad })).filter(i => i.plato)
   const totalPedido = itemsPedido.reduce((sum, i) => sum + i.plato.precio * i.cantidad, 0)
   const totalProductos = itemsPedido.reduce((sum, i) => sum + i.cantidad, 0)
 
   const [sorpresaPlatos, setSorpresaPlatos] = useState<typeof todosLosPlatos>([])
   function sorprendeme() {
-    const d = todosLosPlatos.filter(p => p.disponible)
+    const d = todosLosPlatos.filter((p: any) => p.disponible)
     if (d.length < 3) return
     setSorpresaPlatos([...d].sort(() => Math.random() - 0.5).slice(0, 3))
     setMostrarSorpresa(true)
@@ -193,7 +193,7 @@ export default function MenuPublicoPage() {
                   fontSize: '22px', fontWeight: 600, color: color, marginBottom: '12px',
                   boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
                 }}>
-                  {restaurante.nombre.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
+                  {restaurante.nombre.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()}
                 </div>
                 <div style={{ fontSize: '24px', fontWeight: 600, color: 'white', marginBottom: '4px' }}>{restaurante.nombre}</div>
                 <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.8)' }}>{restaurante.tipo} · {restaurante.ciudad}</div>
@@ -285,7 +285,7 @@ export default function MenuPublicoPage() {
           <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(253,251,247,1) 0%, transparent 80%)' }} />
           <div style={{ position: 'relative', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '12px', width: '100%' }}>
             <div style={{ width: '52px', height: '52px', borderRadius: '12px', flexShrink: 0, background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', fontWeight: 600, color: color, boxShadow: '0 2px 8px rgba(0,0,0,0.15)' }}>
-              {restaurante.nombre.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
+              {restaurante.nombre.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()}
             </div>
             <div>
               <div style={{ fontSize: '17px', fontWeight: 600 }}>{restaurante.nombre}</div>
@@ -317,11 +317,11 @@ export default function MenuPublicoPage() {
         {categoriaAbierta && (
           <div style={{ padding: '0 16px 10px' }}>
             <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-light)', borderRadius: '8px', overflow: 'hidden' }}>
-              {categorias.map((cat, i) => (
+              {categorias.map((cat: any, i: number) => (
                 <div key={cat.id} onClick={() => { setCategoriaAbierta(null); document.getElementById(cat.id)?.scrollIntoView({ behavior: 'smooth' }) }}
                   style={{ padding: '10px 14px', fontSize: '13px', cursor: 'pointer', borderBottom: i < categorias.length - 1 ? '1px solid var(--border-light)' : 'none', display: 'flex', justifyContent: 'space-between' }}>
                   <span>{cat.nombre}</span>
-                  <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{cat.platos.filter(p => p.disponible).length}</span>
+                  <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{cat.platos.filter((p: any) => p.disponible).length}</span>
                 </div>
               ))}
             </div>
@@ -374,7 +374,7 @@ export default function MenuPublicoPage() {
                 <span style={{ fontSize: '13px', fontWeight: 500, color: color }}>🎲 Tu combinación</span>
                 <span onClick={() => setMostrarSorpresa(false)} style={{ fontSize: '11px', color: 'var(--text-tertiary)', cursor: 'pointer' }}>✕ Cerrar</span>
               </div>
-              {sorpresaPlatos.map((plato) => (
+              {sorpresaPlatos.map((plato: any) => (
                 <div key={plato.id} onClick={() => setPlatoDetalle(plato.id)} style={{
                   background: 'var(--bg-secondary)', borderRadius: '8px', padding: '10px',
                   display: 'flex', gap: '10px', marginBottom: '6px', border: '1px solid var(--border-light)', cursor: 'pointer',
@@ -395,10 +395,10 @@ export default function MenuPublicoPage() {
         )}
 
         {/* Categorías y platos */}
-        {categoriasFiltradas.map((cat) => (
+        {categoriasFiltradas.map((cat: any) => (
           <div key={cat.id} id={cat.id} style={{ padding: '0 16px', marginBottom: '14px' }}>
             <div style={{ fontSize: '14px', fontWeight: 500, marginBottom: '8px', paddingTop: '4px' }}>{cat.nombre}</div>
-            {cat.platos.map((plato) => (
+            {cat.platos.map((plato: any) => (
               <div key={plato.id} style={{
                 background: 'var(--bg-secondary)', border: '1px solid var(--border-light)',
                 borderRadius: '10px', padding: '10px', display: 'flex', gap: '10px',
@@ -456,7 +456,7 @@ export default function MenuPublicoPage() {
               </div>
               {esQR && <div style={{ padding: '12px 20px', background: 'var(--color-info-light)', fontSize: '12px', color: 'var(--color-info)' }}>Mesa {qrMesa?.replace('mesa', '')} · Muéstrale este resumen al mesero</div>}
               <div style={{ padding: '16px 20px' }}>
-                {itemsPedido.map((item) => (
+                {itemsPedido.map((item: any) => (
                   <div key={item.plato.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--border-light)' }}>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: '13px', fontWeight: 500 }}>{item.plato.nombre}</div>
@@ -499,7 +499,7 @@ export default function MenuPublicoPage() {
         )}
         {/* Modal calificar plato */}
         {platoCalificar && (() => {
-          const plato = todosLosPlatos.find(p => p.id === platoCalificar)
+          const plato = todosLosPlatos.find((p: any) => p.id === platoCalificar)
           if (!plato) return null
           const tagsDisponibles = [
             { id: 'buena_porcion', label: 'Buena porción' },
@@ -625,7 +625,7 @@ export default function MenuPublicoPage() {
         })()}
         {/* Modal detalle plato */}
         {platoDetalle && (() => {
-          const plato = todosLosPlatos.find(p => p.id === platoDetalle)
+          const plato = todosLosPlatos.find((p: any) => p.id === platoDetalle)
           if (!plato) return null
           const cantidadActual = pedido[plato.id] || 0
           const cantidadMostrar = cantidadActual || 1
@@ -660,7 +660,7 @@ export default function MenuPublicoPage() {
                     <>
                       <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '10px' }}>Reseñas</div>
                       <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-light)', borderRadius: '10px', overflow: 'hidden', marginBottom: '14px' }}>
-                        {resenasDemo.map((r, i) => (
+                        {resenasDemo.map((r: any, i: number) => (
                           <div key={i} style={{ padding: '12px 14px', borderBottom: i < resenasDemo.length - 1 ? '1px solid var(--border-light)' : 'none' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
                               <div style={{ fontSize: '11px', color: '#F2A623' }}>{'★'.repeat(r.estrellas)}{'☆'.repeat(5 - r.estrellas)}</div>
