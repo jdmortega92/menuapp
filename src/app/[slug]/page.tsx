@@ -172,12 +172,17 @@ export default function MenuPublicoPage() {
               {/* Dirección */}
               <div style={{ marginBottom: '20px' }}>
                 <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '10px' }}>Ubicación</div>
-                <div style={{
-                  background: 'var(--bg-secondary)', border: '1px solid var(--border-light)',
-                  borderRadius: '10px', padding: '14px',
-                }}>
-                  <div style={{ fontSize: '13px' }}>Cra 70 #45-12, Laureles</div>
-                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>{restaurante.ciudad}</div>
+                <div onClick={() => window.open(`https://maps.google.com/?q=${encodeURIComponent('Cra 70 #45-12, Laureles, ' + restaurante.ciudad)}`, '_blank')}
+                  style={{
+                    background: 'var(--bg-secondary)', border: '1px solid var(--border-light)',
+                    borderRadius: '10px', padding: '14px', cursor: 'pointer',
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  }}>
+                  <div>
+                    <div style={{ fontSize: '13px' }}>Cra 70 #45-12, Laureles</div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>{restaurante.ciudad}</div>
+                  </div>
+                  <span style={{ fontSize: '12px', color: 'var(--color-info)' }}>Ver mapa →</span>
                 </div>
               </div>
 
