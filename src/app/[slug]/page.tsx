@@ -86,7 +86,7 @@ export default function MenuPublicoPage() {
         .select('*, platos(*)')
         .eq('restaurante_id', rest.id)
         .eq('activo', true)
-        .single()
+        .maybeSingle()
 
       if (pd?.platos) {
         setPlatoDia({
