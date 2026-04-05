@@ -341,6 +341,12 @@ export default function RegistroPage() {
               >
                 {cargando ? 'Creando cuenta...' : 'Crear mi menú gratis'}
               </button>
+              <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', textAlign: 'center', marginTop: '12px' }}>
+                Al crear tu cuenta aceptas nuestros{' '}
+                <span onClick={() => router.push('/legal')} style={{ color: 'var(--color-info)', cursor: 'pointer' }}>términos y condiciones</span>
+                {' '}y{' '}
+                <span onClick={() => router.push('/legal')} style={{ color: 'var(--color-info)', cursor: 'pointer' }}>política de privacidad</span>
+              </div>
             </>
           )}
         </form>
