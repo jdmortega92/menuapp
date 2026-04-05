@@ -50,9 +50,10 @@ export default function MenuPublicoPage() {
         .from('config_restaurante')
         .select('*')
         .eq('restaurante_id', rest.id)
-        .single()
+        .maybeSingle()
 
       if (conf) setConfig(conf)
+      console.log('CONFIG:', conf)
 
       // Categorías y platos
       const { data: cats } = await supabase
