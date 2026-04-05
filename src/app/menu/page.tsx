@@ -1,7 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { useAuth } from '@/hooks'
+import { createClient } from '@/lib/supabase-browser'
 
 interface Plato {
   id: string; nombre: string; precio: number; descripcion: string; disponible: boolean; foto_url: string | null
@@ -12,6 +14,8 @@ interface Categoria {
 
 export default function MiMenuPage() {
   const router = useRouter()
+  const { usuario, restaurante: rest, cargando: cargandoAuth } = useAuth()
+  const [cargandoMenu, setCargandoMenu] = useState(true)
   const [tabActiva, setTabActiva] = useState<'platos' | 'combos'>('platos')
   const [busqueda, setBusqueda] = useState('')
   const [mostrarFormCategoria, setMostrarFormCategoria] = useState(false)
@@ -53,23 +57,56 @@ export default function MiMenuPage() {
 
   const MAX_DESC = 150
 
-  const [categorias, setCategorias] = useState<Categoria[]>([
-    {
-      id: '1', nombre: 'Platos fuertes', orden: 0,
-      platos: [
-        { id: 'p1', nombre: 'Bandeja paisa', precio: 18000, descripcion: 'Frijoles, arroz, carne, chicharrón, huevo', disponible: true, foto_url: null },
-        { id: 'p2', nombre: 'Arroz con pollo', precio: 15000, descripcion: 'Arroz, pollo desmechado, verduras', disponible: false, foto_url: null },
-        { id: 'p3', nombre: 'Cazuela de frijoles', precio: 14000, descripcion: 'Frijoles rojos, arroz, chicharrón, aguacate', disponible: true, foto_url: null },
-      ],
-    },
-    {
-      id: '2', nombre: 'Bebidas', orden: 1,
-      platos: [
-        { id: 'p4', nombre: 'Limonada de coco', precio: 6000, descripcion: 'Limonada con leche de coco y hielo', disponible: true, foto_url: null },
-        { id: 'p5', nombre: 'Jugo natural', precio: 5000, descripcion: 'Fruta fresca del día', disponible: true, foto_url: null },
-      ],
-    },
-  ])
+  const [categorias, setCategorias] = useState<Categoria[]>([])
+  // Cargar categorías y platos de Supabase
+  useEffect(() => {
+    if (!rest?.id) return
+
+    async function cargar() {
+      const supabase = createClient()
+
+      const { data: cats } = await supabase
+        .from('categorias')
+        .select('*')
+        .eq('restaurante_id', rest!.id)
+        .order('orden', { ascending: true })
+
+      const { data: platos } = await supabase
+        .from('platos')
+        .select('*')
+        .eq('restaurante_id', rest!.id)
+        .order('orden', { ascending: true })
+
+      if (cats) {
+        const categoriasConPlatos = cats.map(cat => ({
+          id: cat.id,
+          nombre: cat.nombre,
+          orden: cat.orden,
+          platos: (platos || [])
+            .filter(p => p.categoria_id === cat.id)
+            .map(p => ({
+              id: p.id,
+              nombre: p.nombre,
+              precio: p.precio,
+              descripcion: p.descripcion || '',
+              disponible: p.disponible,
+              foto_url: p.foto_url,
+            })),
+        }))
+        setCategorias(categoriasConPlatos)
+      }
+      setCargandoMenu(false)
+    }
+
+    cargar()
+  }, [rest?.id])
+
+  // Proteger ruta
+  useEffect(() => {
+    if (!cargandoAuth && !usuario) {
+      router.push('/login')
+    }
+  }, [cargandoAuth, usuario, router])
   const precioIndividualCombo = nuevoCombo.platoIds.reduce((sum, id) => {
     const plato = categorias.flatMap(c => c.platos).find(p => p.id === id)
     return sum + (plato?.precio || 0)
@@ -88,18 +125,32 @@ export default function MiMenuPage() {
   function eliminarCombo(id: string) { setCombos(combos.filter(c => c.id !== id)) }
 
   // ── Categorías ──
-  function agregarCategoria() {
-    if (!nuevaCategoria.trim()) return
-    setCategorias([...categorias, { id: Date.now().toString(), nombre: nuevaCategoria, orden: categorias.length, platos: [] }])
+  async function agregarCategoria() {
+    if (!nuevaCategoria.trim() || !rest?.id) return
+    const supabase = createClient()
+    const { data, error } = await supabase
+      .from('categorias')
+      .insert({ restaurante_id: rest.id, nombre: nuevaCategoria, orden: categorias.length })
+      .select()
+      .single()
+
+    if (data) {
+      setCategorias([...categorias, { id: data.id, nombre: data.nombre, orden: data.orden, platos: [] }])
+    }
     setNuevaCategoria('')
     setMostrarFormCategoria(false)
   }
-  function eliminarCategoria(id: string) {
+  async function eliminarCategoria(id: string) {
+    const supabase = createClient()
+    await supabase.from('platos').delete().eq('categoria_id', id)
+    await supabase.from('categorias').delete().eq('id', id)
     setCategorias(categorias.filter(c => c.id !== id))
     setMenuCategoria(null)
   }
-  function renombrarCategoria(id: string) {
+  async function renombrarCategoria(id: string) {
     if (!nombreEditCategoria.trim()) return
+    const supabase = createClient()
+    await supabase.from('categorias').update({ nombre: nombreEditCategoria }).eq('id', id)
     setCategorias(categorias.map(c => c.id === id ? { ...c, nombre: nombreEditCategoria } : c))
     setEditandoCategoria(null)
     setNombreEditCategoria('')
@@ -119,47 +170,77 @@ export default function MiMenuPage() {
   }
 
   // ── Platos ──
-  function agregarPlato(categoriaId: string) {
-    if (!nuevoPlato.nombre.trim() || !nuevoPlato.precio) return
-    setCategorias(categorias.map(cat => {
-      if (cat.id === categoriaId) {
-        return { ...cat, platos: [...cat.platos, {
-          id: Date.now().toString(), nombre: nuevoPlato.nombre,
-          precio: parseInt(nuevoPlato.precio), descripcion: nuevoPlato.descripcion,
-          disponible: true, foto_url: null,
-        }] }
-      }
-      return cat
-    }))
+  async function agregarPlato(categoriaId: string) {
+    if (!nuevoPlato.nombre.trim() || !nuevoPlato.precio || !rest?.id) return
+    const supabase = createClient()
+    const cat = categorias.find(c => c.id === categoriaId)
+    const { data, error } = await supabase
+      .from('platos')
+      .insert({
+        restaurante_id: rest.id,
+        categoria_id: categoriaId,
+        nombre: nuevoPlato.nombre,
+        precio: parseInt(nuevoPlato.precio),
+        descripcion: nuevoPlato.descripcion,
+        disponible: true,
+        orden: cat ? cat.platos.length : 0,
+      })
+      .select()
+      .single()
+
+    if (data) {
+      setCategorias(categorias.map(c => {
+        if (c.id === categoriaId) {
+          return { ...c, platos: [...c.platos, {
+            id: data.id, nombre: data.nombre, precio: data.precio,
+            descripcion: data.descripcion || '', disponible: data.disponible, foto_url: data.foto_url,
+          }] }
+        }
+        return c
+      }))
+    }
     setNuevoPlato({ nombre: '', precio: '', descripcion: '' })
     setMostrarFormPlato(null)
   }
-  function toggleDisponible(categoriaId: string, platoId: string) {
-    setCategorias(categorias.map(cat => {
-      if (cat.id === categoriaId) {
-        return { ...cat, platos: cat.platos.map(p => p.id === platoId ? { ...p, disponible: !p.disponible } : p) }
+  async function toggleDisponible(categoriaId: string, platoId: string) {
+    const cat = categorias.find(c => c.id === categoriaId)
+    const plato = cat?.platos.find(p => p.id === platoId)
+    if (!plato) return
+    const supabase = createClient()
+    await supabase.from('platos').update({ disponible: !plato.disponible }).eq('id', platoId)
+    setCategorias(categorias.map(c => {
+      if (c.id === categoriaId) {
+        return { ...c, platos: c.platos.map(p => p.id === platoId ? { ...p, disponible: !p.disponible } : p) }
       }
-      return cat
+      return c
     }))
   }
-  function eliminarPlato(categoriaId: string, platoId: string) {
-    setCategorias(categorias.map(cat => {
-      if (cat.id === categoriaId) {
-        return { ...cat, platos: cat.platos.filter(p => p.id !== platoId) }
+  async function eliminarPlato(categoriaId: string, platoId: string) {
+    const supabase = createClient()
+    await supabase.from('platos').delete().eq('id', platoId)
+    setCategorias(categorias.map(c => {
+      if (c.id === categoriaId) {
+        return { ...c, platos: c.platos.filter(p => p.id !== platoId) }
       }
-      return cat
+      return c
     }))
     if (platoExpandido === platoId) setPlatoExpandido(null)
   }
-  function guardarEdicionPlato(categoriaId: string, platoId: string) {
+  async function guardarEdicionPlato(categoriaId: string, platoId: string) {
     if (!editPlato.nombre.trim() || !editPlato.precio) return
-    setCategorias(categorias.map(cat => {
-      if (cat.id === categoriaId) {
-        return { ...cat, platos: cat.platos.map(p => p.id === platoId ? {
+    const supabase = createClient()
+    await supabase.from('platos').update({
+      nombre: editPlato.nombre,
+      precio: parseInt(editPlato.precio),
+      descripcion: editPlato.descripcion,
+    }).eq('id', platoId)
+    setCategorias(categorias.map(c => {
+      if (c.id === categoriaId) {
+        return { ...c, platos: c.platos.map(p => p.id === platoId ? {
           ...p, nombre: editPlato.nombre, precio: parseInt(editPlato.precio), descripcion: editPlato.descripcion,
         } : p) }
       }
-      return cat
+      return c
     }))
     setPlatoExpandido(null)
   }
