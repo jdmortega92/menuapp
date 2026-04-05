@@ -1,28 +1,46 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { useAuth } from '@/hooks'
 
 export default function MiQRPage() {
   const router = useRouter()
+  const { usuario, restaurante: rest, cargando } = useAuth()
   const [copiado, setCopiado] = useState(false)
   const [tabFormato, setTabFormato] = useState<'mesa' | 'enlace'>('mesa')
+  const [mesas, setMesas] = useState(8)
 
-  // Datos demo
   const restaurante = {
-    nombre: 'La Parrilla de Juan',
-    slug: 'la-parrilla-de-juan',
+    nombre: rest?.nombre || 'Mi restaurante',
+    slug: rest?.slug || 'mi-restaurante',
   }
   const urlBase = 'menuapp.co'
   const urlMenu = `${urlBase}/${restaurante.slug}`
-  const [mesas, setMesas] = useState(8)
+
+  useEffect(() => {
+    if (!cargando && !usuario) {
+      router.push('/login')
+    }
+  }, [cargando, usuario, router])
 
   function copiarEnlace() {
     navigator.clipboard.writeText(`https://${urlMenu}`)
     setCopiado(true)
     setTimeout(() => setCopiado(false), 2000)
   }
+  if (cargando) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-primary)' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '24px', fontWeight: 500, fontFamily: 'var(--font-display)' }}>Menu<span style={{ color: 'var(--color-accent)' }}>App</span></div>
+          <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '8px' }}>Cargando...</div>
+        </div>
+      </div>
+    )
+  }
 
+  if (!usuario) return null
   return (
     <div style={{ background: 'var(--bg-primary)', minHeight: '100vh' }}>
       <div style={{ maxWidth: '500px', margin: '0 auto', paddingBottom: '80px' }}>
