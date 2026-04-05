@@ -34,16 +34,55 @@ export default function RegistroPage() {
     setError('')
     setCargando(true)
 
-    const { error } = await registrarConEmail(email, password)
+    // 1. Crear cuenta en Supabase Auth
+    const { data, error: authError } = await registrarConEmail(email, password)
 
-    if (error) {
+    if (authError) {
       setError('Error al crear la cuenta. Intenta con otro correo.')
       setCargando(false)
       return
     }
 
-    // Después del registro, redirigir al dashboard
-    // donde se completará el perfil del restaurante
+    if (!data.user) {
+      setError('Error inesperado. Intenta de nuevo.')
+      setCargando(false)
+      return
+    }
+
+    // 2. Crear restaurante en la base de datos
+    const { createClient } = await import('@/lib/supabase-browser')
+    const supabase = createClient()
+
+    const slug = nombre
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+
+    const { error: dbError } = await supabase
+      .from('restaurantes')
+      .insert({
+        usuario_id: data.user.id,
+        nombre,
+        tipo,
+        ciudad,
+        whatsapp,
+        slug,
+        plan: 'gratis',
+        idioma: 'es',
+      })
+
+    if (dbError) {
+      if (dbError.message.includes('slug')) {
+        setError('Ese nombre ya está en uso. Intenta con otro.')
+      } else {
+        setError('Error al crear el restaurante: ' + dbError.message)
+      }
+      setCargando(false)
+      return
+    }
+
     router.push('/dashboard')
   }
 
