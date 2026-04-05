@@ -102,7 +102,7 @@ export default function MenuPublicoPage() {
   }, [slug])
 
   const color = restaurante?.color_principal || '#E85D24'
-  const todosLosPlatos = categorias.flatMap(c => c.platos)
+  const todosLosPlatos = categorias.flatMap((c: any) => c.platos)
 
   const categoriasFiltradas = busqueda.trim()
     ? categorias.map((cat: any) => ({ ...cat, platos: cat.platos.filter((p: any) => p.nombre.toLowerCase().includes(busqueda.toLowerCase()) || p.descripcion?.toLowerCase().includes(busqueda.toLowerCase())) })).filter((cat: any) => cat.platos.length > 0)
