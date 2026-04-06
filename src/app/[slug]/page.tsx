@@ -101,6 +101,20 @@ export default function MenuPublicoPage() {
     }
     cargar()
   }, [slug])
+  useEffect(() => {
+    if (!platoDetalle || !restaurante) return
+    setResenasReales([])
+    const supabase = createClient()
+    supabase.from('calificaciones')
+      .select('*')
+      .eq('plato_id', platoDetalle)
+      .order('created_at', { ascending: false })
+      .limit(5)
+      .then(({ data }: any) => {
+        if (data) setResenasReales(data)
+        else setResenasReales([])
+      })
+  }, [platoDetalle, restaurante])
 
   const color = restaurante?.color_principal || '#E85D24'
   const todosLosPlatos = categorias.flatMap((c: any) => c.platos)
@@ -148,11 +162,8 @@ export default function MenuPublicoPage() {
     )
   }
 
-  const resenasDemo = [
-    { estrellas: 5, comentario: 'Excelente porción, muy completa', tiempo: 'Hace 2 horas' },
-    { estrellas: 4, comentario: 'Muy buena, le pondría más aguacate', tiempo: 'Ayer' },
-    { estrellas: 5, comentario: 'La mejor del barrio, siempre vengo por ella', tiempo: 'Hace 3 días' },
-  ]
+  const [resenasReales, setResenasReales] = useState<any[]>([])
+  
   if (cargando) {
     return (
       <div style={{ background: '#FDFBF7', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -516,8 +527,16 @@ export default function MenuPublicoPage() {
             setCalTags(calTags.includes(id) ? calTags.filter(t => t !== id) : [...calTags, id])
           }
 
-          function enviarCalificacion() {
+          async function enviarCalificacion() {
             if (calEstrellas === 0) return
+            const supabase = createClient()
+            await supabase.from('calificaciones').insert({
+              plato_id: plato.id,
+              restaurante_id: restaurante.id,
+              estrellas: calEstrellas,
+              tags: calTags,
+              comentario: calComentario || null,
+            })
             setCalEnviada(true)
             setTimeout(() => { setPlatoCalificar(null); setCalEnviada(false) }, 2000)
           }
@@ -630,6 +649,8 @@ export default function MenuPublicoPage() {
           if (!plato) return null
           const cantidadActual = pedido[plato.id] || 0
           const cantidadMostrar = cantidadActual || 1
+
+          
           return (
             <>
               <div onClick={() => setPlatoDetalle(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 60 }} />
@@ -659,24 +680,40 @@ export default function MenuPublicoPage() {
                   {/* Reseñas */}
                   {config?.calificaciones_activo && (
                     <>
-                      <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '10px' }}>Reseñas</div>
-                      <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-light)', borderRadius: '10px', overflow: 'hidden', marginBottom: '14px' }}>
-                        {resenasDemo.map((r: any, i: number) => (
-                          <div key={i} style={{ padding: '12px 14px', borderBottom: i < resenasDemo.length - 1 ? '1px solid var(--border-light)' : 'none' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                              <div style={{ fontSize: '11px', color: '#F2A623' }}>{'★'.repeat(r.estrellas)}{'☆'.repeat(5 - r.estrellas)}</div>
-                              <div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{r.tiempo}</div>
+                      <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '10px' }}>Reseñas {resenasReales.length > 0 ? `(${resenasReales.length})` : ''}</div>
+                      {resenasReales.length > 0 ? (
+                        <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-light)', borderRadius: '10px', overflow: 'hidden', marginBottom: '14px' }}>
+                          {resenasReales.map((r: any, i: number) => (
+                            <div key={i} style={{ padding: '12px 14px', borderBottom: i < resenasReales.length - 1 ? '1px solid var(--border-light)' : 'none' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                                <div style={{ fontSize: '11px', color: '#F2A623' }}>{'★'.repeat(r.estrellas)}{'☆'.repeat(5 - r.estrellas)}</div>
+                                <div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>
+                                  {new Date(r.created_at).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })}
+                                </div>
+                              </div>
+                              {r.tags && r.tags.length > 0 && (
+                                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginBottom: '4px' }}>
+                                  {r.tags.map((t: string, ti: number) => (
+                                    <span key={ti} style={{ fontSize: '10px', background: 'var(--bg-tertiary)', padding: '2px 6px', borderRadius: '4px', color: 'var(--text-secondary)' }}>{t}</span>
+                                  ))}
+                                </div>
+                              )}
+                              {r.comentario && <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{r.comentario}</div>}
                             </div>
-                            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{r.comentario}</div>
-                          </div>
-                        ))}
-                      </div>
-                     <div onClick={() => { setPlatoCalificar(plato.id); setPlatoDetalle(null); setCalEstrellas(0); setCalTags([]); setCalComentario(''); setCalEnviada(false) }} style={{ border: '1px dashed var(--border-medium)', borderRadius: '10px', padding: '14px', textAlign: 'center', cursor: 'pointer', marginBottom: '16px' }}>
+                          ))}
+                        </div>
+                      ) : (
+                        <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-light)', borderRadius: '10px', padding: '16px', textAlign: 'center', marginBottom: '14px' }}>
+                          <div style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>Aún no hay reseñas. ¡Sé el primero!</div>
+                        </div>
+                      )}
+                      <div onClick={() => { setPlatoCalificar(plato.id); setPlatoDetalle(null); setCalEstrellas(0); setCalTags([]); setCalComentario(''); setCalEnviada(false) }} style={{ border: '1px dashed var(--border-medium)', borderRadius: '10px', padding: '14px', textAlign: 'center', cursor: 'pointer', marginBottom: '16px' }}>
                         <div style={{ fontSize: '13px', fontWeight: 500 }}>Calificar este plato</div>
                         <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>Comparte tu experiencia</div>
                       </div>
                     </>
                   )}
+                      
 
                   {/* Agregar al pedido */}
                   <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
