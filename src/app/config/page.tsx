@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks'
 import { createClient } from '@/lib/supabase-browser'
+import Cropper from 'react-easy-crop'
 
 export default function ConfigPage() {
   const router = useRouter()
@@ -32,6 +33,17 @@ export default function ConfigPage() {
   })
   const [email, setEmail] = useState('')
   const [cargandoConfig, setCargandoConfig] = useState(true)
+  const [logoUrl, setLogoUrl] = useState<string | null>(null)
+  const [bannerUrl, setBannerUrl] = useState<string | null>(null)
+  const [subiendoImagen, setSubiendoImagen] = useState(false)
+  const [cropModal, setCropModal] = useState<{ imagen: string; tipo: 'logo' | 'banner' } | null>(null)
+  const [crop, setCrop] = useState({ x: 0, y: 0 })
+  const [zoom, setZoom] = useState(1)
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<any>(null)
+
+  const onCropComplete = useCallback((croppedArea: any, croppedAreaPixels: any) => {
+    setCroppedAreaPixels(croppedAreaPixels)
+  }, [])
 
   // Cargar datos reales
   useEffect(() => {
@@ -66,6 +78,18 @@ export default function ConfigPage() {
           sorprendeme_activo: conf.sorprendeme_activo ?? true,
           menu_por_horario_activo: false,
         })
+      }
+      // Cargar logo y banner
+      const supabase2 = createClient()
+      const { data: logoCheck } = await supabase2.storage.from('imagenes').list(`${rest!.id}`, { search: 'logo' })
+      if (logoCheck && logoCheck.length > 0) {
+        const { data: logoData } = supabase2.storage.from('imagenes').getPublicUrl(`${rest!.id}/logo.jpg`)
+        setLogoUrl(logoData.publicUrl + '?t=' + Date.now())
+      }
+      const { data: bannerCheck } = await supabase2.storage.from('imagenes').list(`${rest!.id}`, { search: 'banner' })
+      if (bannerCheck && bannerCheck.length > 0) {
+        const { data: bannerData } = supabase2.storage.from('imagenes').getPublicUrl(`${rest!.id}/banner.jpg`)
+        setBannerUrl(bannerData.publicUrl + '?t=' + Date.now())
       }
       setCargandoConfig(false)
     }
@@ -111,7 +135,70 @@ export default function ConfigPage() {
     { valor: 'food_truck', label: 'Food truck' },
     { valor: 'otro', label: 'Otro' },
   ]
+  function recortarImagen(imageSrc: string, pixelCrop: any, ancho: number, alto: number): Promise<Blob> {
+    return new Promise((resolve) => {
+      const img = new Image()
+      img.onload = () => {
+        const canvas = document.createElement('canvas')
+        const ctx = canvas.getContext('2d')!
+        canvas.width = ancho
+        canvas.height = alto
+        ctx.drawImage(img, pixelCrop.x, pixelCrop.y, pixelCrop.width, pixelCrop.height, 0, 0, ancho, alto)
+        canvas.toBlob((blob) => resolve(blob!), 'image/jpeg', 0.85)
+      }
+      img.src = imageSrc
+    })
+  }
 
+  function seleccionarImagen(tipo: 'logo' | 'banner', file: File) {
+    if (file.size > 10 * 1024 * 1024) {
+      alert('La imagen es muy grande. Máximo 10MB.')
+      return
+    }
+    const url = URL.createObjectURL(file)
+    setCropModal({ imagen: url, tipo })
+    setCrop({ x: 0, y: 0 })
+    setZoom(1)
+  }
+
+  async function confirmarRecorte() {
+    if (!cropModal || !croppedAreaPixels || !rest?.id) return
+    setSubiendoImagen(true)
+    const tipo = cropModal.tipo
+
+    const ancho = tipo === 'logo' ? 400 : 1200
+    const alto = tipo === 'logo' ? 400 : 400
+    const blob = await recortarImagen(cropModal.imagen, croppedAreaPixels, ancho, alto)
+
+    setCropModal(null)
+
+    const supabase = createClient()
+    const path = `${rest.id}/${tipo}.jpg`
+
+    const { error } = await supabase.storage
+      .from('imagenes')
+      .upload(path, blob, { upsert: true, contentType: 'image/jpeg' })
+
+    if (error) {
+      setSubiendoImagen(false)
+      alert('Error al subir la imagen')
+      return
+    }
+
+    const { data: urlData } = supabase.storage.from('imagenes').getPublicUrl(path)
+    const url = urlData.publicUrl + '?t=' + Date.now()
+
+    // Guardar URL en restaurante
+    if (tipo === 'logo') {
+      await supabase.from('restaurantes').update({ logo_url: url }).eq('id', rest.id)
+      setLogoUrl(url)
+    } else {
+      await supabase.from('restaurantes').update({ banner_url: url }).eq('id', rest.id)
+      setBannerUrl(url)
+    }
+
+    setSubiendoImagen(false)
+  }
   function toggleSeccion(id: string) {
     setSeccionActiva(seccionActiva === id ? null : id)
   }
@@ -292,29 +379,60 @@ export default function ConfigPage() {
               {/* Banner */}
               <div style={{ marginBottom: '14px' }}>
                 <label className="label">Foto de portada (banner)</label>
-                <div style={{
-                  border: '1px dashed var(--border-medium)', borderRadius: 'var(--radius-md)',
-                  padding: '20px', textAlign: 'center', cursor: 'pointer', marginTop: '6px',
-                }}>
-                  <div style={{ fontSize: '24px', marginBottom: '4px', color: 'var(--text-tertiary)' }}>⊕</div>
-                  <div style={{ fontSize: '13px', color: 'var(--color-info)' }}>Subir imagen</div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>JPG o PNG · Recomendado: 1200x400</div>
-                </div>
+                {bannerUrl ? (
+                  <div style={{ marginTop: '6px' }}>
+                    <div style={{ width: '100%', aspectRatio: '3/1', borderRadius: '10px', overflow: 'hidden', marginBottom: '8px' }}>
+                      <img src={bannerUrl} alt="Banner" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    </div>
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', fontSize: '12px', border: '1px solid var(--border-light)', cursor: 'pointer', color: 'var(--color-info)' }}>
+                      {subiendoImagen ? 'Subiendo...' : 'Cambiar banner'}
+                      <input type="file" accept="image/*" style={{ display: 'none' }} disabled={subiendoImagen}
+                        onChange={(e) => { const f = e.target.files?.[0]; if (f) seleccionarImagen('banner', f) }} />
+                    </label>
+                  </div>
+                ) : (
+                  <label style={{ cursor: 'pointer', display: 'block', marginTop: '6px' }}>
+                    <div style={{
+                      border: '1px dashed var(--border-medium)', borderRadius: 'var(--radius-md)',
+                      padding: '20px', textAlign: 'center',
+                    }}>
+                      <div style={{ fontSize: '24px', marginBottom: '4px', color: 'var(--text-tertiary)' }}>⊕</div>
+                      <div style={{ fontSize: '13px', color: 'var(--color-info)' }}>{subiendoImagen ? 'Subiendo...' : 'Subir banner'}</div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>JPG o PNG · Máximo 10MB · Se ajusta a 1200x400</div>
+                    </div>
+                    <input type="file" accept="image/*" style={{ display: 'none' }} disabled={subiendoImagen}
+                      onChange={(e) => { const f = e.target.files?.[0]; if (f) seleccionarImagen('banner', f) }} />
+                  </label>
+                )}
               </div>
 
               {/* Logo */}
               <div style={{ marginBottom: '14px' }}>
                 <label className="label">Logo del negocio</label>
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginTop: '6px' }}>
-                  <div style={{
-                    width: '56px', height: '56px', borderRadius: '12px', border: '1px dashed var(--border-medium)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-                  }}>
-                    <span style={{ fontSize: '20px', color: 'var(--text-tertiary)' }}>⊕</span>
-                  </div>
+                  <label style={{ cursor: 'pointer' }}>
+                    <div style={{
+                      width: '56px', height: '56px', borderRadius: '12px',
+                      border: logoUrl ? 'none' : '1px dashed var(--border-medium)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      overflow: 'hidden',
+                    }}>
+                      {logoUrl ? (
+                        <img src={logoUrl} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        <span style={{ fontSize: '20px', color: 'var(--text-tertiary)' }}>⊕</span>
+                      )}
+                    </div>
+                    <input type="file" accept="image/*" style={{ display: 'none' }} disabled={subiendoImagen}
+                      onChange={(e) => { const f = e.target.files?.[0]; if (f) seleccionarImagen('logo', f) }} />
+                  </label>
                   <div>
-                    <div style={{ fontSize: '13px', color: 'var(--color-info)', cursor: 'pointer' }}>Subir logo</div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>Cuadrado · Recomendado: 200x200</div>
+                    <label style={{ fontSize: '13px', color: 'var(--color-info)', cursor: 'pointer' }}>
+                      {subiendoImagen ? 'Subiendo...' : logoUrl ? 'Cambiar logo' : 'Subir logo'}
+                      <input type="file" accept="image/*" style={{ display: 'none' }} disabled={subiendoImagen}
+                        onChange={(e) => { const f = e.target.files?.[0]; if (f) seleccionarImagen('logo', f) }} />
+                    </label>
+                    <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>Cuadrado · Máximo 10MB · Se ajusta a 400x400</div>
                   </div>
                 </div>
               </div>
@@ -456,7 +574,41 @@ export default function ConfigPage() {
             </div>
           )}
         </div>
-
+        {/* Modal recorte de imagen */}
+        {cropModal && (
+          <>
+            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 80 }} />
+            <div style={{ position: 'fixed', inset: 0, zIndex: 90, display: 'flex', flexDirection: 'column' }}>
+              <div style={{ padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span onClick={() => setCropModal(null)} style={{ fontSize: '14px', color: 'white', cursor: 'pointer' }}>Cancelar</span>
+                <span style={{ fontSize: '15px', fontWeight: 500, color: 'white' }}>Ajustar {cropModal.tipo === 'logo' ? 'logo' : 'banner'}</span>
+                <span onClick={confirmarRecorte} style={{ fontSize: '14px', color: '#4CAF50', fontWeight: 500, cursor: 'pointer' }}>Listo</span>
+              </div>
+              <div style={{ position: 'relative', flex: 1 }}>
+                <Cropper
+                  image={cropModal.imagen}
+                  crop={crop}
+                  zoom={zoom}
+                  aspect={cropModal.tipo === 'logo' ? 1 : 3}
+                  onCropChange={setCrop}
+                  onZoomChange={setZoom}
+                  onCropComplete={onCropComplete}
+                  cropShape={cropModal.tipo === 'logo' ? 'round' : 'rect'}
+                />
+              </div>
+              <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', width: '100%', maxWidth: '300px' }}>
+                  <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)' }}>-</span>
+                  <input type="range" min={1} max={3} step={0.1} value={zoom}
+                    onChange={(e) => setZoom(Number(e.target.value))}
+                    style={{ flex: 1, accentColor: '#4CAF50' }} />
+                  <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)' }}>+</span>
+                </div>
+                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)' }}>Arrastra para ajustar · Zoom para acercar</div>
+              </div>
+            </div>
+          </>
+        )}
         {/* Bottom nav */}
         <div style={{
           display: 'flex', borderTop: '1px solid var(--border-light)',

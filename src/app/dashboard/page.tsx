@@ -113,9 +113,12 @@ export default function DashboardPage() {
                 background: 'var(--color-info)', display: 'flex',
                 alignItems: 'center', justifyContent: 'center',
                 fontSize: '14px', fontWeight: 500, color: 'white', cursor: 'pointer',
+                overflow: 'hidden',
               }}
             >
-              {restaurante.iniciales}
+              {rest?.logo_url ? (
+                <img src={rest.logo_url} alt={restaurante.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : restaurante.iniciales}
             </div>
           </div>
         </div>
@@ -133,10 +136,14 @@ export default function DashboardPage() {
               boxShadow: 'var(--shadow-lg)', animation: 'scaleIn 0.2s ease',
             }}>
               <div style={{ padding: '14px', display: 'flex', alignItems: 'center', gap: '12px', borderBottom: '1px solid var(--border-light)' }}>
-                <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'var(--color-info)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '15px', fontWeight: 500, color: 'white' }}>{restaurante.iniciales}</div>
+                <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'var(--color-info)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '15px', fontWeight: 500, color: 'white', overflow: 'hidden' }}>
+                  {rest?.logo_url ? (
+                    <img src={rest.logo_url} alt={restaurante.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : restaurante.iniciales}
+                </div>
                 <div>
-                  <div style={{ fontSize: '13px', fontWeight: 500 }}>Juan Pérez</div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>juan@gmail.com</div>
+                  <div style={{ fontSize: '13px', fontWeight: 500 }}>{restaurante.nombre}</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{usuario?.email || ''}</div>
                 </div>
               </div>
               {[

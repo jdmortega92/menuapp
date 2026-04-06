@@ -195,7 +195,8 @@ export default function MenuPublicoPage() {
           <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
             {/* Portada */}
             <div style={{
-              height: '240px', background: `linear-gradient(135deg, ${color} 0%, ${color}AA 50%, ${color}66 100%)`,
+              height: '240px',
+              background: restaurante.banner_url ? `url(${restaurante.banner_url}) center/cover` : `linear-gradient(135deg, ${color} 0%, ${color}AA 50%, ${color}66 100%)`,
               position: 'relative', display: 'flex', alignItems: 'flex-end',
             }}>
               <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.5) 0%, transparent 50%)' }} />
@@ -204,9 +205,11 @@ export default function MenuPublicoPage() {
                   width: '64px', height: '64px', borderRadius: '16px', background: 'white',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: '22px', fontWeight: 600, color: color, marginBottom: '12px',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.2)', overflow: 'hidden',
                 }}>
-                  {restaurante.nombre.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()}
+                  {restaurante.logo_url ? (
+                    <img src={restaurante.logo_url} alt={restaurante.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : restaurante.nombre.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()}
                 </div>
                 <div style={{ fontSize: '24px', fontWeight: 600, color: 'white', marginBottom: '4px' }}>{restaurante.nombre}</div>
                 <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.8)' }}>{restaurante.tipo} · {restaurante.ciudad}</div>
@@ -294,11 +297,13 @@ export default function MenuPublicoPage() {
         )}
         {mostrarMenu && (<>
         {/* Banner */}
-        <div style={{ height: '100px', background: `linear-gradient(135deg, ${color} 0%, ${color}CC 100%)`, position: 'relative', display: 'flex', alignItems: 'flex-end' }}>
+        <div style={{ height: '100px', background: restaurante.banner_url ? `url(${restaurante.banner_url}) center/cover` : `linear-gradient(135deg, ${color} 0%, ${color}CC 100%)`, position: 'relative', display: 'flex', alignItems: 'flex-end' }}>
           <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(253,251,247,1) 0%, transparent 80%)' }} />
           <div style={{ position: 'relative', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '12px', width: '100%' }}>
-            <div style={{ width: '52px', height: '52px', borderRadius: '12px', flexShrink: 0, background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', fontWeight: 600, color: color, boxShadow: '0 2px 8px rgba(0,0,0,0.15)' }}>
-              {restaurante.nombre.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()}
+            <div style={{ width: '52px', height: '52px', borderRadius: '12px', flexShrink: 0, background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', fontWeight: 600, color: color, boxShadow: '0 2px 8px rgba(0,0,0,0.15)', overflow: 'hidden' }}>
+              {restaurante.logo_url ? (
+                <img src={restaurante.logo_url} alt={restaurante.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : restaurante.nombre.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()}
             </div>
             <div>
               <div style={{ fontSize: '17px', fontWeight: 600 }}>{restaurante.nombre}</div>
