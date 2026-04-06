@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks'
 import { createClient } from '@/lib/supabase-browser'
+import Cropper from 'react-easy-crop'
 
 interface Plato {
   id: string; nombre: string; precio: number; descripcion: string; disponible: boolean; foto_url: string | null
@@ -28,6 +29,14 @@ export default function MiMenuPage() {
   const [platoExpandido, setPlatoExpandido] = useState<string | null>(null)
   const [editPlato, setEditPlato] = useState({ nombre: '', precio: '', descripcion: '' })
   const [subiendoFoto, setSubiendoFoto] = useState(false)
+  const [cropModal, setCropModal] = useState<{ imagen: string; platoId: string; categoriaId: string } | null>(null)
+  const [crop, setCrop] = useState({ x: 0, y: 0 })
+  const [zoom, setZoom] = useState(1)
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<any>(null)
+
+  const onCropComplete = useCallback((croppedArea: any, croppedAreaPixels: any) => {
+    setCroppedAreaPixels(croppedAreaPixels)
+  }, [])
   const [subTab, setSubTab] = useState<'combos' | 'promos' | 'plato-dia'>('combos')
   const [mostrarFormCombo, setMostrarFormCombo] = useState(false)
   const [mostrarFormPromo, setMostrarFormPromo] = useState(false)
@@ -57,45 +66,49 @@ export default function MiMenuPage() {
   function eliminarPromo(id: string) { setPromos(promos.filter(p => p.id !== id)) }
 
   const MAX_DESC = 150
-  async function comprimirImagen(file: File): Promise<Blob> {
+  function recortarImagen(imageSrc: string, pixelCrop: any): Promise<Blob> {
     return new Promise((resolve) => {
       const img = new Image()
-      const canvas = document.createElement('canvas')
-      const ctx = canvas.getContext('2d')!
       img.onload = () => {
-        const maxAncho = 800
-        let ancho = img.width
-        let alto = img.height
-        if (ancho > maxAncho) {
-          alto = (maxAncho / ancho) * alto
-          ancho = maxAncho
-        }
-        canvas.width = ancho
-        canvas.height = alto
-        ctx.drawImage(img, 0, 0, ancho, alto)
-        canvas.toBlob((blob) => resolve(blob!), 'image/jpeg', 0.8)
+        const canvas = document.createElement('canvas')
+        const ctx = canvas.getContext('2d')!
+        canvas.width = 800
+        canvas.height = 450
+        ctx.drawImage(
+          img,
+          pixelCrop.x, pixelCrop.y, pixelCrop.width, pixelCrop.height,
+          0, 0, 800, 450
+        )
+        canvas.toBlob((blob) => resolve(blob!), 'image/jpeg', 0.82)
       }
-      img.src = URL.createObjectURL(file)
+      img.src = imageSrc
     })
   }
 
-  async function subirFoto(platoId: string, categoriaId: string, file: File) {
-    if (!rest?.id) return
+  function seleccionarFoto(platoId: string, categoriaId: string, file: File) {
     if (file.size > 10 * 1024 * 1024) {
       alert('La imagen es muy grande. Máximo 10MB.')
       return
     }
+    const url = URL.createObjectURL(file)
+    setCropModal({ imagen: url, platoId, categoriaId })
+    setCrop({ x: 0, y: 0 })
+    setZoom(1)
+  }
+
+  async function confirmarRecorte() {
+    if (!cropModal || !croppedAreaPixels || !rest?.id) return
     setSubiendoFoto(true)
+    setCropModal(null)
+
     const supabase = createClient()
-    const path = `${rest.id}/platos/${platoId}.jpg`
+    const path = `${rest.id}/platos/${cropModal.platoId}.jpg`
 
-    // Comprimir imagen
-    const comprimida = await comprimirImagen(file)
+    const blob = await recortarImagen(cropModal.imagen, croppedAreaPixels)
 
-    // Subir imagen
     const { error: uploadError } = await supabase.storage
       .from('imagenes')
-      .upload(path, comprimida, { upsert: true, contentType: 'image/jpeg' })
+      .upload(path, blob, { upsert: true, contentType: 'image/jpeg' })
 
     if (uploadError) {
       setSubiendoFoto(false)
@@ -103,17 +116,14 @@ export default function MiMenuPage() {
       return
     }
 
-    // Obtener URL pública con timestamp para evitar cache
     const { data: urlData } = supabase.storage.from('imagenes').getPublicUrl(path)
     const foto_url = urlData.publicUrl + '?t=' + Date.now()
 
-    // Guardar en la tabla platos
-    await supabase.from('platos').update({ foto_url }).eq('id', platoId)
+    await supabase.from('platos').update({ foto_url }).eq('id', cropModal.platoId)
 
-    // Actualizar estado local
     setCategorias(categorias.map(c => {
-      if (c.id === categoriaId) {
-        return { ...c, platos: c.platos.map(p => p.id === platoId ? { ...p, foto_url } : p) }
+      if (c.id === cropModal.categoriaId) {
+        return { ...c, platos: c.platos.map(p => p.id === cropModal.platoId ? { ...p, foto_url } : p) }
       }
       return c
     }))
@@ -588,7 +598,7 @@ export default function MiMenuPage() {
                               disabled={subiendoFoto}
                               onChange={(e) => {
                                 const file = e.target.files?.[0]
-                                if (file) subirFoto(plato.id, cat.id, file)
+                                if (file) seleccionarFoto(plato.id, cat.id, file)
                               }} />
                           </label>
                           <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '4px' }}>JPG o PNG · Máximo 10MB · Se redimensiona a 800px</div>
@@ -865,7 +875,45 @@ export default function MiMenuPage() {
             )}
           </>
         )}
+        {/* Modal recorte de imagen */}
+        {cropModal && (
+          <>
+            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 80 }} />
+            <div style={{ position: 'fixed', inset: 0, zIndex: 90, display: 'flex', flexDirection: 'column' }}>
+              {/* Header */}
+              <div style={{ padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span onClick={() => setCropModal(null)} style={{ fontSize: '14px', color: 'white', cursor: 'pointer' }}>Cancelar</span>
+                <span style={{ fontSize: '15px', fontWeight: 500, color: 'white' }}>Ajustar foto</span>
+                <span onClick={confirmarRecorte} style={{ fontSize: '14px', color: '#4CAF50', fontWeight: 500, cursor: 'pointer' }}>Listo</span>
+              </div>
 
+              {/* Área de recorte */}
+              <div style={{ position: 'relative', flex: 1 }}>
+                <Cropper
+                  image={cropModal.imagen}
+                  crop={crop}
+                  zoom={zoom}
+                  aspect={16 / 9}
+                  onCropChange={setCrop}
+                  onZoomChange={setZoom}
+                  onCropComplete={onCropComplete}
+                />
+              </div>
+
+              {/* Controles */}
+              <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', width: '100%', maxWidth: '300px' }}>
+                  <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)' }}>-</span>
+                  <input type="range" min={1} max={3} step={0.1} value={zoom}
+                    onChange={(e) => setZoom(Number(e.target.value))}
+                    style={{ flex: 1, accentColor: '#4CAF50' }} />
+                  <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)' }}>+</span>
+                </div>
+                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)' }}>Arrastra para ajustar · Zoom para acercar</div>
+              </div>
+            </div>
+          </>
+        )}
         {/* Bottom nav */}
         <div style={{
           display: 'flex', borderTop: '1px solid var(--border-light)',
