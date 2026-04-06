@@ -27,6 +27,7 @@ export default function MiMenuPage() {
   const [nombreEditCategoria, setNombreEditCategoria] = useState('')
   const [platoExpandido, setPlatoExpandido] = useState<string | null>(null)
   const [editPlato, setEditPlato] = useState({ nombre: '', precio: '', descripcion: '' })
+  const [subiendoFoto, setSubiendoFoto] = useState(false)
   const [subTab, setSubTab] = useState<'combos' | 'promos' | 'plato-dia'>('combos')
   const [mostrarFormCombo, setMostrarFormCombo] = useState(false)
   const [mostrarFormPromo, setMostrarFormPromo] = useState(false)
@@ -56,6 +57,68 @@ export default function MiMenuPage() {
   function eliminarPromo(id: string) { setPromos(promos.filter(p => p.id !== id)) }
 
   const MAX_DESC = 150
+  async function comprimirImagen(file: File): Promise<Blob> {
+    return new Promise((resolve) => {
+      const img = new Image()
+      const canvas = document.createElement('canvas')
+      const ctx = canvas.getContext('2d')!
+      img.onload = () => {
+        const maxAncho = 800
+        let ancho = img.width
+        let alto = img.height
+        if (ancho > maxAncho) {
+          alto = (maxAncho / ancho) * alto
+          ancho = maxAncho
+        }
+        canvas.width = ancho
+        canvas.height = alto
+        ctx.drawImage(img, 0, 0, ancho, alto)
+        canvas.toBlob((blob) => resolve(blob!), 'image/jpeg', 0.8)
+      }
+      img.src = URL.createObjectURL(file)
+    })
+  }
+
+  async function subirFoto(platoId: string, categoriaId: string, file: File) {
+    if (!rest?.id) return
+    if (file.size > 10 * 1024 * 1024) {
+      alert('La imagen es muy grande. Máximo 10MB.')
+      return
+    }
+    setSubiendoFoto(true)
+    const supabase = createClient()
+    const path = `${rest.id}/platos/${platoId}.jpg`
+
+    // Comprimir imagen
+    const comprimida = await comprimirImagen(file)
+
+    // Subir imagen
+    const { error: uploadError } = await supabase.storage
+      .from('imagenes')
+      .upload(path, comprimida, { upsert: true, contentType: 'image/jpeg' })
+
+    if (uploadError) {
+      setSubiendoFoto(false)
+      alert('Error al subir la imagen')
+      return
+    }
+
+    // Obtener URL pública con timestamp para evitar cache
+    const { data: urlData } = supabase.storage.from('imagenes').getPublicUrl(path)
+    const foto_url = urlData.publicUrl + '?t=' + Date.now()
+
+    // Guardar en la tabla platos
+    await supabase.from('platos').update({ foto_url }).eq('id', platoId)
+
+    // Actualizar estado local
+    setCategorias(categorias.map(c => {
+      if (c.id === categoriaId) {
+        return { ...c, platos: c.platos.map(p => p.id === platoId ? { ...p, foto_url } : p) }
+      }
+      return c
+    }))
+    setSubiendoFoto(false)
+  }
 
   const [categorias, setCategorias] = useState<Categoria[]>([])
   // Cargar categorías y platos de Supabase
@@ -274,7 +337,18 @@ export default function MiMenuPage() {
       })).filter(cat => cat.platos.length > 0)
     : categorias
   const totalResultados = categoriasFiltradas.reduce((sum, cat) => sum + cat.platos.length, 0)
+  if (cargandoAuth || cargandoMenu) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-primary)' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '24px', fontWeight: 500, fontFamily: 'var(--font-display)' }}>Menu<span style={{ color: 'var(--color-accent)' }}>App</span></div>
+          <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '8px' }}>Cargando menú...</div>
+        </div>
+      </div>
+    )
+  }
 
+  if (!usuario) return null
   return (
     <div style={{ background: 'var(--bg-primary)', minHeight: '100vh' }}>
       <div style={{ maxWidth: '500px', margin: '0 auto', paddingBottom: '80px' }}>
@@ -412,6 +486,9 @@ export default function MiMenuPage() {
                         {nuevoPlato.descripcion.length}/{MAX_DESC}
                       </span>
                     </div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginBottom: '8px' }}>
+                      📷 Podrás agregar foto después de crear el plato
+                    </div>
                     <div style={{ display: 'flex', gap: '8px' }}>
                       <button onClick={() => agregarPlato(cat.id)} className="btn-primary" style={{ flex: 1, padding: '10px', fontSize: '13px' }}>Agregar</button>
                       <button onClick={() => setMostrarFormPlato(null)} className="btn-outline" style={{ flex: 1, padding: '10px', fontSize: '13px' }}>Cancelar</button>
@@ -435,7 +512,12 @@ export default function MiMenuPage() {
                         width: '52px', height: '52px', borderRadius: '8px', background: 'var(--bg-tertiary)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         fontSize: '18px', fontWeight: 500, color: 'var(--text-tertiary)', flexShrink: 0,
-                      }}>{plato.nombre.charAt(0)}</div>
+                        overflow: 'hidden',
+                      }}>
+                        {plato.foto_url ? (
+                          <img src={plato.foto_url} alt={plato.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : plato.nombre.charAt(0)}
+                      </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
                           <div style={{ fontSize: '13px', fontWeight: 500 }}>{plato.nombre}</div>
@@ -485,6 +567,31 @@ export default function MiMenuPage() {
                             fontSize: '10px', color: editPlato.descripcion.length > MAX_DESC - 20 ? 'var(--color-warning)' : 'var(--text-tertiary)' }}>
                             {editPlato.descripcion.length}/{MAX_DESC}
                           </span>
+                        </div>
+                        {/* Foto */}
+                        <div style={{ marginBottom: '10px' }}>
+                          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Foto del plato</div>
+                          {plato.foto_url && (
+                            <div style={{ width: '100%', aspectRatio: '16/9', borderRadius: '8px', overflow: 'hidden', marginBottom: '8px' }}>
+                              <img src={plato.foto_url} alt={plato.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            </div>
+                          )}
+                          <label style={{
+                            display: 'inline-flex', alignItems: 'center', gap: '6px',
+                            padding: '8px 14px', borderRadius: '8px', fontSize: '12px',
+                            border: '1px solid var(--border-light)', cursor: subiendoFoto ? 'not-allowed' : 'pointer',
+                            color: subiendoFoto ? 'var(--text-tertiary)' : 'var(--color-info)',
+                            opacity: subiendoFoto ? 0.6 : 1,
+                          }}>
+                            {subiendoFoto ? 'Subiendo...' : plato.foto_url ? 'Cambiar foto' : '📷 Subir foto'}
+                            <input type="file" accept="image/*" style={{ display: 'none' }}
+                              disabled={subiendoFoto}
+                              onChange={(e) => {
+                                const file = e.target.files?.[0]
+                                if (file) subirFoto(plato.id, cat.id, file)
+                              }} />
+                          </label>
+                          <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '4px' }}>JPG o PNG · Máximo 10MB · Se redimensiona a 800px</div>
                         </div>
                         <div style={{ display: 'flex', gap: '8px' }}>
                           <button onClick={() => guardarEdicionPlato(cat.id, plato.id)} className="btn-primary" style={{ flex: 1, padding: '10px', fontSize: '13px' }}>Guardar</button>

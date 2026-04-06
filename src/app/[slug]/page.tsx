@@ -76,6 +76,7 @@ export default function MenuPublicoPage() {
             .map((p: any) => ({
               id: p.id, nombre: p.nombre, precio: p.precio,
               descripcion: p.descripcion || '', disponible: p.disponible,
+              foto_url: p.foto_url || null,
               estrellas: 0, resenas: 0,
             })),
         })))
@@ -419,7 +420,12 @@ export default function MenuPublicoPage() {
                 <div onClick={() => plato.disponible && setPlatoDetalle(plato.id)} style={{
                   width: '64px', height: '64px', borderRadius: '8px', flexShrink: 0, cursor: plato.disponible ? 'pointer' : 'default',
                   background: `${color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px', fontWeight: 500, color: color,
-                }}>{plato.nombre.charAt(0)}</div>
+                  overflow: 'hidden',
+                }}>
+                  {plato.foto_url ? (
+                    <img src={plato.foto_url} alt={plato.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : plato.nombre.charAt(0)}
+                </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div onClick={() => plato.disponible && setPlatoDetalle(plato.id)} style={{ cursor: plato.disponible ? 'pointer' : 'default' }}>
                     <div style={{ fontSize: '13px', fontWeight: 500 }}>{plato.nombre}</div>
@@ -656,8 +662,12 @@ export default function MenuPublicoPage() {
               <div onClick={() => setPlatoDetalle(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 60 }} />
               <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 70, background: 'var(--bg-secondary)', borderRadius: '16px 16px 0 0', maxHeight: '85vh', overflowY: 'auto', animation: 'slideUp 0.3s ease' }}>
                 {/* Foto grande */}
-                <div style={{ height: '200px', background: `${color}15`, borderRadius: '16px 16px 0 0', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-                  <span style={{ fontSize: '60px', fontWeight: 500, color: color, opacity: 0.3 }}>{plato.nombre.charAt(0)}</span>
+                <div style={{ height: '200px', background: `${color}15`, borderRadius: '16px 16px 0 0', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}>
+                  {plato.foto_url ? (
+                    <img src={plato.foto_url} alt={plato.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : (
+                    <span style={{ fontSize: '60px', fontWeight: 500, color: color, opacity: 0.3 }}>{plato.nombre.charAt(0)}</span>
+                  )}
                   <div onClick={() => setPlatoDetalle(null)} style={{ position: 'absolute', top: '12px', right: '12px', width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '16px', cursor: 'pointer' }}>✕</div>
                 </div>
 
