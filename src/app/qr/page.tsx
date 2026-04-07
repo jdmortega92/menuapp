@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks'
+import QRCode from 'qrcode'
 
 export default function MiQRPage() {
   const router = useRouter()
@@ -17,6 +18,52 @@ export default function MiQRPage() {
   }
   const urlBase = 'menuapp.co'
   const urlMenu = `${urlBase}/${restaurante.slug}`
+  const qrCanvasRef = useRef<HTMLCanvasElement>(null)
+  const [qrGenerado, setQrGenerado] = useState(false)
+  const urlCompleta = `https://menuapp-iota.vercel.app/${restaurante.slug}`
+
+  useEffect(() => {
+    if (qrCanvasRef.current && restaurante.slug) {
+      QRCode.toCanvas(qrCanvasRef.current, urlCompleta, {
+        width: 200,
+        margin: 2,
+        color: { dark: '#1A1A18', light: '#FFFFFF' },
+      }, () => setQrGenerado(true))
+    }
+  }, [restaurante.slug, urlCompleta])
+
+  function descargarQR(formato: 'png' | 'svg', url: string, nombre: string) {
+    if (formato === 'png') {
+      QRCode.toDataURL(url, { width: 600, margin: 2, color: { dark: '#1A1A18', light: '#FFFFFF' } }, (err: any, dataUrl: string) => {
+        if (err) return
+        const link = document.createElement('a')
+        link.download = `${nombre}.png`
+        link.href = dataUrl
+        link.click()
+      })
+    } else {
+      QRCode.toString(url, { type: 'svg', width: 600, margin: 2, color: { dark: '#1A1A18', light: '#FFFFFF' } }, (err: any, svgString: string) => {
+        if (err) return
+        const blob = new Blob([svgString], { type: 'image/svg+xml' })
+        const link = document.createElement('a')
+        link.download = `${nombre}.svg`
+        link.href = URL.createObjectURL(blob)
+        link.click()
+      })
+    }
+  }
+
+  function compartirEnlace(red: string) {
+    const texto = `Mira el menú de ${restaurante.nombre}: ${urlCompleta}`
+    if (red === 'WhatsApp') {
+      window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, '_blank')
+    } else if (red === 'Facebook') {
+      window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(urlCompleta)}`, '_blank')
+    } else {
+      navigator.share?.({ title: restaurante.nombre, text: texto, url: urlCompleta })
+        .catch(() => { navigator.clipboard.writeText(urlCompleta) })
+    }
+  }
 
   useEffect(() => {
     if (!cargando && !usuario) {
@@ -25,7 +72,16 @@ export default function MiQRPage() {
   }, [cargando, usuario, router])
 
   function copiarEnlace() {
-    navigator.clipboard.writeText(`https://${urlMenu}`)
+    try {
+      navigator.clipboard.writeText(urlCompleta)
+    } catch {
+      const input = document.createElement('input')
+      input.value = urlCompleta
+      document.body.appendChild(input)
+      input.select()
+      document.execCommand('copy')
+      document.body.removeChild(input)
+    }
     setCopiado(true)
     setTimeout(() => setCopiado(false), 2000)
   }
@@ -53,22 +109,8 @@ export default function MiQRPage() {
         {/* QR grande */}
         <div style={{ padding: '0 20px', marginBottom: '16px' }}>
           <div className="card" style={{ padding: '24px', textAlign: 'center' }}>
-            {/* QR placeholder */}
-            <div style={{
-              width: '200px', height: '200px', margin: '0 auto 16px',
-              background: 'var(--bg-tertiary)', borderRadius: '12px',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              flexDirection: 'column', gap: '8px',
-            }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: '4px', width: '100px' }}>
-                {Array.from({ length: 25 }).map((_, i) => (
-                  <div key={i} style={{
-                    width: '16px', height: '16px', borderRadius: '2px',
-                    background: [0,1,2,4,5,6,10,12,14,18,20,21,22,24].includes(i) ? 'var(--text-primary)' : 'transparent',
-                  }} />
-                ))}
-              </div>
-              <div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>QR se genera al conectar</div>
+            <div style={{ width: '200px', height: '200px', margin: '0 auto 16px', borderRadius: '12px', overflow: 'hidden', background: 'white', padding: '8px' }}>
+              <canvas ref={qrCanvasRef} style={{ width: '100%', height: '100%' }} />
             </div>
 
             <div style={{ fontSize: '15px', fontWeight: 500, marginBottom: '4px' }}>{restaurante.nombre}</div>
@@ -163,29 +205,44 @@ export default function MiQRPage() {
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: '10px' }}>
-                  <span style={{ fontSize: '12px', color: 'var(--color-info)', cursor: 'pointer' }}>PNG</span>
-                  <span style={{ fontSize: '12px', color: 'var(--color-info)', cursor: 'pointer' }}>PDF</span>
+                  <span onClick={() => descargarQR('png', `${urlCompleta}?qr=mesa${i + 1}`, `mesa-${i + 1}-${restaurante.slug}`)} style={{ fontSize: '12px', color: 'var(--color-info)', cursor: 'pointer' }}>PNG</span>
+                  <span onClick={() => descargarQR('svg', `${urlCompleta}?qr=mesa${i + 1}`, `mesa-${i + 1}-${restaurante.slug}`)} style={{ fontSize: '12px', color: 'var(--color-info)', cursor: 'pointer' }}>SVG</span>
                 </div>
               </div>
             ))}
 
             {/* Agregar mesa */}
-            <div style={{
-              border: '1px dashed var(--border-medium)', borderRadius: 'var(--radius-md)',
-              padding: '14px', textAlign: 'center', cursor: 'pointer', marginBottom: '14px',
-            }}>
-              <span onClick={() => setMesas(mesas + 1)} style={{ fontSize: '13px', color: 'var(--color-info)' }}>+ Agregar mesa</span>
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
+              <div onClick={() => setMesas(mesas + 1)} style={{
+                flex: 1, border: '1px dashed var(--border-medium)', borderRadius: 'var(--radius-md)',
+                padding: '14px', textAlign: 'center', cursor: 'pointer',
+              }}>
+                <span style={{ fontSize: '13px', color: 'var(--color-info)' }}>+ Agregar mesa</span>
+              </div>
+              {mesas > 1 && (
+                <div onClick={() => setMesas(mesas - 1)} style={{
+                  flex: 1, border: '1px dashed var(--border-medium)', borderRadius: 'var(--radius-md)',
+                  padding: '14px', textAlign: 'center', cursor: 'pointer',
+                }}>
+                  <span style={{ fontSize: '13px', color: 'var(--color-danger)' }}>- Quitar mesa</span>
+                </div>
+              )}
             </div>
 
             {/* Descargar todos */}
-            <div style={{
+            <div onClick={async () => {
+              for (let i = 0; i < mesas; i++) {
+                await new Promise(r => setTimeout(r, 300))
+                descargarQR('png', `${urlCompleta}?qr=mesa${i + 1}`, `mesa-${i + 1}-${restaurante.slug}`)
+              }
+            }} style={{
               background: 'var(--text-primary)', borderRadius: 'var(--radius-md)',
               padding: '14px', display: 'flex', justifyContent: 'space-between',
               alignItems: 'center', cursor: 'pointer', marginBottom: '14px',
             }}>
               <div>
                 <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--bg-secondary)' }}>Descargar todos los QR</div>
-                <div style={{ fontSize: '11px', color: 'var(--bg-secondary)', opacity: 0.6, marginTop: '2px' }}>{mesas} mesas en un ZIP</div>
+                <div style={{ fontSize: '11px', color: 'var(--bg-secondary)', opacity: 0.6, marginTop: '2px' }}>{mesas} mesas en PNG</div>
               </div>
               <span style={{ fontSize: '16px', color: 'var(--bg-secondary)' }}>↓</span>
             </div>
@@ -229,7 +286,7 @@ export default function MiQRPage() {
                 { icon: '📘', label: 'Facebook' },
                 { icon: '↗', label: 'Otro' },
               ].map((red, i) => (
-                <div key={i} className="card" style={{
+                <div key={i} onClick={() => compartirEnlace(red.label)} className="card" style={{
                   flex: 1, padding: '14px', textAlign: 'center', cursor: 'pointer',
                 }}>
                   <div style={{ fontSize: '20px', marginBottom: '4px' }}>{red.icon}</div>
@@ -243,10 +300,9 @@ export default function MiQRPage() {
             <div style={{ display: 'flex', gap: '10px', marginBottom: '14px' }}>
               {[
                 { formato: 'PNG', desc: 'Para redes sociales' },
-                { formato: 'PDF', desc: 'Para imprimir' },
                 { formato: 'SVG', desc: 'Alta calidad' },
               ].map((f, i) => (
-                <div key={i} className="card" style={{
+                <div key={i} onClick={() => descargarQR(f.formato.toLowerCase() as 'png' | 'svg', urlCompleta, `qr-${restaurante.slug}`)} className="card" style={{
                   flex: 1, padding: '14px', textAlign: 'center', cursor: 'pointer',
                 }}>
                   <div style={{ fontSize: '14px', fontWeight: 500, marginBottom: '2px' }}>{f.formato}</div>
