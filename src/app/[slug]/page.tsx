@@ -361,7 +361,7 @@ export default function MenuPublicoPage() {
         )}
 
         {/* Plato del día */}
-        {config?.plato_dia_activo && !busqueda.trim() && (
+        {config?.plato_dia_activo && platoDia && !busqueda.trim() && (
           <div style={{ padding: '0 16px 10px' }}>
             <div style={{ background: `${color}10`, border: `1px solid ${color}30`, borderRadius: '10px', padding: '12px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>

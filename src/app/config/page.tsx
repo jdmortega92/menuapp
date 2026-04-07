@@ -87,7 +87,7 @@ export default function ConfigPage() {
           plato_ganador_activo: conf.plato_ganador_activo ?? false,
           calificaciones_activo: conf.calificaciones_activo ?? true,
           sorprendeme_activo: conf.sorprendeme_activo ?? true,
-          menu_por_horario_activo: false,
+          menu_por_horario_activo: conf.menu_por_horario_activo ?? false,
         })
       }
       // Cargar logo y banner
