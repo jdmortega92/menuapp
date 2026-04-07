@@ -30,6 +30,7 @@ export default function MenuPublicoPage() {
   const [categorias, setCategorias] = useState<any[]>([])
   const [platoDia, setPlatoDia] = useState<any>(null)
   const [cargando, setCargando] = useState(true)
+  const [horariosRest, setHorariosRest] = useState<any[]>([])
 
   useEffect(() => {
     async function cargar() {
@@ -42,6 +43,15 @@ export default function MenuPublicoPage() {
         .eq('slug', slug)
         .single()
 
+      // Horarios
+      const { data: horariosData } = await supabase
+        .from('horarios')
+        .select('*')
+        .eq('restaurante_id', rest.id)
+
+      if (horariosData && horariosData.length > 0) {
+        setHorariosRest(horariosData)
+      }  
       if (!rest) { setCargando(false); return }
       setRestaurante(rest)
 
@@ -224,25 +234,29 @@ export default function MenuPublicoPage() {
               </div>
 
               {/* Horario */}
-              <div style={{ marginBottom: '20px' }}>
-                <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '10px' }}>Horario</div>
-                <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-light)', borderRadius: '10px', overflow: 'hidden' }}>
-                  {[
-                    { dia: 'Lunes a Viernes', hora: '11:00 am — 9:00 pm' },
-                    { dia: 'Sábado', hora: '11:00 am — 10:00 pm' },
-                    { dia: 'Domingo', hora: '11:00 am — 4:00 pm' },
-                  ].map((h, i) => (
-                    <div key={i} style={{
-                      padding: '10px 14px', display: 'flex', justifyContent: 'space-between',
-                      borderBottom: i < 2 ? '1px solid var(--border-light)' : 'none',
-                      fontSize: '13px',
-                    }}>
-                      <span>{h.dia}</span>
-                      <span style={{ color: 'var(--text-secondary)' }}>{h.hora}</span>
-                    </div>
-                  ))}
+              {horariosRest.length > 0 && (
+                <div style={{ marginBottom: '20px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '10px' }}>Horario</div>
+                  <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-light)', borderRadius: '10px', overflow: 'hidden' }}>
+                    {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'].map((dia: string, i: number) => {
+                      const h = horariosRest.find((x: any) => x.dia === dia)
+                      if (!h) return null
+                      return (
+                        <div key={dia} style={{
+                          padding: '10px 14px', display: 'flex', justifyContent: 'space-between',
+                          borderBottom: i < 6 ? '1px solid var(--border-light)' : 'none',
+                          fontSize: '13px',
+                        }}>
+                          <span>{dia}</span>
+                          <span style={{ color: h.cerrado ? 'var(--color-danger)' : 'var(--text-secondary)' }}>
+                            {h.cerrado ? 'Cerrado' : `${h.hora_apertura} — ${h.hora_cierre}`}
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Dirección */}
               <div style={{ marginBottom: '20px' }}>
@@ -397,7 +411,11 @@ export default function MenuPublicoPage() {
                   background: 'var(--bg-secondary)', borderRadius: '8px', padding: '10px',
                   display: 'flex', gap: '10px', marginBottom: '6px', border: '1px solid var(--border-light)', cursor: 'pointer',
                 }}>
-                  <div style={{ width: '48px', height: '48px', borderRadius: '8px', flexShrink: 0, background: `${color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', fontWeight: 500, color: color }}>{plato.nombre.charAt(0)}</div>
+                  <div style={{ width: '48px', height: '48px', borderRadius: '8px', flexShrink: 0, background: `${color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', fontWeight: 500, color: color, overflow: 'hidden' }}>
+                    {plato.foto_url ? (
+                      <img src={plato.foto_url} alt={plato.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : plato.nombre.charAt(0)}
+                  </div>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: '13px', fontWeight: 500 }}>{plato.nombre}</div>
                     <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{plato.descripcion}</div>

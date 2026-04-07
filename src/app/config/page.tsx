@@ -33,6 +33,17 @@ export default function ConfigPage() {
   })
   const [email, setEmail] = useState('')
   const [cargandoConfig, setCargandoConfig] = useState(true)
+  const [horarios, setHorarios] = useState<{ dia: string; hora_apertura: string; hora_cierre: string; cerrado: boolean }[]>([
+    { dia: 'Lunes', hora_apertura: '11:00', hora_cierre: '21:00', cerrado: false },
+    { dia: 'Martes', hora_apertura: '11:00', hora_cierre: '21:00', cerrado: false },
+    { dia: 'Miércoles', hora_apertura: '11:00', hora_cierre: '21:00', cerrado: false },
+    { dia: 'Jueves', hora_apertura: '11:00', hora_cierre: '21:00', cerrado: false },
+    { dia: 'Viernes', hora_apertura: '11:00', hora_cierre: '21:00', cerrado: false },
+    { dia: 'Sábado', hora_apertura: '11:00', hora_cierre: '21:00', cerrado: false },
+    { dia: 'Domingo', hora_apertura: '11:00', hora_cierre: '21:00', cerrado: false },
+  ])
+  const [guardandoHorarios, setGuardandoHorarios] = useState(false)
+  const [guardadoHorarios, setGuardadoHorarios] = useState(false)
   const [logoUrl, setLogoUrl] = useState<string | null>(null)
   const [bannerUrl, setBannerUrl] = useState<string | null>(null)
   const [subiendoImagen, setSubiendoImagen] = useState(false)
@@ -90,6 +101,21 @@ export default function ConfigPage() {
       if (bannerCheck && bannerCheck.length > 0) {
         const { data: bannerData } = supabase2.storage.from('imagenes').getPublicUrl(`${rest!.id}/banner.jpg`)
         setBannerUrl(bannerData.publicUrl + '?t=' + Date.now())
+      }
+      // Cargar horarios
+      const { data: horariosData } = await supabase
+        .from('horarios')
+        .select('*')
+        .eq('restaurante_id', rest!.id)
+
+      if (horariosData && horariosData.length > 0) {
+        const diasOrden = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
+        const horariosOrdenados = diasOrden.map(dia => {
+          const h = horariosData.find((x: any) => x.dia === dia)
+          return h ? { dia: h.dia, hora_apertura: h.hora_apertura, hora_cierre: h.hora_cierre, cerrado: h.cerrado } 
+                   : { dia, hora_apertura: '11:00', hora_cierre: '21:00', cerrado: false }
+        })
+        setHorarios(horariosOrdenados)
       }
       setCargandoConfig(false)
     }
@@ -198,6 +224,29 @@ export default function ConfigPage() {
     }
 
     setSubiendoImagen(false)
+  }
+  async function guardarHorarios() {
+    if (!rest?.id) return
+    setGuardandoHorarios(true)
+    const supabase = createClient()
+
+    // Borrar horarios existentes
+    await supabase.from('horarios').delete().eq('restaurante_id', rest.id)
+
+    // Insertar nuevos
+    await supabase.from('horarios').insert(
+      horarios.map(h => ({
+        restaurante_id: rest.id,
+        dia: h.dia,
+        hora_apertura: h.hora_apertura,
+        hora_cierre: h.hora_cierre,
+        cerrado: h.cerrado,
+      }))
+    )
+
+    setGuardandoHorarios(false)
+    setGuardadoHorarios(true)
+    setTimeout(() => setGuardadoHorarios(false), 2000)
   }
   function toggleSeccion(id: string) {
     setSeccionActiva(seccionActiva === id ? null : id)
@@ -520,18 +569,52 @@ export default function ConfigPage() {
           </div>
           {seccionActiva === 'horarios' && (
             <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-light)', borderTop: 'none', borderRadius: '0 0 12px 12px', padding: '14px', animation: 'fadeInUp 0.2s ease' }}>
-              {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'].map((dia) => (
-                <div key={dia} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--border-light)' }}>
-                  <span style={{ fontSize: '13px', width: '80px' }}>{dia}</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--text-secondary)' }}>
-                    <input type="time" defaultValue="11:00" style={{ border: '1px solid var(--border-light)', borderRadius: '6px', padding: '4px 6px', fontSize: '12px', fontFamily: 'var(--font-body)' }} />
-                    <span>—</span>
-                    <input type="time" defaultValue="21:00" style={{ border: '1px solid var(--border-light)', borderRadius: '6px', padding: '4px 6px', fontSize: '12px', fontFamily: 'var(--font-body)' }} />
+              {horarios.map((h, i) => (
+                <div key={h.dia} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: i < 6 ? '1px solid var(--border-light)' : 'none', opacity: h.cerrado ? 0.4 : 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100px' }}>
+                    <span style={{ fontSize: '13px' }}>{h.dia}</span>
+                  </div>
+                  {h.cerrado ? (
+                    <span style={{ fontSize: '12px', color: 'var(--color-danger)', fontWeight: 500 }}>Cerrado</span>
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                      <input type="time" value={h.hora_apertura}
+                        onChange={(e) => {
+                          const nuevo = [...horarios]
+                          nuevo[i] = { ...nuevo[i], hora_apertura: e.target.value }
+                          setHorarios(nuevo)
+                        }}
+                        style={{ border: '1px solid var(--border-light)', borderRadius: '6px', padding: '4px 6px', fontSize: '12px', fontFamily: 'var(--font-body)' }} />
+                      <span>—</span>
+                      <input type="time" value={h.hora_cierre}
+                        onChange={(e) => {
+                          const nuevo = [...horarios]
+                          nuevo[i] = { ...nuevo[i], hora_cierre: e.target.value }
+                          setHorarios(nuevo)
+                        }}
+                        style={{ border: '1px solid var(--border-light)', borderRadius: '6px', padding: '4px 6px', fontSize: '12px', fontFamily: 'var(--font-body)' }} />
+                    </div>
+                  )}
+                  <div onClick={() => {
+                    const nuevo = [...horarios]
+                    nuevo[i] = { ...nuevo[i], cerrado: !nuevo[i].cerrado }
+                    setHorarios(nuevo)
+                  }} style={{
+                    width: '36px', height: '20px', borderRadius: '10px',
+                    background: h.cerrado ? 'var(--color-danger)' : 'var(--color-info)',
+                    position: 'relative', cursor: 'pointer', transition: 'background 0.2s', flexShrink: 0,
+                  }}>
+                    <div style={{
+                      width: '16px', height: '16px', borderRadius: '50%', background: 'white',
+                      position: 'absolute', top: '2px',
+                      left: h.cerrado ? '2px' : '18px',
+                      transition: 'left 0.2s',
+                    }} />
                   </div>
                 </div>
               ))}
-              <button onClick={guardarCambios} className="btn-primary" style={{ width: '100%', padding: '12px', fontSize: '13px', marginTop: '14px' }}>
-                {guardando ? 'Guardando...' : guardado ? '✓ Guardado' : 'Guardar horarios'}
+              <button onClick={guardarHorarios} className="btn-primary" style={{ width: '100%', padding: '12px', fontSize: '13px', marginTop: '14px' }}>
+                {guardandoHorarios ? 'Guardando...' : guardadoHorarios ? '✓ Guardado' : 'Guardar horarios'}
               </button>
             </div>
           )}
