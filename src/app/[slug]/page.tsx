@@ -43,6 +43,16 @@ export default function MenuPublicoPage() {
         .eq('slug', slug)
         .single()
 
+      if (!rest) { setCargando(false); return }
+
+      // Registrar visita al menú
+      const { error: visitaErr } = await supabase.from('visitas_menu').insert({
+        restaurante_id: rest.id,
+        origen: esQR ? 'qr' : 'enlace',
+        mesa: qrMesa || null,
+      })
+      
+
       // Horarios
       const { data: horariosData } = await supabase
         .from('horarios')
@@ -51,8 +61,7 @@ export default function MenuPublicoPage() {
 
       if (horariosData && horariosData.length > 0) {
         setHorariosRest(horariosData)
-      }  
-      if (!rest) { setCargando(false); return }
+      }
       setRestaurante(rest)
 
       // Config
@@ -115,6 +124,15 @@ export default function MenuPublicoPage() {
   useEffect(() => {
     if (!platoDetalle || !restaurante) return
     setResenasReales([])
+    // Registrar vista del plato
+    const supabaseVista = createClient()
+    supabaseVista.from('vistas_platos').insert({
+      plato_id: platoDetalle,
+      restaurante_id: restaurante.id,
+      fecha: new Date().toISOString().split('T')[0],
+    }).then(({ error }: any) => {
+      
+    })
     const supabase = createClient()
     supabase.from('calificaciones')
       .select('*')
@@ -153,6 +171,19 @@ export default function MenuPublicoPage() {
   }
 
   function pedirPorWhatsApp() {
+    // Registrar pedido
+    const supabasePedido = createClient()
+    supabasePedido.from('pedidos_whatsapp').insert({
+      restaurante_id: restaurante.id,
+      origen: esQR ? 'qr' : 'enlace',
+      mesa: qrMesa || null,
+      fecha: new Date().toISOString().split('T')[0],
+      total: totalPedido,
+      nota: nota || null,
+      productos: itemsPedido.map(i => ({ nombre: i.plato.nombre, cantidad: i.cantidad, precio: i.plato.precio })),
+    }).then(({ error }: any) => {
+      
+    })
     const lineas = itemsPedido.map(i => `- ${i.cantidad} ${i.plato.nombre} $${(i.plato.precio * i.cantidad).toLocaleString('es-CO')}`)
     let msg = `Hola! Vi tu menú en ${restaurante.nombre} y quiero pedir:\n${lineas.join('\n')}`
     if (nota) msg += `\nNota: ${nota}`

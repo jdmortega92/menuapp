@@ -3,10 +3,13 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks'
+import { createClient } from '@/lib/supabase-browser'
 
 export default function DashboardPage() {
   const router = useRouter()
   const [mostrarPerfil, setMostrarPerfil] = useState(false)
+  const [mostrarFiltro, setMostrarFiltro] = useState(false)
+  const [filtroTiempo, setFiltroTiempo] = useState<'hoy' | 'semana' | 'mes'>('semana')
 
   // Datos reales de Supabase
   const { usuario, restaurante: rest, cargando } = useAuth()
@@ -17,16 +20,70 @@ export default function DashboardPage() {
     plan: plan,
   }
 
-  const stats = {
-    escaneos: 147,
-    escaneosAnterior: 131,
-    visitas: 203,
-    visitasAnterior: 188,
-    pedidosWhatsapp: 23,
-    pedidosAnterior: 18,
-    calificacion: 4.3,
-    totalResenas: 48,
-  }
+  const [stats, setStats] = useState({
+    escaneos: 0,
+    visitas: 0,
+    pedidosWhatsapp: 0,
+    calificacion: 0,
+    totalResenas: 0,
+  })
+
+  useEffect(() => {
+    if (!rest?.id) return
+    async function cargarStats() {
+      const supabase = createClient()
+      const hoy = new Date()
+      let desde = ''
+      if (filtroTiempo === 'hoy') {
+        desde = hoy.toISOString().split('T')[0]
+      } else if (filtroTiempo === 'semana') {
+        desde = new Date(hoy.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+      } else {
+        desde = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().split('T')[0]
+      }
+
+      // Visitas al menú esta semana
+      const { count: visitas } = await supabase
+        .from('visitas_menu')
+        .select('*', { count: 'exact', head: true })
+        .eq('restaurante_id', rest!.id)
+        .gte('fecha', desde)
+
+      // Pedidos WhatsApp esta semana
+      const { count: pedidos } = await supabase
+        .from('pedidos_whatsapp')
+        .select('*', { count: 'exact', head: true })
+        .eq('restaurante_id', rest!.id)
+        .gte('fecha', desde)
+
+      // Calificación promedio
+      const { data: calData } = await supabase
+        .from('calificaciones')
+        .select('estrellas')
+        .eq('restaurante_id', rest!.id)
+
+      let promedio = 0
+      if (calData && calData.length > 0) {
+        promedio = Math.round((calData.reduce((sum: number, c: any) => sum + c.estrellas, 0) / calData.length) * 10) / 10
+      }
+
+      // Vistas de platos esta semana
+      const { count: vistasPlatos } = await supabase
+        .from('vistas_platos')
+        .select('*', { count: 'exact', head: true })
+        .eq('restaurante_id', rest!.id)
+        .gte('fecha', desde)
+
+      setStats({
+        escaneos: visitas || 0,
+        visitas: vistasPlatos || 0,
+        pedidosWhatsapp: pedidos || 0,
+        calificacion: promedio,
+        totalResenas: calData?.length || 0,
+      })
+    }
+    cargarStats()
+  }, [rest?.id, filtroTiempo])
 
   const platosMasVistos = [
     { nombre: 'Bandeja paisa', vistas: 34, pedidos: 12 },
@@ -60,11 +117,7 @@ export default function DashboardPage() {
   const esBasico = plan === 'basico' || plan === 'pro'
   const esPro = plan === 'pro'
 
-  function porcentajeCambio(actual: number, anterior: number): string {
-    if (anterior === 0) return '+0%'
-    const cambio = Math.round(((actual - anterior) / anterior) * 100)
-    return cambio >= 0 ? `+${cambio}%` : `${cambio}%`
-  }
+  
 
   const maxEscaneo = Math.max(...escaneosPorDia.map(d => Math.max(d.actual, d.anterior)))
 
@@ -198,30 +251,57 @@ export default function DashboardPage() {
         {/* Estadísticas header */}
         <div style={{ padding: '0 20px', marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ fontSize: '14px', fontWeight: 500 }}>Estadísticas</div>
-          {esBasico && (
-            <div style={{
-              border: '1px solid var(--border-light)', borderRadius: 'var(--radius-md)',
-              padding: '6px 12px', fontSize: '12px', color: 'var(--text-secondary)',
-              background: 'var(--bg-secondary)', cursor: 'pointer',
-            }}>
-              Esta semana ↓
+          <div style={{ position: 'relative' }}>
+              <div onClick={() => setMostrarFiltro(!mostrarFiltro)} style={{
+                border: '1px solid var(--border-light)', borderRadius: 'var(--radius-md)',
+                padding: '6px 12px', fontSize: '12px', color: 'var(--text-secondary)',
+                background: 'var(--bg-secondary)', cursor: 'pointer',
+              }}>
+                {filtroTiempo === 'hoy' ? 'Hoy' : filtroTiempo === 'semana' ? 'Esta semana' : 'Este mes'} ↓
+              </div>
+              {mostrarFiltro && (
+                <>
+                  <div onClick={() => setMostrarFiltro(false)} style={{ position: 'fixed', inset: 0, zIndex: 60 }} />
+                  <div style={{
+                    position: 'absolute', right: 0, top: '36px', zIndex: 70,
+                    background: 'var(--bg-secondary)', border: '1px solid var(--border-light)',
+                    borderRadius: 'var(--radius-sm)', overflow: 'hidden', width: '140px',
+                    boxShadow: 'var(--shadow-lg)',
+                  }}>
+                    {[
+                      { id: 'hoy', label: 'Hoy' },
+                      { id: 'semana', label: 'Esta semana' },
+                      { id: 'mes', label: 'Este mes' },
+                    ].map((f) => (
+                      <div key={f.id} onClick={() => { setFiltroTiempo(f.id as any); setMostrarFiltro(false) }}
+                        style={{
+                          padding: '10px 14px', fontSize: '12px', cursor: 'pointer',
+                          background: filtroTiempo === f.id ? 'var(--color-info-light)' : 'transparent',
+                          color: filtroTiempo === f.id ? 'var(--color-info)' : 'var(--text-primary)',
+                          borderBottom: '1px solid var(--border-light)',
+                        }}>
+                        {f.label}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
-          )}
         </div>
 
         {/* Números grandes */}
         <div style={{ padding: '0 20px', marginBottom: '14px' }}>
           <div style={{ display: 'flex', gap: '10px' }}>
             <div className="card" style={{ flex: 1, padding: '14px' }}>
-              <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Escaneos QR</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Visitas al menú</div>
               <div style={{ fontSize: '26px', fontWeight: 500, marginTop: '4px' }}>{stats.escaneos}</div>
-              {esBasico && <div style={{ fontSize: '11px', color: 'var(--color-green)', marginTop: '2px' }}>{porcentajeCambio(stats.escaneos, stats.escaneosAnterior)} vs anterior</div>}
+              {esBasico && <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>esta semana</div>}
               {!esBasico && <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>esta semana</div>}
             </div>
             <div className="card" style={{ flex: 1, padding: '14px' }}>
-              <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Visitas al menú</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Platos vistos</div>
               <div style={{ fontSize: '26px', fontWeight: 500, marginTop: '4px' }}>{stats.visitas}</div>
-              {esBasico && <div style={{ fontSize: '11px', color: 'var(--color-green)', marginTop: '2px' }}>{porcentajeCambio(stats.visitas, stats.visitasAnterior)} vs anterior</div>}
+              {esBasico && <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>esta semana</div>}
               {!esBasico && <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>esta semana</div>}
             </div>
           </div>
@@ -294,7 +374,7 @@ export default function DashboardPage() {
               <div className="card" style={{ flex: 1, padding: '14px' }}>
                 <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Pedidos WhatsApp</div>
                 <div style={{ fontSize: '26px', fontWeight: 500, marginTop: '4px' }}>{stats.pedidosWhatsapp}</div>
-                <div style={{ fontSize: '11px', color: 'var(--color-green)', marginTop: '2px' }}>+{stats.pedidosWhatsapp - stats.pedidosAnterior} vs anterior</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>esta semana</div>
               </div>
               <div className="card" style={{ flex: 1, padding: '14px' }}>
                 <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Calificación promedio</div>
