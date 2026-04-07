@@ -73,6 +73,116 @@ export default function DashboardPage() {
         .select('*', { count: 'exact', head: true })
         .eq('restaurante_id', rest!.id)
         .gte('fecha', desde)
+      // Platos más vistos
+      const { data: vistasData } = await supabase
+        .from('vistas_platos')
+        .select('plato_id')
+        .eq('restaurante_id', rest!.id)
+        .gte('fecha', desde)
+
+      if (vistasData && vistasData.length > 0) {
+        const conteo: Record<string, number> = {}
+        vistasData.forEach((v: any) => { conteo[v.plato_id] = (conteo[v.plato_id] || 0) + 1 })
+
+        const { data: platosInfo } = await supabase
+          .from('platos')
+          .select('id, nombre')
+          .eq('restaurante_id', rest!.id)
+
+        if (platosInfo) {
+          const lista = Object.entries(conteo)
+            .map(([id, vistas]) => ({
+              nombre: platosInfo.find((p: any) => p.id === id)?.nombre || 'Plato',
+              vistas,
+              pedidos: 0,
+            }))
+            .sort((a, b) => b.vistas - a.vistas)
+            .slice(0, 5)
+          setPlatosMasVistos(lista)
+        }
+      } else {
+        setPlatosMasVistos([])
+      }
+
+      // Horarios pico
+      const { data: visitasHora } = await supabase
+        .from('visitas_menu')
+        .select('created_at')
+        .eq('restaurante_id', rest!.id)
+        .gte('fecha', desde)
+
+      if (visitasHora && visitasHora.length > 0) {
+        const porHora: Record<number, number> = {}
+        visitasHora.forEach((v: any) => {
+          const hora = new Date(v.created_at).getHours()
+          porHora[hora] = (porHora[hora] || 0) + 1
+        })
+        const listaHoras = Object.entries(porHora)
+          .map(([hora, cantidad]) => ({
+            rango: `${parseInt(hora)}:00 — ${parseInt(hora) + 1}:00`,
+            escaneos: cantidad,
+          }))
+          .sort((a, b) => b.escaneos - a.escaneos)
+          .slice(0, 3)
+        setHorariosPico(listaHoras)
+      } else {
+        setHorariosPico([])
+      }
+
+      // Visitas por día de la semana
+      const { data: visitasDia } = await supabase
+        .from('visitas_menu')
+        .select('fecha')
+        .eq('restaurante_id', rest!.id)
+        .gte('fecha', desde)
+
+      if (visitasDia && visitasDia.length > 0) {
+        const dias = ['D', 'L', 'M', 'Mi', 'J', 'V', 'S']
+        const porDia: Record<number, number> = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 }
+        visitasDia.forEach((v: any) => {
+          const d = new Date(v.fecha + 'T12:00:00').getDay()
+          porDia[d] = (porDia[d] || 0) + 1
+        })
+        setEscaneosPorDia([1, 2, 3, 4, 5, 6, 0].map(d => ({
+          dia: dias[d],
+          actual: porDia[d] || 0,
+        })))
+      } else {
+        setEscaneosPorDia([])
+      }
+
+      // Últimas reseñas
+      const { data: resenasData } = await supabase
+        .from('calificaciones')
+        .select('*, platos(nombre)')
+        .eq('restaurante_id', rest!.id)
+        .order('created_at', { ascending: false })
+        .limit(3)
+
+      if (resenasData && resenasData.length > 0) {
+        setResenas(resenasData.map((r: any) => ({
+          plato: r.platos?.nombre || 'Plato',
+          estrellas: r.estrellas,
+          comentario: r.comentario || '',
+          tiempo: new Date(r.created_at).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' }),
+        })))
+      } else {
+        setResenas([])
+      }
+
+      // Mejor y peor día
+      if (visitasDia && visitasDia.length > 0) {
+        const porFecha: Record<string, number> = {}
+        visitasDia.forEach((v: any) => { porFecha[v.fecha] = (porFecha[v.fecha] || 0) + 1 })
+        const fechas = Object.entries(porFecha).sort((a, b) => b[1] - a[1])
+        if (fechas.length > 0) {
+          setMejorDia({ dia: new Date(fechas[0][0] + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric' }), cantidad: fechas[0][1] })
+          setPeorDia({ dia: new Date(fechas[fechas.length - 1][0] + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric' }), cantidad: fechas[fechas.length - 1][1] })
+        }
+      } else {
+        setMejorDia(null)
+        setPeorDia(null)
+      }
 
       setStats({
         escaneos: visitas || 0,
@@ -85,41 +195,19 @@ export default function DashboardPage() {
     cargarStats()
   }, [rest?.id, filtroTiempo])
 
-  const platosMasVistos = [
-    { nombre: 'Bandeja paisa', vistas: 34, pedidos: 12 },
-    { nombre: 'Arroz con pollo', vistas: 28, pedidos: 8 },
-    { nombre: 'Limonada de coco', vistas: 22, pedidos: 15 },
-    { nombre: 'Cazuela de frijoles', vistas: 22, pedidos: 1 },
-  ]
-
-  const horariosPico = [
-    { rango: '12:00 pm — 1:00 pm', escaneos: 42 },
-    { rango: '7:00 pm — 8:00 pm', escaneos: 38 },
-    { rango: '1:00 pm — 2:00 pm', escaneos: 29 },
-  ]
-
-  const escaneosPorDia = [
-    { dia: 'L', actual: 18, anterior: 15 },
-    { dia: 'M', actual: 22, anterior: 20 },
-    { dia: 'Mi', actual: 28, anterior: 24 },
-    { dia: 'J', actual: 19, anterior: 21 },
-    { dia: 'V', actual: 32, anterior: 26 },
-    { dia: 'S', actual: 26, anterior: 22 },
-    { dia: 'D', actual: 12, anterior: 16 },
-  ]
-
-  const resenas = [
-    { plato: 'Bandeja paisa', estrellas: 5, comentario: 'Excelente porción, muy completa', tiempo: 'Hace 2 horas' },
-    { plato: 'Cazuela de frijoles', estrellas: 3, comentario: 'Buena pero le falta sazón', tiempo: 'Hace 5 horas' },
-    { plato: 'Limonada de coco', estrellas: 4, comentario: 'Refrescante, muy buena', tiempo: 'Ayer' },
-  ]
+  const [platosMasVistos, setPlatosMasVistos] = useState<any[]>([])
+  const [horariosPico, setHorariosPico] = useState<any[]>([])
+  const [escaneosPorDia, setEscaneosPorDia] = useState<any[]>([])
+  const [resenas, setResenas] = useState<any[]>([])
+  const [mejorDia, setMejorDia] = useState<{ dia: string; cantidad: number } | null>(null)
+  const [peorDia, setPeorDia] = useState<{ dia: string; cantidad: number } | null>(null)
 
   const esBasico = plan === 'basico' || plan === 'pro'
   const esPro = plan === 'pro'
 
   
 
-  const maxEscaneo = Math.max(...escaneosPorDia.map(d => Math.max(d.actual, d.anterior)))
+  const maxEscaneo = escaneosPorDia.length > 0 ? Math.max(...escaneosPorDia.map((d: any) => d.actual), 1) : 1
 
   useEffect(() => {
     if (!cargando && !usuario) {
@@ -295,14 +383,12 @@ export default function DashboardPage() {
             <div className="card" style={{ flex: 1, padding: '14px' }}>
               <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Visitas al menú</div>
               <div style={{ fontSize: '26px', fontWeight: 500, marginTop: '4px' }}>{stats.escaneos}</div>
-              {esBasico && <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>esta semana</div>}
-              {!esBasico && <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>esta semana</div>}
+              <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>{filtroTiempo === 'hoy' ? 'hoy' : filtroTiempo === 'semana' ? 'esta semana' : 'este mes'}</div>
             </div>
             <div className="card" style={{ flex: 1, padding: '14px' }}>
               <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Platos vistos</div>
               <div style={{ fontSize: '26px', fontWeight: 500, marginTop: '4px' }}>{stats.visitas}</div>
-              {esBasico && <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>esta semana</div>}
-              {!esBasico && <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>esta semana</div>}
+              <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>{filtroTiempo === 'hoy' ? 'hoy' : filtroTiempo === 'semana' ? 'esta semana' : 'este mes'}</div>
             </div>
           </div>
         </div>
@@ -313,9 +399,9 @@ export default function DashboardPage() {
             <div className="card" style={{ padding: '14px' }}>
               <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '12px' }}>Embudo de conversión</div>
               {[
-                { label: 'Escanearon QR', valor: stats.escaneos, pct: 100 },
-                { label: 'Exploraron el menú', valor: Math.round(stats.escaneos * 0.61), pct: 61 },
-                { label: 'Pidieron por WhatsApp', valor: stats.pedidosWhatsapp, pct: Math.round((stats.pedidosWhatsapp / stats.escaneos) * 100) },
+                { label: 'Visitaron el menú', valor: stats.escaneos, pct: 100 },
+                { label: 'Vieron platos', valor: stats.visitas, pct: stats.escaneos > 0 ? Math.round((stats.visitas / stats.escaneos) * 100) : 0 },
+                { label: 'Pidieron por WhatsApp', valor: stats.pedidosWhatsapp, pct: stats.escaneos > 0 ? Math.round((stats.pedidosWhatsapp / stats.escaneos) * 100) : 0 },
               ].map((item, i) => (
                 <div key={i} style={{ marginBottom: i < 2 ? '10px' : 0 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '4px' }}>
@@ -340,11 +426,11 @@ export default function DashboardPage() {
         ) : null}
 
         {/* BÁSICO+: Gráfica escaneos por día */}
-        {esBasico && (
+        {esBasico && escaneosPorDia.length > 0 && (
           <div style={{ padding: '0 20px', marginBottom: '14px' }}>
             <div className="card" style={{ padding: '14px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-                <div style={{ fontSize: '13px', fontWeight: 500 }}>Escaneos por día</div>
+                <div style={{ fontSize: '13px', fontWeight: 500 }}>Visitas por día</div>
                 {esPro && (
                   <div style={{ display: 'flex', gap: '10px', fontSize: '10px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: '8px', height: '8px', borderRadius: '2px', background: 'var(--color-info)' }} />Esta sem.</div>
@@ -355,7 +441,6 @@ export default function DashboardPage() {
               <div style={{ display: 'flex', alignItems: 'end', gap: '4px', height: '80px' }}>
                 {escaneosPorDia.map((d, i) => (
                   <div key={i} style={{ flex: 1, display: 'flex', gap: '2px', alignItems: 'end' }}>
-                    {esPro && <div style={{ flex: 1, background: 'var(--border-light)', borderRadius: '2px', height: `${(d.anterior / maxEscaneo) * 80}px`, opacity: 0.5 }} />}
                     <div style={{ flex: 1, background: 'var(--color-info)', borderRadius: '2px', height: `${(d.actual / maxEscaneo) * 80}px` }} />
                   </div>
                 ))}
@@ -367,14 +452,14 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* PRO: WhatsApp + Calificación */}
+        {/* Pedidos WhatsApp + Calificación */}
         {esPro ? (
           <div style={{ padding: '0 20px', marginBottom: '14px' }}>
             <div style={{ display: 'flex', gap: '10px' }}>
               <div className="card" style={{ flex: 1, padding: '14px' }}>
                 <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Pedidos WhatsApp</div>
                 <div style={{ fontSize: '26px', fontWeight: 500, marginTop: '4px' }}>{stats.pedidosWhatsapp}</div>
-                <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>esta semana</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>{filtroTiempo === 'hoy' ? 'hoy' : filtroTiempo === 'semana' ? 'esta semana' : 'este mes'}</div>
               </div>
               <div className="card" style={{ flex: 1, padding: '14px' }}>
                 <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Calificación promedio</div>
@@ -386,29 +471,31 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
-        ) : esBasico ? (
+        ) : (
           <div style={{ padding: '0 20px', marginBottom: '10px' }}>
             <div style={{ display: 'flex', gap: '10px' }}>
               <div className="card" style={{ flex: 1, padding: '16px', textAlign: 'center', opacity: 0.5 }}>
                 <div style={{ fontSize: '20px', marginBottom: '4px' }}>🔒</div>
                 <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Pedidos WhatsApp</div>
+                <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '2px' }}>Plan Pro</div>
               </div>
               <div className="card" style={{ flex: 1, padding: '16px', textAlign: 'center', opacity: 0.5 }}>
                 <div style={{ fontSize: '20px', marginBottom: '4px' }}>🔒</div>
                 <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Calificación promedio</div>
+                <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '2px' }}>Plan Pro</div>
               </div>
             </div>
           </div>
-        ) : null}
+        )}
 
         {/* BÁSICO+: Platos más vistos */}
-        {esBasico ? (
+        {esBasico && platosMasVistos.length > 0 ? (
           <div style={{ padding: '0 20px', marginBottom: '14px' }}>
             <div className="card" style={{ padding: '14px' }}>
               <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '12px' }}>
                 {esPro ? 'Platos: vistas vs pedidos' : 'Platos más vistos'}
               </div>
-              {platosMasVistos.map((p, i) => (
+              {platosMasVistos.map((p: any, i: number) => (
                 <div key={i} style={{ marginBottom: i < platosMasVistos.length - 1 ? '10px' : 0 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', marginBottom: '4px' }}>
                     <span style={{ color: esPro && p.vistas > 15 && p.pedidos < 3 ? 'var(--color-danger)' : 'var(--text-primary)' }}>{p.nombre}</span>
@@ -443,11 +530,11 @@ export default function DashboardPage() {
         )}
 
         {/* BÁSICO+: Horarios pico */}
-        {esBasico ? (
+        {esBasico && horariosPico.length > 0 ? (
           <div style={{ padding: '0 20px', marginBottom: '14px' }}>
             <div className="card" style={{ padding: '14px' }}>
-              <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '12px' }}>Horarios con más escaneos</div>
-              {horariosPico.map((h, i) => (
+              <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '12px' }}>Horarios con más visitas</div>
+              {horariosPico.map((h: any, i: number) => (
                 <div key={i} style={{
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                   padding: '8px 0', borderBottom: i < horariosPico.length - 1 ? '1px solid var(--border-light)' : 'none',
@@ -469,25 +556,25 @@ export default function DashboardPage() {
         )}
 
         {/* PRO: Mejores y peores días */}
-        {esPro && (
+        {esPro && mejorDia && peorDia && (
           <div style={{ padding: '0 20px', marginBottom: '14px' }}>
             <div style={{ display: 'flex', gap: '10px' }}>
               <div className="card" style={{ flex: 1, padding: '14px' }}>
-                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Mejor día del mes</div>
-                <div style={{ fontSize: '14px', fontWeight: 500 }}>Viernes 14</div>
-                <div style={{ fontSize: '12px', color: 'var(--color-green)', marginTop: '2px' }}>52 escaneos</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Mejor día</div>
+                <div style={{ fontSize: '14px', fontWeight: 500 }}>{mejorDia.dia}</div>
+                <div style={{ fontSize: '12px', color: 'var(--color-green)', marginTop: '2px' }}>{mejorDia.cantidad} visitas</div>
               </div>
               <div className="card" style={{ flex: 1, padding: '14px' }}>
-                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Peor día del mes</div>
-                <div style={{ fontSize: '14px', fontWeight: 500 }}>Lunes 4</div>
-                <div style={{ fontSize: '12px', color: 'var(--color-danger)', marginTop: '2px' }}>8 escaneos</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Peor día</div>
+                <div style={{ fontSize: '14px', fontWeight: 500 }}>{peorDia.dia}</div>
+                <div style={{ fontSize: '12px', color: 'var(--color-danger)', marginTop: '2px' }}>{peorDia.cantidad} visitas</div>
               </div>
             </div>
           </div>
         )}
 
         {/* PRO: Últimas reseñas */}
-        {esPro && (
+        {esPro && resenas.length > 0 && (
           <div style={{ padding: '0 20px', marginBottom: '14px' }}>
             <div className="card" style={{ padding: '14px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
@@ -517,8 +604,8 @@ export default function DashboardPage() {
               alignItems: 'center', cursor: 'pointer',
             }}>
               <div>
-                <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--bg-secondary)' }}>Descargar reporte semanal</div>
-                <div style={{ fontSize: '11px', color: 'var(--bg-secondary)', opacity: 0.6, marginTop: '2px' }}>PDF con resumen completo</div>
+                <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--bg-secondary)' }}>Descargar reporte</div>
+                <div style={{ fontSize: '11px', color: 'var(--bg-secondary)', opacity: 0.6, marginTop: '2px' }}>PDF · {filtroTiempo === 'hoy' ? 'Hoy' : filtroTiempo === 'semana' ? 'Esta semana' : 'Este mes'}</div>
               </div>
               <span style={{ fontSize: '16px', color: 'var(--bg-secondary)' }}>↓</span>
             </div>
