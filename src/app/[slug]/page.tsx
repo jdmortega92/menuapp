@@ -45,11 +45,13 @@ export default function MenuPublicoPage() {
 
       if (!rest) { setCargando(false); return }
 
-      // Registrar visita al menú
+      // Registrar visita al menú (fecha Colombia UTC-5)
+      const fechaColombia = new Date(new Date().getTime() - 5 * 60 * 60 * 1000).toISOString().split('T')[0]
       const { error: visitaErr } = await supabase.from('visitas_menu').insert({
         restaurante_id: rest.id,
         origen: esQR ? 'qr' : 'enlace',
         mesa: qrMesa || null,
+        fecha: fechaColombia,
       })
       
 
@@ -126,10 +128,11 @@ export default function MenuPublicoPage() {
     setResenasReales([])
     // Registrar vista del plato
     const supabaseVista = createClient()
+    const fechaCOL = new Date(new Date().getTime() - 5 * 60 * 60 * 1000).toISOString().split('T')[0]
     supabaseVista.from('vistas_platos').insert({
       plato_id: platoDetalle,
       restaurante_id: restaurante.id,
-      fecha: new Date().toISOString().split('T')[0],
+      fecha: fechaCOL,
     }).then(({ error }: any) => {
       
     })
@@ -177,7 +180,7 @@ export default function MenuPublicoPage() {
       restaurante_id: restaurante.id,
       origen: esQR ? 'qr' : 'enlace',
       mesa: qrMesa || null,
-      fecha: new Date().toISOString().split('T')[0],
+      fecha: new Date(new Date().getTime() - 5 * 60 * 60 * 1000).toISOString().split('T')[0],
       total: totalPedido,
       nota: nota || null,
       productos: itemsPedido.map(i => ({ nombre: i.plato.nombre, cantidad: i.cantidad, precio: i.plato.precio })),

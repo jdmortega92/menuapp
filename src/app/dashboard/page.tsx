@@ -16,7 +16,7 @@ export default function DashboardPage() {
   const plan = (rest?.plan || 'gratis') as 'gratis' | 'basico' | 'pro'
   const restaurante = {
     nombre: rest?.nombre || 'Mi restaurante',
-    iniciales: rest?.nombre ? rest.nombre.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() : 'MR',
+    iniciales: rest?.nombre ? rest.nombre.split(' ').map((w: any) => w[0]).join('').slice(0, 2).toUpperCase() : 'MR',
     plan: plan,
   }
 
@@ -27,6 +27,14 @@ export default function DashboardPage() {
     calificacion: 0,
     totalResenas: 0,
   })
+
+  const [platosMasVistos, setPlatosMasVistos] = useState<any[]>([])
+  const [platosMenusVistos, setPlatosMenusVistos] = useState<any[]>([])
+  const [horariosPico, setHorariosPico] = useState<any[]>([])
+  const [escaneosPorDia, setEscaneosPorDia] = useState<any[]>([])
+  const [resenas, setResenas] = useState<any[]>([])
+  const [mejorDia, setMejorDia] = useState<{ dia: string; cantidad: number } | null>(null)
+  const [peorDia, setPeorDia] = useState<{ dia: string; cantidad: number } | null>(null)
 
   useEffect(() => {
     if (!rest?.id) return
@@ -42,14 +50,14 @@ export default function DashboardPage() {
         desde = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().split('T')[0]
       }
 
-      // Visitas al menú esta semana
+      // Visitas al menú
       const { count: visitas } = await supabase
         .from('visitas_menu')
         .select('*', { count: 'exact', head: true })
         .eq('restaurante_id', rest!.id)
         .gte('fecha', desde)
 
-      // Pedidos WhatsApp esta semana
+      // Pedidos WhatsApp
       const { count: pedidos } = await supabase
         .from('pedidos_whatsapp')
         .select('*', { count: 'exact', head: true })
@@ -67,12 +75,13 @@ export default function DashboardPage() {
         promedio = Math.round((calData.reduce((sum: number, c: any) => sum + c.estrellas, 0) / calData.length) * 10) / 10
       }
 
-      // Vistas de platos esta semana
+      // Vistas de platos
       const { count: vistasPlatos } = await supabase
         .from('vistas_platos')
         .select('*', { count: 'exact', head: true })
         .eq('restaurante_id', rest!.id)
         .gte('fecha', desde)
+
       // Platos más vistos
       const { data: vistasData } = await supabase
         .from('vistas_platos')
@@ -83,22 +92,27 @@ export default function DashboardPage() {
       if (vistasData && vistasData.length > 0) {
         const conteo: Record<string, number> = {}
         vistasData.forEach((v: any) => { conteo[v.plato_id] = (conteo[v.plato_id] || 0) + 1 })
-
         const { data: platosInfo } = await supabase
           .from('platos')
           .select('id, nombre')
           .eq('restaurante_id', rest!.id)
-
         if (platosInfo) {
-          const lista = Object.entries(conteo)
+          // Platos con vistas (ordenados de más a menos)
+          const conVistas = Object.entries(conteo)
             .map(([id, vistas]) => ({
+              id,
               nombre: platosInfo.find((p: any) => p.id === id)?.nombre || 'Plato',
               vistas,
-              pedidos: 0,
             }))
-            .sort((a, b) => b.vistas - a.vistas)
-            .slice(0, 5)
-          setPlatosMasVistos(lista)
+            .sort((a: any, b: any) => b.vistas - a.vistas)
+
+          // Platos sin ninguna vista
+          const sinVistas = platosInfo
+            .filter((p: any) => !conteo[p.id])
+            .map((p: any) => ({ id: p.id, nombre: p.nombre, vistas: 0 }))
+
+          setPlatosMasVistos(conVistas.slice(0, 5))
+          setPlatosMenusVistos([...conVistas.slice(5), ...sinVistas].slice(0, 5))
         }
       } else {
         setPlatosMasVistos([])
@@ -122,7 +136,7 @@ export default function DashboardPage() {
             rango: `${parseInt(hora)}:00 — ${parseInt(hora) + 1}:00`,
             escaneos: cantidad,
           }))
-          .sort((a, b) => b.escaneos - a.escaneos)
+          .sort((a: any, b: any) => b.escaneos - a.escaneos)
           .slice(0, 3)
         setHorariosPico(listaHoras)
       } else {
@@ -137,18 +151,26 @@ export default function DashboardPage() {
         .gte('fecha', desde)
 
       if (visitasDia && visitasDia.length > 0) {
-        const dias = ['D', 'L', 'M', 'Mi', 'J', 'V', 'S']
-        const porDia: Record<number, number> = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 }
+        const porFechaConteo: Record<string, number> = {}
         visitasDia.forEach((v: any) => {
-          const d = new Date(v.fecha + 'T12:00:00').getDay()
-          porDia[d] = (porDia[d] || 0) + 1
+          porFechaConteo[v.fecha] = (porFechaConteo[v.fecha] || 0) + 1
         })
-        setEscaneosPorDia([1, 2, 3, 4, 5, 6, 0].map(d => ({
-          dia: dias[d],
+        const diasSemana = ['D', 'L', 'M', 'Mi', 'J', 'V', 'S']
+        const porDia: Record<number, number> = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 }
+        Object.entries(porFechaConteo).forEach(([fecha, cantidad]) => {
+          const partes = fecha.split('-')
+          const d = new Date(parseInt(partes[0]), parseInt(partes[1]) - 1, parseInt(partes[2]))
+          porDia[d.getDay()] = (porDia[d.getDay()] || 0) + cantidad
+        })
+        setEscaneosPorDia([1, 2, 3, 4, 5, 6, 0].map((d: number) => ({
+          dia: diasSemana[d],
           actual: porDia[d] || 0,
         })))
       } else {
-        setEscaneosPorDia([])
+        setEscaneosPorDia([1, 2, 3, 4, 5, 6, 0].map((d: number) => ({
+          dia: ['D', 'L', 'M', 'Mi', 'J', 'V', 'S'][d],
+          actual: 0,
+        })))
       }
 
       // Últimas reseñas
@@ -174,14 +196,14 @@ export default function DashboardPage() {
       if (visitasDia && visitasDia.length > 0) {
         const porFecha: Record<string, number> = {}
         visitasDia.forEach((v: any) => { porFecha[v.fecha] = (porFecha[v.fecha] || 0) + 1 })
-        const fechas = Object.entries(porFecha).sort((a, b) => b[1] - a[1])
+        const fechas = Object.entries(porFecha).sort((a: any, b: any) => b[1] - a[1])
         if (fechas.length > 0) {
           setMejorDia({ dia: new Date(fechas[0][0] + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric' }), cantidad: fechas[0][1] })
           setPeorDia({ dia: new Date(fechas[fechas.length - 1][0] + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric' }), cantidad: fechas[fechas.length - 1][1] })
         }
       } else {
-        setMejorDia(null)
-        setPeorDia(null)
+        setPlatosMasVistos([])
+        setPlatosMenusVistos([])
       }
 
       setStats({
@@ -195,19 +217,10 @@ export default function DashboardPage() {
     cargarStats()
   }, [rest?.id, filtroTiempo])
 
-  const [platosMasVistos, setPlatosMasVistos] = useState<any[]>([])
-  const [horariosPico, setHorariosPico] = useState<any[]>([])
-  const [escaneosPorDia, setEscaneosPorDia] = useState<any[]>([])
-  const [resenas, setResenas] = useState<any[]>([])
-  const [mejorDia, setMejorDia] = useState<{ dia: string; cantidad: number } | null>(null)
-  const [peorDia, setPeorDia] = useState<{ dia: string; cantidad: number } | null>(null)
-
   const esBasico = plan === 'basico' || plan === 'pro'
   const esPro = plan === 'pro'
-
-  
-
   const maxEscaneo = escaneosPorDia.length > 0 ? Math.max(...escaneosPorDia.map((d: any) => d.actual), 1) : 1
+  const textoFiltro = filtroTiempo === 'hoy' ? 'hoy' : filtroTiempo === 'semana' ? 'esta semana' : 'este mes'
 
   useEffect(() => {
     if (!cargando && !usuario) {
@@ -226,9 +239,8 @@ export default function DashboardPage() {
     )
   }
 
-  if (!usuario) {
-    return null
-  }
+  if (!usuario) return null
+
   return (
     <div style={{ background: 'var(--bg-primary)', minHeight: '100vh' }}>
       <div style={{ maxWidth: '500px', margin: '0 auto', paddingBottom: '80px' }}>
@@ -247,16 +259,11 @@ export default function DashboardPage() {
             }}>
               {esPro ? 'Pro' : esBasico ? 'Básico' : 'Gratis'}
             </div>
-            <div
-              onClick={() => setMostrarPerfil(!mostrarPerfil)}
-              style={{
-                width: '36px', height: '36px', borderRadius: '50%',
-                background: 'var(--color-info)', display: 'flex',
-                alignItems: 'center', justifyContent: 'center',
-                fontSize: '14px', fontWeight: 500, color: 'white', cursor: 'pointer',
-                overflow: 'hidden',
-              }}
-            >
+            <div onClick={() => setMostrarPerfil(!mostrarPerfil)} style={{
+              width: '36px', height: '36px', borderRadius: '50%', background: 'var(--color-info)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '14px', fontWeight: 500, color: 'white', cursor: 'pointer', overflow: 'hidden',
+            }}>
               {rest?.logo_url ? (
                 <img src={rest.logo_url} alt={restaurante.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               ) : restaurante.iniciales}
@@ -267,9 +274,7 @@ export default function DashboardPage() {
         {/* Dropdown perfil */}
         {mostrarPerfil && (
           <>
-            <div onClick={() => setMostrarPerfil(false)} style={{
-              position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.2)', zIndex: 60,
-            }} />
+            <div onClick={() => setMostrarPerfil(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.2)', zIndex: 60 }} />
             <div style={{
               position: 'absolute', right: '20px', top: '64px', zIndex: 70,
               background: 'var(--bg-secondary)', border: '1px solid var(--border-light)',
@@ -292,7 +297,7 @@ export default function DashboardPage() {
                 { label: 'Mis facturas', sub: 'Descargar y compartir', href: '/facturas' },
                 { label: 'Invitar restaurantes', sub: 'Gana meses gratis', href: '/referidos' },
                 { label: 'Idioma', sub: 'Español', href: '#' },
-              ].map((item, i) => (
+              ].map((item: any, i: number) => (
                 <div key={i} onClick={() => { setMostrarPerfil(false); router.push(item.href) }} style={{
                   padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                   borderBottom: '1px solid var(--border-light)', cursor: 'pointer',
@@ -309,9 +314,7 @@ export default function DashboardPage() {
                 const { cerrarSesion } = await import('@/lib/auth')
                 await cerrarSesion()
                 router.push('/login')
-              }} style={{
-                padding: '10px 14px', fontSize: '13px', color: 'var(--color-danger)', cursor: 'pointer',
-              }}>
+              }} style={{ padding: '10px 14px', fontSize: '13px', color: 'var(--color-danger)', cursor: 'pointer' }}>
                 Cerrar sesión
               </div>
             </div>
@@ -325,7 +328,7 @@ export default function DashboardPage() {
               { icon: '+', label: 'Agregar plato', href: '/menu' },
               { icon: '⊘', label: 'Marcar agotado', href: '/menu' },
               { icon: '◻', label: 'Ver QR', href: '/qr' },
-            ].map((a, i) => (
+            ].map((a: any, i: number) => (
               <div key={i} onClick={() => router.push(a.href)} className="card" style={{
                 flex: 1, padding: '12px', textAlign: 'center', cursor: 'pointer',
               }}>
@@ -340,41 +343,41 @@ export default function DashboardPage() {
         <div style={{ padding: '0 20px', marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ fontSize: '14px', fontWeight: 500 }}>Estadísticas</div>
           <div style={{ position: 'relative' }}>
-              <div onClick={() => setMostrarFiltro(!mostrarFiltro)} style={{
-                border: '1px solid var(--border-light)', borderRadius: 'var(--radius-md)',
-                padding: '6px 12px', fontSize: '12px', color: 'var(--text-secondary)',
-                background: 'var(--bg-secondary)', cursor: 'pointer',
-              }}>
-                {filtroTiempo === 'hoy' ? 'Hoy' : filtroTiempo === 'semana' ? 'Esta semana' : 'Este mes'} ↓
-              </div>
-              {mostrarFiltro && (
-                <>
-                  <div onClick={() => setMostrarFiltro(false)} style={{ position: 'fixed', inset: 0, zIndex: 60 }} />
-                  <div style={{
-                    position: 'absolute', right: 0, top: '36px', zIndex: 70,
-                    background: 'var(--bg-secondary)', border: '1px solid var(--border-light)',
-                    borderRadius: 'var(--radius-sm)', overflow: 'hidden', width: '140px',
-                    boxShadow: 'var(--shadow-lg)',
-                  }}>
-                    {[
-                      { id: 'hoy', label: 'Hoy' },
-                      { id: 'semana', label: 'Esta semana' },
-                      { id: 'mes', label: 'Este mes' },
-                    ].map((f) => (
-                      <div key={f.id} onClick={() => { setFiltroTiempo(f.id as any); setMostrarFiltro(false) }}
-                        style={{
-                          padding: '10px 14px', fontSize: '12px', cursor: 'pointer',
-                          background: filtroTiempo === f.id ? 'var(--color-info-light)' : 'transparent',
-                          color: filtroTiempo === f.id ? 'var(--color-info)' : 'var(--text-primary)',
-                          borderBottom: '1px solid var(--border-light)',
-                        }}>
-                        {f.label}
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
+            <div onClick={() => setMostrarFiltro(!mostrarFiltro)} style={{
+              border: '1px solid var(--border-light)', borderRadius: 'var(--radius-md)',
+              padding: '6px 12px', fontSize: '12px', color: 'var(--text-secondary)',
+              background: 'var(--bg-secondary)', cursor: 'pointer',
+            }}>
+              {filtroTiempo === 'hoy' ? 'Hoy' : filtroTiempo === 'semana' ? 'Esta semana' : 'Este mes'} ↓
             </div>
+            {mostrarFiltro && (
+              <>
+                <div onClick={() => setMostrarFiltro(false)} style={{ position: 'fixed', inset: 0, zIndex: 60 }} />
+                <div style={{
+                  position: 'absolute', right: 0, top: '36px', zIndex: 70,
+                  background: 'var(--bg-secondary)', border: '1px solid var(--border-light)',
+                  borderRadius: 'var(--radius-sm)', overflow: 'hidden', width: '140px',
+                  boxShadow: 'var(--shadow-lg)',
+                }}>
+                  {[
+                    { id: 'hoy', label: 'Hoy' },
+                    { id: 'semana', label: 'Esta semana' },
+                    { id: 'mes', label: 'Este mes' },
+                  ].map((f: any) => (
+                    <div key={f.id} onClick={() => { setFiltroTiempo(f.id as any); setMostrarFiltro(false) }}
+                      style={{
+                        padding: '10px 14px', fontSize: '12px', cursor: 'pointer',
+                        background: filtroTiempo === f.id ? 'var(--color-info-light)' : 'transparent',
+                        color: filtroTiempo === f.id ? 'var(--color-info)' : 'var(--text-primary)',
+                        borderBottom: '1px solid var(--border-light)',
+                      }}>
+                      {f.label}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         </div>
 
         {/* Números grandes */}
@@ -383,71 +386,21 @@ export default function DashboardPage() {
             <div className="card" style={{ flex: 1, padding: '14px' }}>
               <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Visitas al menú</div>
               <div style={{ fontSize: '26px', fontWeight: 500, marginTop: '4px' }}>{stats.escaneos}</div>
-              <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>{filtroTiempo === 'hoy' ? 'hoy' : filtroTiempo === 'semana' ? 'esta semana' : 'este mes'}</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>{textoFiltro}</div>
             </div>
             <div className="card" style={{ flex: 1, padding: '14px' }}>
               <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Platos vistos</div>
               <div style={{ fontSize: '26px', fontWeight: 500, marginTop: '4px' }}>{stats.visitas}</div>
-              <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>{filtroTiempo === 'hoy' ? 'hoy' : filtroTiempo === 'semana' ? 'esta semana' : 'este mes'}</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>{textoFiltro}</div>
             </div>
           </div>
         </div>
-
-        {/* PRO: Embudo de conversión */}
-        {esPro ? (
+        {stats.escaneos === 0 && stats.visitas === 0 && (
           <div style={{ padding: '0 20px', marginBottom: '14px' }}>
-            <div className="card" style={{ padding: '14px' }}>
-              <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '12px' }}>Embudo de conversión</div>
-              {[
-                { label: 'Visitaron el menú', valor: stats.escaneos, pct: 100 },
-                { label: 'Vieron platos', valor: stats.visitas, pct: stats.escaneos > 0 ? Math.round((stats.visitas / stats.escaneos) * 100) : 0 },
-                { label: 'Pidieron por WhatsApp', valor: stats.pedidosWhatsapp, pct: stats.escaneos > 0 ? Math.round((stats.pedidosWhatsapp / stats.escaneos) * 100) : 0 },
-              ].map((item, i) => (
-                <div key={i} style={{ marginBottom: i < 2 ? '10px' : 0 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '4px' }}>
-                    <span>{item.label}</span>
-                    <span style={{ fontWeight: 500 }}>{item.valor} <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>({item.pct}%)</span></span>
-                  </div>
-                  <div style={{ height: '8px', background: 'var(--bg-tertiary)', borderRadius: '4px', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${item.pct}%`, background: i === 2 ? 'var(--color-green)' : 'var(--color-info)', borderRadius: '4px', opacity: 1 - i * 0.2 }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : !esBasico ? (
-          <div style={{ padding: '0 20px', marginBottom: '10px' }}>
-            <div className="card" style={{ padding: '20px', textAlign: 'center', opacity: 0.5 }}>
-              <div style={{ fontSize: '30px', marginBottom: '6px' }}>🔒</div>
-              <div style={{ fontSize: '13px', fontWeight: 500 }}>Gráfica de escaneos</div>
-              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>Disponible en Plan Básico</div>
-            </div>
-          </div>
-        ) : null}
-
-        {/* BÁSICO+: Gráfica escaneos por día */}
-        {esBasico && escaneosPorDia.length > 0 && (
-          <div style={{ padding: '0 20px', marginBottom: '14px' }}>
-            <div className="card" style={{ padding: '14px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-                <div style={{ fontSize: '13px', fontWeight: 500 }}>Visitas por día</div>
-                {esPro && (
-                  <div style={{ display: 'flex', gap: '10px', fontSize: '10px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: '8px', height: '8px', borderRadius: '2px', background: 'var(--color-info)' }} />Esta sem.</div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: '8px', height: '8px', borderRadius: '2px', background: 'var(--border-light)' }} />Anterior</div>
-                  </div>
-                )}
-              </div>
-              <div style={{ display: 'flex', alignItems: 'end', gap: '4px', height: '80px' }}>
-                {escaneosPorDia.map((d, i) => (
-                  <div key={i} style={{ flex: 1, display: 'flex', gap: '2px', alignItems: 'end' }}>
-                    <div style={{ flex: 1, background: 'var(--color-info)', borderRadius: '2px', height: `${(d.actual / maxEscaneo) * 80}px` }} />
-                  </div>
-                ))}
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', fontSize: '10px', color: 'var(--text-tertiary)' }}>
-                {escaneosPorDia.map((d, i) => <span key={i}>{d.dia}</span>)}
-              </div>
+            <div style={{ background: 'var(--color-info-light)', borderRadius: 'var(--radius-md)', padding: '12px', fontSize: '12px', color: 'var(--color-info)' }}>
+              {filtroTiempo === 'hoy' 
+                ? 'Aún no hay visitas hoy. Los datos se actualizan en tiempo real cuando los comensales abren tu menú.'
+                : 'Comparte tu enlace o QR para empezar a recibir visitas. Los datos aparecen aquí automáticamente.'}
             </div>
           </div>
         )}
@@ -459,7 +412,7 @@ export default function DashboardPage() {
               <div className="card" style={{ flex: 1, padding: '14px' }}>
                 <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Pedidos WhatsApp</div>
                 <div style={{ fontSize: '26px', fontWeight: 500, marginTop: '4px' }}>{stats.pedidosWhatsapp}</div>
-                <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>{filtroTiempo === 'hoy' ? 'hoy' : filtroTiempo === 'semana' ? 'esta semana' : 'este mes'}</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>{textoFiltro}</div>
               </div>
               <div className="card" style={{ flex: 1, padding: '14px' }}>
                 <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Calificación promedio</div>
@@ -488,37 +441,105 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* BÁSICO+: Platos más vistos */}
-        {esBasico && platosMasVistos.length > 0 ? (
+        {/* Embudo de conversión */}
+        {esPro ? (
           <div style={{ padding: '0 20px', marginBottom: '14px' }}>
             <div className="card" style={{ padding: '14px' }}>
-              <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '12px' }}>
-                {esPro ? 'Platos: vistas vs pedidos' : 'Platos más vistos'}
-              </div>
-              {platosMasVistos.map((p: any, i: number) => (
-                <div key={i} style={{ marginBottom: i < platosMasVistos.length - 1 ? '10px' : 0 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', marginBottom: '4px' }}>
-                    <span style={{ color: esPro && p.vistas > 15 && p.pedidos < 3 ? 'var(--color-danger)' : 'var(--text-primary)' }}>{p.nombre}</span>
-                    <div style={{ display: 'flex', gap: '8px', fontSize: '11px' }}>
-                      <span style={{ color: 'var(--color-info)' }}>{p.vistas} vistas</span>
-                      {esPro && <span style={{ color: p.pedidos < 3 && p.vistas > 15 ? 'var(--color-danger)' : 'var(--color-green)' }}>{p.pedidos} pedidos</span>}
-                    </div>
+              <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '12px' }}>Embudo de conversión</div>
+              {[
+                { label: 'Visitaron el menú', valor: stats.escaneos, pct: 100 },
+                { label: 'Vieron platos', valor: stats.visitas, pct: stats.escaneos > 0 ? Math.round((stats.visitas / stats.escaneos) * 100) : 0 },
+                { label: 'Pidieron por WhatsApp', valor: stats.pedidosWhatsapp, pct: stats.escaneos > 0 ? Math.round((stats.pedidosWhatsapp / stats.escaneos) * 100) : 0 },
+              ].map((item: any, i: number) => (
+                <div key={i} style={{ marginBottom: i < 2 ? '10px' : 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '4px' }}>
+                    <span>{item.label}</span>
+                    <span style={{ fontWeight: 500 }}>{item.valor} <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>({item.pct}%)</span></span>
                   </div>
-                  <div style={{ height: '6px', background: 'var(--bg-tertiary)', borderRadius: '3px', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${(p.vistas / platosMasVistos[0].vistas) * 100}%`, background: 'var(--color-info)', borderRadius: '3px', opacity: 1 - i * 0.2 }} />
+                  <div style={{ height: '8px', background: 'var(--bg-tertiary)', borderRadius: '4px', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${item.pct}%`, background: i === 2 ? 'var(--color-green)' : 'var(--color-info)', borderRadius: '4px', opacity: 1 - i * 0.2 }} />
                   </div>
-                  {esPro && (
-                    <div style={{ height: '6px', background: 'var(--bg-tertiary)', borderRadius: '3px', overflow: 'hidden', marginTop: '3px' }}>
-                      <div style={{ height: '100%', width: `${(p.pedidos / platosMasVistos[0].vistas) * 100}%`, background: p.pedidos < 3 && p.vistas > 15 ? 'var(--color-danger)' : 'var(--color-green)', borderRadius: '3px' }} />
-                    </div>
-                  )}
-                  {esPro && p.vistas > 15 && p.pedidos < 3 && (
-                    <div style={{ fontSize: '10px', color: 'var(--color-danger)', marginTop: '4px' }}>Muchas vistas, pocos pedidos — revisar precio o foto</div>
-                  )}
                 </div>
               ))}
             </div>
           </div>
+        ) : !esBasico ? (
+          <div style={{ padding: '0 20px', marginBottom: '10px' }}>
+            <div className="card" style={{ padding: '20px', textAlign: 'center', opacity: 0.5 }}>
+              <div style={{ fontSize: '30px', marginBottom: '6px' }}>🔒</div>
+              <div style={{ fontSize: '13px', fontWeight: 500 }}>Embudo de conversión</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>Disponible en Plan Básico</div>
+            </div>
+          </div>
+        ) : null}
+
+        {/* Visitas por día */}
+        {esBasico && filtroTiempo !== 'hoy' && escaneosPorDia.length > 0 && escaneosPorDia.some((d: any) => d.actual > 0) && (
+          <div style={{ padding: '0 20px', marginBottom: '14px' }}>
+            <div className="card" style={{ padding: '14px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                <div style={{ fontSize: '13px', fontWeight: 500 }}>Visitas por día</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>Total: {escaneosPorDia.reduce((s: number, d: any) => s + d.actual, 0)}</div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'end', gap: '6px', height: '100px' }}>
+                {escaneosPorDia.map((d: any, i: number) => (
+                  <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                    <span style={{ fontSize: '10px', color: d.actual > 0 ? 'var(--color-info)' : 'var(--text-tertiary)', fontWeight: 500 }}>{d.actual > 0 ? d.actual : ''}</span>
+                    <div style={{ width: '100%', background: d.actual > 0 ? 'var(--color-info)' : 'var(--bg-tertiary)', borderRadius: '3px', height: `${d.actual > 0 ? Math.max((d.actual / maxEscaneo) * 70, 6) : 3}px`, transition: 'height 0.3s' }} />
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', fontSize: '10px', color: 'var(--text-tertiary)' }}>
+                {escaneosPorDia.map((d: any, i: number) => <span key={i}>{d.dia}</span>)}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Platos más vistos */}
+        {esBasico ? (
+          platosMasVistos.length > 0 ? (
+            <div style={{ padding: '0 20px', marginBottom: '14px' }}>
+              <div className="card" style={{ padding: '14px' }}>
+                <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '12px' }}>Platos más vistos</div>
+                {platosMasVistos.slice(0, 5).map((p: any, i: number) => (
+                  <div key={i} style={{ marginBottom: '10px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', marginBottom: '4px' }}>
+                      <span>{p.nombre}</span>
+                      <span style={{ color: 'var(--color-info)', fontSize: '11px' }}>{p.vistas} vistas</span>
+                    </div>
+                    <div style={{ height: '6px', background: 'var(--bg-tertiary)', borderRadius: '3px', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${(p.vistas / platosMasVistos[0].vistas) * 100}%`, background: 'var(--color-info)', borderRadius: '3px', opacity: 1 - i * 0.15 }} />
+                    </div>
+                  </div>
+                ))}
+                {platosMenusVistos.length > 0 && (
+                  <>
+                    <div style={{ fontSize: '13px', fontWeight: 500, marginTop: '16px', marginBottom: '12px' }}>Platos menos vistos</div>
+                    {platosMenusVistos.map((p: any, i: number) => (
+                      <div key={i} style={{ marginBottom: '10px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', marginBottom: '4px' }}>
+                          <span style={{ color: p.vistas === 0 ? 'var(--text-tertiary)' : 'var(--color-danger)' }}>{p.nombre}</span>
+                          <span style={{ color: p.vistas === 0 ? 'var(--text-tertiary)' : 'var(--color-danger)', fontSize: '11px' }}>{p.vistas === 0 ? 'Sin vistas' : `${p.vistas} vistas`}</span>
+                        </div>
+                        {p.vistas > 0 && platosMasVistos[0]?.vistas > 0 && (
+                          <div style={{ height: '6px', background: 'var(--bg-tertiary)', borderRadius: '3px', overflow: 'hidden' }}>
+                            <div style={{ height: '100%', width: `${(p.vistas / platosMasVistos[0].vistas) * 100}%`, background: 'var(--color-danger)', borderRadius: '3px', opacity: 0.7 }} />
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div style={{ padding: '0 20px', marginBottom: '14px' }}>
+              <div className="card" style={{ padding: '20px', textAlign: 'center' }}>
+                <div style={{ fontSize: '13px', color: 'var(--text-tertiary)' }}>Sin datos de platos vistos para este periodo</div>
+              </div>
+            </div>
+          )
         ) : (
           <div style={{ padding: '0 20px', marginBottom: '10px' }}>
             <div className="card" style={{ padding: '20px', textAlign: 'center', opacity: 0.5 }}>
@@ -529,22 +550,30 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* BÁSICO+: Horarios pico */}
-        {esBasico && horariosPico.length > 0 ? (
-          <div style={{ padding: '0 20px', marginBottom: '14px' }}>
-            <div className="card" style={{ padding: '14px' }}>
-              <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '12px' }}>Horarios con más visitas</div>
-              {horariosPico.map((h: any, i: number) => (
-                <div key={i} style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  padding: '8px 0', borderBottom: i < horariosPico.length - 1 ? '1px solid var(--border-light)' : 'none',
-                }}>
-                  <span style={{ fontSize: '13px' }}>{h.rango}</span>
-                  <span style={{ fontSize: '12px', fontWeight: 500 }}>{h.escaneos}</span>
-                </div>
-              ))}
+        {/* Horarios pico */}
+        {esBasico ? (
+          horariosPico.length > 0 ? (
+            <div style={{ padding: '0 20px', marginBottom: '14px' }}>
+              <div className="card" style={{ padding: '14px' }}>
+                <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '12px' }}>Horarios con más visitas</div>
+                {horariosPico.map((h: any, i: number) => (
+                  <div key={i} style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '8px 0', borderBottom: i < horariosPico.length - 1 ? '1px solid var(--border-light)' : 'none',
+                  }}>
+                    <span style={{ fontSize: '13px' }}>{h.rango}</span>
+                    <span style={{ fontSize: '12px', fontWeight: 500 }}>{h.escaneos}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          ) : (
+            <div style={{ padding: '0 20px', marginBottom: '14px' }}>
+              <div className="card" style={{ padding: '20px', textAlign: 'center' }}>
+                <div style={{ fontSize: '13px', color: 'var(--text-tertiary)' }}>Sin datos de horarios para este periodo</div>
+              </div>
+            </div>
+          )
         ) : (
           <div style={{ padding: '0 20px', marginBottom: '10px' }}>
             <div className="card" style={{ padding: '20px', textAlign: 'center', opacity: 0.5 }}>
@@ -555,7 +584,7 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* PRO: Mejores y peores días */}
+        {/* Mejor y peor día */}
         {esPro && mejorDia && peorDia && (
           <div style={{ padding: '0 20px', marginBottom: '14px' }}>
             <div style={{ display: 'flex', gap: '10px' }}>
@@ -573,21 +602,18 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* PRO: Últimas reseñas */}
+        {/* Últimas reseñas */}
         {esPro && resenas.length > 0 && (
           <div style={{ padding: '0 20px', marginBottom: '14px' }}>
             <div className="card" style={{ padding: '14px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                <div style={{ fontSize: '13px', fontWeight: 500 }}>Últimas reseñas</div>
-                <span style={{ fontSize: '12px', color: 'var(--color-info)', cursor: 'pointer' }}>Ver todas →</span>
-              </div>
-              {resenas.map((r, i) => (
+              <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '12px' }}>Últimas reseñas</div>
+              {resenas.map((r: any, i: number) => (
                 <div key={i} style={{ padding: '10px 0', borderBottom: i < resenas.length - 1 ? '1px solid var(--border-light)' : 'none' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
                     <span style={{ fontSize: '12px', fontWeight: 500 }}>{r.plato}</span>
                     <div style={{ fontSize: '11px', color: 'var(--color-warning)' }}>{'★'.repeat(r.estrellas)}{'☆'.repeat(5 - r.estrellas)}</div>
                   </div>
-                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{r.comentario}</div>
+                  {r.comentario && <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{r.comentario}</div>}
                   <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '4px' }}>{r.tiempo}</div>
                 </div>
               ))}
@@ -595,7 +621,7 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* PRO: Descargar reporte */}
+        {/* Descargar reporte */}
         {esPro && (
           <div style={{ padding: '0 20px', marginBottom: '14px' }}>
             <div style={{
@@ -612,7 +638,7 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Upsell (gratis o básico) */}
+        {/* Upsell */}
         {!esPro && (
           <div style={{ padding: '0 20px', marginBottom: '16px' }}>
             {plan === 'gratis' ? (
@@ -649,7 +675,7 @@ export default function DashboardPage() {
             { icon: '≡', label: 'Menú', href: '/menu', active: false },
             { icon: '◻', label: 'QR', href: '/qr', active: false },
             { icon: '⊙', label: 'Config', href: '/config', active: false },
-          ].map((item, i) => (
+          ].map((item: any, i: number) => (
             <div key={i} onClick={() => router.push(item.href)} style={{
               flex: 1, padding: '10px', textAlign: 'center', cursor: 'pointer',
               color: item.active ? 'var(--color-info)' : 'var(--text-tertiary)',

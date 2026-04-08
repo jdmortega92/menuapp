@@ -16,6 +16,8 @@ interface Categoria {
 export default function MiMenuPage() {
   const router = useRouter()
   const { usuario, restaurante: rest, cargando: cargandoAuth } = useAuth()
+  const plan = (rest?.plan || 'gratis') as string
+  const esPro = plan === 'pro'
   const [cargandoMenu, setCargandoMenu] = useState(true)
   const [tabActiva, setTabActiva] = useState<'platos' | 'combos'>('platos')
   const [busqueda, setBusqueda] = useState('')
@@ -618,6 +620,23 @@ export default function MiMenuPage() {
 
         {tabActiva === 'combos' && (
           <>
+            {!esPro ? (
+              <div style={{ padding: '40px 20px', textAlign: 'center' }}>
+                <div style={{ fontSize: '40px', marginBottom: '12px' }}>🔒</div>
+                <div style={{ fontSize: '16px', fontWeight: 500, marginBottom: '6px' }}>Combos, Promos y Plato del día</div>
+                <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '20px', lineHeight: 1.6 }}>
+                  Crea paquetes con descuento, promociones por día y destaca tu plato estrella. Disponible en el Plan Pro.
+                </div>
+                <div onClick={() => router.push('/suscripcion')} style={{
+                  display: 'inline-block', background: 'var(--text-primary)', color: 'white',
+                  padding: '12px 24px', borderRadius: 'var(--radius-md)', fontSize: '13px',
+                  fontWeight: 500, cursor: 'pointer',
+                }}>
+                  Ver Plan Pro — $25.000/mes
+                </div>
+              </div>
+            ) : (
+            <>
             {/* Sub-tabs */}
             <div style={{ padding: '12px 20px 0', display: 'flex', gap: '8px' }}>
               {['combos', 'promos', 'plato-dia'].map((sub) => (
@@ -872,6 +891,8 @@ export default function MiMenuPage() {
                   </button>
                 </div>
               </div>
+            )}
+            </>
             )}
           </>
         )}
