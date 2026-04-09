@@ -31,6 +31,8 @@ export default function MenuPublicoPage() {
   const [platoDia, setPlatoDia] = useState<any>(null)
   const [cargando, setCargando] = useState(true)
   const [horariosRest, setHorariosRest] = useState<any[]>([])
+  const [combosPublico, setCombosPublico] = useState<any[]>([])
+  const [mostrarCombos, setMostrarCombos] = useState(false)
 
   useEffect(() => {
     async function cargar() {
@@ -118,7 +120,23 @@ export default function MenuPublicoPage() {
           descripcion: pd.platos.descripcion, horaFin: pd.horario_fin || '15:00',
         })
       }
+      // Combos
+      const { data: combosData } = await supabase
+        .from('combos')
+        .select('*, combo_platos(plato_id, platos(nombre, precio))')
+        .eq('restaurante_id', rest.id)
+        .eq('activo', true)
 
+      if (combosData) {
+        setCombosPublico(combosData.map((c: any) => ({
+          id: c.id,
+          nombre: c.nombre,
+          descripcion: c.descripcion,
+          precio: c.precio,
+          precioIndividual: c.precio_individual,
+          platos: c.combo_platos?.map((cp: any) => cp.platos?.nombre || 'Plato') || [],
+        })))
+      }
       setCargando(false)
     }
     cargar()
@@ -149,7 +167,10 @@ export default function MenuPublicoPage() {
   }, [platoDetalle, restaurante])
 
   const color = restaurante?.color_principal || '#E85D24'
-  const todosLosPlatos = categorias.flatMap((c: any) => c.platos)
+  const todosLosPlatos = [
+    ...categorias.flatMap((c: any) => c.platos),
+    ...combosPublico.map((c: any) => ({ id: c.id, nombre: c.nombre, precio: c.precio, descripcion: c.descripcion || '', disponible: true, foto_url: null })),
+  ]
 
   const categoriasFiltradas = busqueda.trim()
     ? categorias.map((cat: any) => ({ ...cat, platos: cat.platos.filter((p: any) => p.nombre.toLowerCase().includes(busqueda.toLowerCase()) || p.descripcion?.toLowerCase().includes(busqueda.toLowerCase())) })).filter((cat: any) => cat.platos.length > 0)
@@ -375,7 +396,7 @@ export default function MenuPublicoPage() {
         {/* Filtros */}
         <div style={{ padding: '4px 16px 10px', display: 'flex', gap: '6px', overflowX: 'auto' }}>
           <div onClick={() => setCategoriaAbierta(categoriaAbierta ? null : 'open')} style={{ padding: '6px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 500, background: color, color: 'white', cursor: 'pointer', whiteSpace: 'nowrap' }}>Categorías ↓</div>
-          {config?.combos_activo && <div style={{ padding: '6px 12px', borderRadius: '20px', fontSize: '11px', border: '1px solid var(--border-light)', color: 'var(--text-secondary)', background: 'var(--bg-secondary)', cursor: 'pointer', whiteSpace: 'nowrap' }}>Combos</div>}
+          {config?.combos_activo && combosPublico.length > 0 && <div onClick={() => setMostrarCombos(!mostrarCombos)} style={{ padding: '6px 12px', borderRadius: '20px', fontSize: '11px', border: mostrarCombos ? 'none' : '1px solid var(--border-light)', color: mostrarCombos ? 'white' : 'var(--text-secondary)', background: mostrarCombos ? color : 'var(--bg-secondary)', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.2s' }}>Combos</div>}
           {config?.promos_activo && <div style={{ padding: '6px 12px', borderRadius: '20px', fontSize: '11px', border: '1px solid var(--border-light)', color: 'var(--text-secondary)', background: 'var(--bg-secondary)', cursor: 'pointer', whiteSpace: 'nowrap' }}>Promos</div>}
         </div>
 
@@ -463,7 +484,30 @@ export default function MenuPublicoPage() {
             </div>
           </div>
         )}
-
+        {/* Combos */}
+        {mostrarCombos && combosPublico.length > 0 && !busqueda.trim() && (
+          <div id="combos-section" style={{ padding: '0 16px', marginBottom: '14px' }}>
+            <div style={{ fontSize: '14px', fontWeight: 500, marginBottom: '8px', paddingTop: '4px' }}>🍱 Combos</div>
+            {combosPublico.map((combo: any) => (
+              <div key={combo.id} style={{
+                background: 'var(--bg-secondary)', border: `1px solid ${color}30`,
+                borderRadius: '10px', padding: '12px', marginBottom: '8px',
+              }}>
+                <div style={{ fontSize: '14px', fontWeight: 500 }}>{combo.nombre}</div>
+                {combo.descripcion && <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>{combo.descripcion}</div>}
+                <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '4px' }}>{combo.platos.join(' + ')}</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '15px', fontWeight: 500, color: color }}>${combo.precio.toLocaleString('es-CO')}</span>
+                    <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', textDecoration: 'line-through' }}>${combo.precioIndividual.toLocaleString('es-CO')}</span>
+                    <span style={{ fontSize: '11px', color: 'var(--color-green)', fontWeight: 500 }}>-${(combo.precioIndividual - combo.precio).toLocaleString('es-CO')}</span>
+                  </div>
+                  <Qty id={combo.id} />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
         {/* Categorías y platos */}
         {categoriasFiltradas.map((cat: any) => (
           <div key={cat.id} id={cat.id} style={{ padding: '0 16px', marginBottom: '14px' }}>

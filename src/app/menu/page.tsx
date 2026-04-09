@@ -42,15 +42,13 @@ export default function MiMenuPage() {
   const [subTab, setSubTab] = useState<'combos' | 'promos' | 'plato-dia'>('combos')
   const [mostrarFormCombo, setMostrarFormCombo] = useState(false)
   const [mostrarFormPromo, setMostrarFormPromo] = useState(false)
-  const [nuevoCombo, setNuevoCombo] = useState({ nombre: '', platoIds: [] as string[], precio: '' })
+  const [nuevoCombo, setNuevoCombo] = useState({ nombre: '', descripcion: '', platoIds: [] as string[], precio: '' })
   const [nuevaPromo, setNuevaPromo] = useState({ nombre: '', tipo: '', valor: '', dias: [] as string[] })
   const [platoDiaConfig, setPlatoDiaConfig] = useState({ platoId: '', precioEspecial: '', horaInicio: '11:00', horaFin: '15:00' })
   const [guardandoPlatoDia, setGuardandoPlatoDia] = useState(false)
   const [platoDiaActivo, setPlatoDiaActivo] = useState(false)
 
-  const [combos, setCombos] = useState([
-    { id: 'cb1', nombre: 'Combo paisa', platos: ['Bandeja paisa', 'Limonada de coco'], precio: 22000, precioIndividual: 24000, activo: true },
-  ])
+  const [combos, setCombos] = useState<any[]>([])
   const [promos, setPromos] = useState([
     { id: 'pr1', nombre: 'Happy Hour Bebidas', tipo: 'dos_por_uno', valor: '', dias: ['vie', 'sab'], activo: true },
   ])
@@ -219,6 +217,27 @@ export default function MiMenuPage() {
         })
         setPlatoDiaActivo(true)
       }
+      // Cargar combos
+      const { data: combosData } = await supabase
+        .from('combos')
+        .select('*, combo_platos(plato_id)')
+        .eq('restaurante_id', rest!.id)
+
+      if (combosData) {
+        const combosConNombres = combosData.map((c: any) => ({
+          id: c.id,
+          nombre: c.nombre,
+          precio: c.precio,
+          precioIndividual: c.precio_individual,
+          activo: c.activo,
+          platosIds: c.combo_platos?.map((cp: any) => cp.plato_id) || [],
+          platos: c.combo_platos?.map((cp: any) => {
+            const plato = (platos || []).find((p: any) => p.id === cp.plato_id)
+            return plato?.nombre || 'Plato'
+          }) || [],
+        }))
+        setCombos(combosConNombres)
+      }
       setCargandoMenu(false)
     }
 
@@ -235,18 +254,48 @@ export default function MiMenuPage() {
     const plato = categorias.flatMap(c => c.platos).find(p => p.id === id)
     return sum + (plato?.precio || 0)
   }, 0)
-  function agregarCombo() {
-    if (!nuevoCombo.nombre || nuevoCombo.platoIds.length < 2 || !nuevoCombo.precio) return
+  async function agregarCombo() {
+    if (!nuevoCombo.nombre || nuevoCombo.platoIds.length < 2 || !nuevoCombo.precio || !rest?.id) return
+    const supabase = createClient()
+
+    const { data: comboData, error } = await supabase.from('combos').insert({
+      restaurante_id: rest.id,
+      nombre: nuevoCombo.nombre,
+      descripcion: nuevoCombo.descripcion || null,
+      precio: parseInt(nuevoCombo.precio),
+      precio_individual: precioIndividualCombo,
+      activo: true,
+    }).select().single()
+
+    if (error || !comboData) { alert('Error al crear combo'); return }
+
+    // Insertar platos del combo
+    await supabase.from('combo_platos').insert(
+      nuevoCombo.platoIds.map(platoId => ({ combo_id: comboData.id, plato_id: platoId }))
+    )
+
     const platosNombres = nuevoCombo.platoIds.map(id => categorias.flatMap(c => c.platos).find(p => p.id === id)?.nombre || '')
     setCombos([...combos, {
-      id: Date.now().toString(), nombre: nuevoCombo.nombre, platos: platosNombres,
-      precio: parseInt(nuevoCombo.precio), precioIndividual: precioIndividualCombo, activo: true,
+      id: comboData.id, nombre: comboData.nombre, platos: platosNombres,
+      precio: comboData.precio, precioIndividual: comboData.precio_individual, activo: true,
+      platosIds: nuevoCombo.platoIds,
     }])
-    setNuevoCombo({ nombre: '', platoIds: [], precio: '' })
+    setNuevoCombo({ nombre: '', descripcion: '', platoIds: [], precio: '' })
     setMostrarFormCombo(false)
   }
-  function toggleCombo(id: string) { setCombos(combos.map(c => c.id === id ? { ...c, activo: !c.activo } : c)) }
-  function eliminarCombo(id: string) { setCombos(combos.filter(c => c.id !== id)) }
+  async function toggleCombo(id: string) {
+    const combo = combos.find(c => c.id === id)
+    if (!combo) return
+    const supabase = createClient()
+    await supabase.from('combos').update({ activo: !combo.activo }).eq('id', id)
+    setCombos(combos.map(c => c.id === id ? { ...c, activo: !c.activo } : c))
+  }
+  async function eliminarCombo(id: string) {
+    const supabase = createClient()
+    await supabase.from('combo_platos').delete().eq('combo_id', id)
+    await supabase.from('combos').delete().eq('id', id)
+    setCombos(combos.filter(c => c.id !== id))
+  }
 
   // ── Categorías ──
   async function agregarCategoria() {
@@ -724,6 +773,8 @@ export default function MiMenuPage() {
                     <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '10px' }}>Nuevo combo</div>
                     <input className="input" placeholder="Nombre del combo (ej: Combo paisa)" value={nuevoCombo.nombre}
                       onChange={(e) => setNuevoCombo({ ...nuevoCombo, nombre: e.target.value })} style={{ marginBottom: '8px' }} />
+                    <input className="input" placeholder="Descripción (opcional)" value={nuevoCombo.descripcion || ''}
+                      onChange={(e) => setNuevoCombo({ ...nuevoCombo, descripcion: e.target.value })} style={{ marginBottom: '8px' }} />  
                     <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Selecciona los platos:</div>
                     <div style={{ maxHeight: '160px', overflowY: 'auto', marginBottom: '8px' }}>
                       {categorias.flatMap(c => c.platos).map(p => (
