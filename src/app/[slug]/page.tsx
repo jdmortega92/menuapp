@@ -32,6 +32,10 @@ export default function MenuPublicoPage() {
   const [cargando, setCargando] = useState(true)
   const [horariosRest, setHorariosRest] = useState<any[]>([])
   const [combosPublico, setCombosPublico] = useState<any[]>([])
+  const [promosPublico, setPromosPublico] = useState<any[]>([])
+  const [mostrarPromos, setMostrarPromos] = useState(false)
+  const [promoDetalle, setPromoDetalle] = useState<any>(null)
+  const [promoSeleccion, setPromoSeleccion] = useState<string[]>([])
   const [mostrarCombos, setMostrarCombos] = useState(false)
 
   useEffect(() => {
@@ -137,6 +141,26 @@ export default function MenuPublicoPage() {
           platos: c.combo_platos?.map((cp: any) => cp.platos?.nombre || 'Plato') || [],
         })))
       }
+
+      // Promos
+      const { data: promosData } = await supabase
+        .from('promos')
+        .select('*, promo_platos(plato_id, platos(nombre))')
+        .eq('restaurante_id', rest.id)
+        .eq('activo', true)
+
+      if (promosData) {
+        setPromosPublico(promosData.map((p: any) => ({
+          id: p.id,
+          nombre: p.nombre,
+          tipo: p.tipo,
+          valor: p.valor,
+          dias: p.dias || [],
+          platos: p.promo_platos?.map((pp: any) => pp.platos?.nombre || 'Plato') || [],
+          platosIds: p.promo_platos?.map((pp: any) => pp.plato_id) || [],
+        })))
+      }
+
       setCargando(false)
     }
     cargar()
@@ -397,7 +421,7 @@ export default function MenuPublicoPage() {
         <div style={{ padding: '4px 16px 10px', display: 'flex', gap: '6px', overflowX: 'auto' }}>
           <div onClick={() => setCategoriaAbierta(categoriaAbierta ? null : 'open')} style={{ padding: '6px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 500, background: color, color: 'white', cursor: 'pointer', whiteSpace: 'nowrap' }}>Categorías ↓</div>
           {config?.combos_activo && combosPublico.length > 0 && <div onClick={() => setMostrarCombos(!mostrarCombos)} style={{ padding: '6px 12px', borderRadius: '20px', fontSize: '11px', border: mostrarCombos ? 'none' : '1px solid var(--border-light)', color: mostrarCombos ? 'white' : 'var(--text-secondary)', background: mostrarCombos ? color : 'var(--bg-secondary)', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.2s' }}>Combos</div>}
-          {config?.promos_activo && <div style={{ padding: '6px 12px', borderRadius: '20px', fontSize: '11px', border: '1px solid var(--border-light)', color: 'var(--text-secondary)', background: 'var(--bg-secondary)', cursor: 'pointer', whiteSpace: 'nowrap' }}>Promos</div>}
+          {config?.promos_activo && promosPublico.length > 0 && <div onClick={() => setMostrarPromos(!mostrarPromos)} style={{ padding: '6px 12px', borderRadius: '20px', fontSize: '11px', border: mostrarPromos ? 'none' : '1px solid var(--border-light)', color: mostrarPromos ? 'white' : 'var(--text-secondary)', background: mostrarPromos ? color : 'var(--bg-secondary)', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.2s' }}>Promos</div>}
         </div>
 
         {/* Dropdown categorías */}
@@ -508,6 +532,142 @@ export default function MenuPublicoPage() {
             ))}
           </div>
         )}
+        {/* Promos */}
+        {mostrarPromos && promosPublico.length > 0 && !busqueda.trim() && (
+          <div style={{ padding: '0 16px', marginBottom: '14px' }}>
+            <div style={{ fontSize: '14px', fontWeight: 500, marginBottom: '8px', paddingTop: '4px' }}>🏷️ Promociones</div>
+            {promosPublico.map((promo: any) => {
+              const diasTexto = promo.dias.map((d: string) => {
+                const nombres: Record<string, string> = { lun: 'Lunes', mar: 'Martes', mie: 'Miércoles', jue: 'Jueves', vie: 'Viernes', sab: 'Sábado', dom: 'Domingo' }
+                return nombres[d] || d
+              }).join(', ')
+              return (
+                <div key={promo.id} onClick={() => { setPromoDetalle(promo); setPromoSeleccion([]) }} style={{
+                  background: 'var(--bg-secondary)', border: `1px solid ${color}30`,
+                  borderRadius: '10px', padding: '12px', marginBottom: '8px', cursor: 'pointer',
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ fontSize: '14px', fontWeight: 500 }}>{promo.nombre}</div>
+                    <span style={{ fontSize: '12px', fontWeight: 500, color: 'white', background: color, padding: '3px 10px', borderRadius: '12px' }}>
+                      {promo.tipo === 'dos_por_uno' ? '2x1' : promo.tipo === 'descuento' ? `${promo.valor}% OFF` : `$${parseInt(promo.valor || '0').toLocaleString('es-CO')}`}
+                    </span>
+                  </div>
+                  {promo.platos && promo.platos.length > 0 && (
+                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '6px' }}>Aplica en: {promo.platos.join(', ')}</div>
+                  )}
+                  <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '4px' }}>{diasTexto}</div>
+                  <div style={{ fontSize: '11px', color: color, marginTop: '6px', fontWeight: 500 }}>Toca para ver platos →</div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Modal detalle promo */}
+        {promoDetalle && (() => {
+          const platosPromo = categorias.flatMap((c: any) => c.platos).filter((p: any) => 
+            promoDetalle.platosIds ? promoDetalle.platosIds.includes(p.id) : promoDetalle.platos?.includes(p.nombre)
+          )
+          
+          function calcularPrecioPromo(plato: any) {
+            if (promoDetalle.tipo === 'dos_por_uno') return 0
+            if (promoDetalle.tipo === 'descuento') return Math.round(plato.precio * (1 - (promoDetalle.valor || 0) / 100))
+            if (promoDetalle.tipo === 'precio_especial') return promoDetalle.valor || plato.precio
+            return plato.precio
+          }
+
+          function agregarPromoAlPedido() {
+            if (promoSeleccion.length === 0) return
+            promoSeleccion.forEach(platoId => {
+              const plato = platosPromo.find((p: any) => p.id === platoId)
+              if (!plato) return
+              if (promoDetalle.tipo === 'dos_por_uno') {
+                agregarAlPedido(platoId)
+                agregarAlPedido(platoId)
+              } else {
+                agregarAlPedido(platoId)
+              }
+            })
+            setPromoDetalle(null)
+          }
+
+          return (
+            <>
+              <div onClick={() => setPromoDetalle(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 60 }} />
+              <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 70, background: 'var(--bg-secondary)', borderRadius: '16px 16px 0 0', maxHeight: '80vh', overflowY: 'auto', animation: 'slideUp 0.3s ease' }}>
+                <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-light)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <span style={{ fontSize: '16px', fontWeight: 500 }}>{promoDetalle.nombre}</span>
+                    <span style={{ fontSize: '12px', fontWeight: 500, color: 'white', background: color, padding: '2px 8px', borderRadius: '10px', marginLeft: '8px' }}>
+                      {promoDetalle.tipo === 'dos_por_uno' ? '2x1' : promoDetalle.tipo === 'descuento' ? `${promoDetalle.valor}% OFF` : `$${parseInt(promoDetalle.valor || '0').toLocaleString('es-CO')}`}
+                    </span>
+                  </div>
+                  <span onClick={() => setPromoDetalle(null)} style={{ fontSize: '18px', color: 'var(--text-tertiary)', cursor: 'pointer' }}>✕</span>
+                </div>
+
+                <div style={{ padding: '16px 20px' }}>
+                  <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '12px' }}>
+                    {promoDetalle.tipo === 'dos_por_uno' && 'Selecciona un plato y lleva 2 por el precio de 1'}
+                    {promoDetalle.tipo === 'descuento' && `Selecciona los platos con ${promoDetalle.valor}% de descuento`}
+                    {promoDetalle.tipo === 'precio_especial' && `Platos a precio especial de $${parseInt(promoDetalle.valor || '0').toLocaleString('es-CO')}`}
+                  </div>
+
+                  {platosPromo.map((plato: any) => {
+                    const seleccionado = promoSeleccion.includes(plato.id)
+                    const precioPromo = calcularPrecioPromo(plato)
+                    return (
+                      <div key={plato.id} onClick={() => {
+                        setPromoSeleccion(seleccionado 
+                          ? promoSeleccion.filter(id => id !== plato.id) 
+                          : [...promoSeleccion, plato.id])
+                      }} style={{
+                        padding: '12px', borderRadius: '10px', marginBottom: '8px', cursor: 'pointer',
+                        border: seleccionado ? `2px solid ${color}` : '1px solid var(--border-light)',
+                        background: seleccionado ? `${color}08` : 'var(--bg-primary)',
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      }}>
+                        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                          <div style={{ width: '44px', height: '44px', borderRadius: '8px', background: `${color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
+                            {plato.foto_url ? (
+                              <img src={plato.foto_url} alt={plato.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            ) : <span style={{ fontSize: '16px', color: color }}>{plato.nombre.charAt(0)}</span>}
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '13px', fontWeight: 500 }}>{plato.nombre}</div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+                              <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', textDecoration: 'line-through' }}>${plato.precio.toLocaleString('es-CO')}</span>
+                              <span style={{ fontSize: '13px', fontWeight: 500, color: color }}>
+                                {promoDetalle.tipo === 'dos_por_uno' ? '2x1' : `$${precioPromo.toLocaleString('es-CO')}`}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        <div style={{
+                          width: '24px', height: '24px', borderRadius: '50%',
+                          border: seleccionado ? 'none' : '2px solid var(--border-light)',
+                          background: seleccionado ? color : 'transparent',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}>
+                          {seleccionado && <span style={{ color: 'white', fontSize: '14px' }}>✓</span>}
+                        </div>
+                      </div>
+                    )
+                  })}
+
+                  {promoSeleccion.length > 0 && (
+                    <div onClick={agregarPromoAlPedido} style={{
+                      background: color, color: 'white', borderRadius: '12px',
+                      padding: '16px', textAlign: 'center', fontSize: '15px',
+                      fontWeight: 500, cursor: 'pointer', marginTop: '12px',
+                    }}>
+                      Agregar {promoSeleccion.length} plato{promoSeleccion.length > 1 ? 's' : ''} al pedido
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          )
+        })()}
         {/* Categorías y platos */}
         {categoriasFiltradas.map((cat: any) => (
           <div key={cat.id} id={cat.id} style={{ padding: '0 16px', marginBottom: '14px' }}>

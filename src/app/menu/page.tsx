@@ -43,15 +43,13 @@ export default function MiMenuPage() {
   const [mostrarFormCombo, setMostrarFormCombo] = useState(false)
   const [mostrarFormPromo, setMostrarFormPromo] = useState(false)
   const [nuevoCombo, setNuevoCombo] = useState({ nombre: '', descripcion: '', platoIds: [] as string[], precio: '' })
-  const [nuevaPromo, setNuevaPromo] = useState({ nombre: '', tipo: '', valor: '', dias: [] as string[] })
+  const [nuevaPromo, setNuevaPromo] = useState({ nombre: '', descripcion: '', tipo: '', valor: '', dias: [] as string[], platoIds: [] as string[] })
   const [platoDiaConfig, setPlatoDiaConfig] = useState({ platoId: '', precioEspecial: '', horaInicio: '11:00', horaFin: '15:00' })
   const [guardandoPlatoDia, setGuardandoPlatoDia] = useState(false)
   const [platoDiaActivo, setPlatoDiaActivo] = useState(false)
 
   const [combos, setCombos] = useState<any[]>([])
-  const [promos, setPromos] = useState([
-    { id: 'pr1', nombre: 'Happy Hour Bebidas', tipo: 'dos_por_uno', valor: '', dias: ['vie', 'sab'], activo: true },
-  ])
+  const [promos, setPromos] = useState<any[]>([])
 
   async function guardarPlatoDia() {
     if (!platoDiaConfig.platoId || !platoDiaConfig.precioEspecial || !rest?.id) return
@@ -85,17 +83,48 @@ export default function MiMenuPage() {
     setPlatoDiaConfig({ platoId: '', precioEspecial: '', horaInicio: '11:00', horaFin: '15:00' })
   }
 
-  function agregarPromo() {
-    if (!nuevaPromo.nombre || !nuevaPromo.tipo || nuevaPromo.dias.length === 0) return
+  async function agregarPromo() {
+    if (!nuevaPromo.nombre || !nuevaPromo.tipo || nuevaPromo.dias.length === 0 || nuevaPromo.platoIds.length === 0 || !rest?.id) return
+    const supabase = createClient()
+
+    const { data: promoData, error } = await supabase.from('promos').insert({
+      restaurante_id: rest.id,
+      nombre: nuevaPromo.nombre,
+      tipo: nuevaPromo.tipo,
+      valor: nuevaPromo.valor ? parseInt(nuevaPromo.valor) : null,
+      dias: nuevaPromo.dias,
+      activo: true,
+    }).select().single()
+
+    if (error || !promoData) { alert('Error al crear promo'); return }
+
+    // Insertar platos de la promo
+    await supabase.from('promo_platos').insert(
+      nuevaPromo.platoIds.map(platoId => ({ promo_id: promoData.id, plato_id: platoId }))
+    )
+
+    const platosNombres = nuevaPromo.platoIds.map(id => categorias.flatMap(c => c.platos).find(p => p.id === id)?.nombre || '')
     setPromos([...promos, {
-      id: Date.now().toString(), nombre: nuevaPromo.nombre, tipo: nuevaPromo.tipo,
-      valor: nuevaPromo.valor, dias: nuevaPromo.dias, activo: true,
+      id: promoData.id, nombre: promoData.nombre, tipo: promoData.tipo,
+      valor: promoData.valor?.toString() || '', dias: promoData.dias || [], activo: true,
+      platos: platosNombres, descripcion: nuevaPromo.descripcion,
     }])
-    setNuevaPromo({ nombre: '', tipo: '', valor: '', dias: [] })
+    setNuevaPromo({ nombre: '', descripcion: '', tipo: '', valor: '', dias: [], platoIds: [] })
     setMostrarFormPromo(false)
   }
-  function togglePromo(id: string) { setPromos(promos.map(p => p.id === id ? { ...p, activo: !p.activo } : p)) }
-  function eliminarPromo(id: string) { setPromos(promos.filter(p => p.id !== id)) }
+  async function togglePromo(id: string) {
+    const promo = promos.find(p => p.id === id)
+    if (!promo) return
+    const supabase = createClient()
+    await supabase.from('promos').update({ activo: !promo.activo }).eq('id', id)
+    setPromos(promos.map(p => p.id === id ? { ...p, activo: !p.activo } : p))
+  }
+  async function eliminarPromo(id: string) {
+    const supabase = createClient()
+    await supabase.from('promo_platos').delete().eq('promo_id', id)
+    await supabase.from('promos').delete().eq('id', id)
+    setPromos(promos.filter(p => p.id !== id))
+  }
 
   const MAX_DESC = 150
   function recortarImagen(imageSrc: string, pixelCrop: any): Promise<Blob> {
@@ -237,6 +266,26 @@ export default function MiMenuPage() {
           }) || [],
         }))
         setCombos(combosConNombres)
+      }
+      // Cargar promos
+      const { data: promosData } = await supabase
+        .from('promos')
+        .select('*, promo_platos(plato_id)')
+        .eq('restaurante_id', rest!.id)
+
+      if (promosData) {
+        setPromos(promosData.map((p: any) => ({
+          id: p.id,
+          nombre: p.nombre,
+          tipo: p.tipo,
+          valor: p.valor?.toString() || '',
+          dias: p.dias || [],
+          activo: p.activo,
+          platos: p.promo_platos?.map((pp: any) => {
+            const plato = (platos || []).find((pl: any) => pl.id === pp.plato_id)
+            return plato?.nombre || 'Plato'
+          }) || [],
+        })))
       }
       setCargandoMenu(false)
     }
@@ -861,6 +910,9 @@ export default function MiMenuPage() {
                     <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '10px' }}>Nueva promoción</div>
                     <input className="input" placeholder="Nombre (ej: Happy Hour)" value={nuevaPromo.nombre}
                       onChange={(e) => setNuevaPromo({ ...nuevaPromo, nombre: e.target.value })} style={{ marginBottom: '8px' }} />
+                    <input className="input" placeholder="Descripción (ej: Bebidas al 2x1 los viernes)" value={nuevaPromo.descripcion}
+                      onChange={(e) => setNuevaPromo({ ...nuevaPromo, descripcion: e.target.value })} style={{ marginBottom: '8px' }} />
+                    
                     <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Tipo de promo:</div>
                     <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '10px' }}>
                       {[
@@ -884,6 +936,29 @@ export default function MiMenuPage() {
                       <input className="input" type="number" placeholder="Precio especial" value={nuevaPromo.valor}
                         onChange={(e) => setNuevaPromo({ ...nuevaPromo, valor: e.target.value })} style={{ marginBottom: '8px' }} />
                     )}
+
+                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Platos en esta promo:</div>
+                    <div style={{ maxHeight: '160px', overflowY: 'auto', marginBottom: '10px', border: '1px solid var(--border-light)', borderRadius: '8px' }}>
+                      {categorias.flatMap(c => c.platos).map(p => (
+                        <div key={p.id} onClick={() => {
+                          const sel = nuevaPromo.platoIds.includes(p.id)
+                            ? nuevaPromo.platoIds.filter(id => id !== p.id)
+                            : [...nuevaPromo.platoIds, p.id]
+                          setNuevaPromo({ ...nuevaPromo, platoIds: sel })
+                        }} style={{
+                          padding: '8px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                          borderBottom: '1px solid var(--border-light)', cursor: 'pointer',
+                          background: nuevaPromo.platoIds.includes(p.id) ? 'var(--color-info-light)' : 'transparent',
+                        }}>
+                          <span style={{ fontSize: '12px' }}>{p.nombre}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>${p.precio.toLocaleString('es-CO')}</span>
+                            {nuevaPromo.platoIds.includes(p.id) && <span style={{ color: 'var(--color-info)', fontSize: '12px' }}>✓</span>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
                     <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Días activos:</div>
                     <div style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}>
                       {['L', 'M', 'Mi', 'J', 'V', 'S', 'D'].map((d, i) => {
@@ -909,11 +984,15 @@ export default function MiMenuPage() {
                   </div>
                 )}
 
-                {promos.map((promo) => (
+                {promos.map((promo: any) => (
                   <div key={promo.id} className="card" style={{ padding: '14px', marginBottom: '8px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
                       <div>
                         <div style={{ fontSize: '14px', fontWeight: 500 }}>{promo.nombre}</div>
+                        {promo.descripcion && <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>{promo.descripcion}</div>}
+                        {promo.platos && promo.platos.length > 0 && (
+                          <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '4px' }}>Aplica en: {promo.platos.join(', ')}</div>
+                        )}
                         <div style={{ display: 'flex', gap: '6px', marginTop: '6px', flexWrap: 'wrap' }}>
                           <span className="badge badge-warning">{promo.tipo === 'dos_por_uno' ? '2x1' : promo.tipo === 'descuento' ? `${promo.valor}% off` : `$${parseInt(promo.valor || '0').toLocaleString('es-CO')}`}</span>
                           <span className="badge badge-neutral">{promo.dias.join(', ')}</span>
