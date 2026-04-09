@@ -14,6 +14,7 @@ export default function MenuPublicoPage() {
   const [busqueda, setBusqueda] = useState('')
   const [categoriaAbierta, setCategoriaAbierta] = useState<string | null>(null)
   const [pedido, setPedido] = useState<Record<string, number>>({})
+  const [preciosPromo, setPreciosPromo] = useState<Record<string, { precioUnitario: number; etiqueta: string }>>({})
   const [nota, setNota] = useState('')
   const [mostrarPedido, setMostrarPedido] = useState(false)
   const [mostrarSorpresa, setMostrarSorpresa] = useState(false)
@@ -206,8 +207,12 @@ export default function MenuPublicoPage() {
     if (c <= 0) { const n = { ...pedido }; delete n[platoId]; setPedido(n) } else { setPedido({ ...pedido, [platoId]: c }) }
   }
 
-  const itemsPedido = Object.entries(pedido).map(([id, cantidad]) => ({ plato: todosLosPlatos.find((p: any) => p.id === id)!, cantidad })).filter(i => i.plato)
-  const totalPedido = itemsPedido.reduce((sum, i) => sum + i.plato.precio * i.cantidad, 0)
+  const itemsPedido = Object.entries(pedido).map(([id, cantidad]) => {
+    const plato = todosLosPlatos.find((p: any) => p.id === id)
+    const promo = preciosPromo[id]
+    return { plato: plato!, cantidad, promo }
+  }).filter(i => i.plato)
+  const totalPedido = itemsPedido.reduce((sum, i) => sum + (i.promo ? i.promo.precioUnitario : i.plato.precio) * i.cantidad, 0)
   const totalProductos = itemsPedido.reduce((sum, i) => sum + i.cantidad, 0)
 
   const [sorpresaPlatos, setSorpresaPlatos] = useState<typeof todosLosPlatos>([])
@@ -232,7 +237,11 @@ export default function MenuPublicoPage() {
     }).then(({ error }: any) => {
       
     })
-    const lineas = itemsPedido.map(i => `- ${i.cantidad} ${i.plato.nombre} $${(i.plato.precio * i.cantidad).toLocaleString('es-CO')}`)
+    const lineas = itemsPedido.map(i => {
+      const precioUnit = i.promo ? i.promo.precioUnitario : i.plato.precio
+      const etiqueta = i.promo ? ` (${i.promo.etiqueta})` : ''
+      return `- ${i.cantidad} ${i.plato.nombre}${etiqueta} $${(precioUnit * i.cantidad).toLocaleString('es-CO')}`
+    })
     let msg = `Hola! Vi tu menú en ${restaurante.nombre} y quiero pedir:\n${lineas.join('\n')}`
     if (nota) msg += `\nNota: ${nota}`
     msg += `\nTotal: $${totalPedido.toLocaleString('es-CO')}`
@@ -568,26 +577,32 @@ export default function MenuPublicoPage() {
           const platosPromo = categorias.flatMap((c: any) => c.platos).filter((p: any) => 
             promoDetalle.platosIds ? promoDetalle.platosIds.includes(p.id) : promoDetalle.platos?.includes(p.nombre)
           )
-          
-          function calcularPrecioPromo(plato: any) {
-            if (promoDetalle.tipo === 'dos_por_uno') return 0
-            if (promoDetalle.tipo === 'descuento') return Math.round(plato.precio * (1 - (promoDetalle.valor || 0) / 100))
-            if (promoDetalle.tipo === 'precio_especial') return promoDetalle.valor || plato.precio
-            return plato.precio
-          }
 
           function agregarPromoAlPedido() {
             if (promoSeleccion.length === 0) return
+            const nuevoPedido = { ...pedido }
+            const nuevosPrecios = { ...preciosPromo }
+
             promoSeleccion.forEach(platoId => {
               const plato = platosPromo.find((p: any) => p.id === platoId)
               if (!plato) return
+
               if (promoDetalle.tipo === 'dos_por_uno') {
-                agregarAlPedido(platoId)
-                agregarAlPedido(platoId)
-              } else {
-                agregarAlPedido(platoId)
+                // 2x1: agrega 2 unidades, cobra solo 1
+                nuevoPedido[platoId] = (nuevoPedido[platoId] || 0) + 2
+                nuevosPrecios[platoId] = { precioUnitario: Math.round(plato.precio / 2), etiqueta: '2x1' }
+              } else if (promoDetalle.tipo === 'descuento') {
+                const precioDesc = Math.round(plato.precio * (1 - (promoDetalle.valor || 0) / 100))
+                nuevoPedido[platoId] = (nuevoPedido[platoId] || 0) + 1
+                nuevosPrecios[platoId] = { precioUnitario: precioDesc, etiqueta: `${promoDetalle.valor}% OFF` }
+              } else if (promoDetalle.tipo === 'precio_especial') {
+                nuevoPedido[platoId] = (nuevoPedido[platoId] || 0) + 1
+                nuevosPrecios[platoId] = { precioUnitario: promoDetalle.valor, etiqueta: 'Precio especial' }
               }
             })
+
+            setPedido(nuevoPedido)
+            setPreciosPromo(nuevosPrecios)
             setPromoDetalle(null)
           }
 
@@ -614,16 +629,25 @@ export default function MenuPublicoPage() {
 
                   {platosPromo.map((plato: any) => {
                     const seleccionado = promoSeleccion.includes(plato.id)
-                    const precioPromo = calcularPrecioPromo(plato)
+                    const maxSeleccion = promoDetalle.tipo === 'dos_por_uno' ? 1 : platosPromo.length
+                    const puedeSeleccionar = seleccionado || promoSeleccion.length < maxSeleccion
+
                     return (
                       <div key={plato.id} onClick={() => {
-                        setPromoSeleccion(seleccionado 
-                          ? promoSeleccion.filter(id => id !== plato.id) 
-                          : [...promoSeleccion, plato.id])
+                        if (seleccionado) {
+                          setPromoSeleccion(promoSeleccion.filter(id => id !== plato.id))
+                        } else if (puedeSeleccionar) {
+                          if (promoDetalle.tipo === 'dos_por_uno') {
+                            setPromoSeleccion([plato.id])
+                          } else {
+                            setPromoSeleccion([...promoSeleccion, plato.id])
+                          }
+                        }
                       }} style={{
-                        padding: '12px', borderRadius: '10px', marginBottom: '8px', cursor: 'pointer',
+                        padding: '12px', borderRadius: '10px', marginBottom: '8px', cursor: puedeSeleccionar || seleccionado ? 'pointer' : 'default',
                         border: seleccionado ? `2px solid ${color}` : '1px solid var(--border-light)',
                         background: seleccionado ? `${color}08` : 'var(--bg-primary)',
+                        opacity: !puedeSeleccionar && !seleccionado ? 0.4 : 1,
                         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                       }}>
                         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
@@ -635,10 +659,23 @@ export default function MenuPublicoPage() {
                           <div>
                             <div style={{ fontSize: '13px', fontWeight: 500 }}>{plato.nombre}</div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
-                              <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', textDecoration: 'line-through' }}>${plato.precio.toLocaleString('es-CO')}</span>
-                              <span style={{ fontSize: '13px', fontWeight: 500, color: color }}>
-                                {promoDetalle.tipo === 'dos_por_uno' ? '2x1' : `$${precioPromo.toLocaleString('es-CO')}`}
-                              </span>
+                              {promoDetalle.tipo === 'dos_por_uno' ? (
+                                <>
+                                  <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', textDecoration: 'line-through' }}>${(plato.precio * 2).toLocaleString('es-CO')}</span>
+                                  <span style={{ fontSize: '13px', fontWeight: 500, color: color }}>${plato.precio.toLocaleString('es-CO')}</span>
+                                  <span style={{ fontSize: '10px', color: 'var(--color-green)', fontWeight: 500 }}>× 2 unidades</span>
+                                </>
+                              ) : promoDetalle.tipo === 'descuento' ? (
+                                <>
+                                  <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', textDecoration: 'line-through' }}>${plato.precio.toLocaleString('es-CO')}</span>
+                                  <span style={{ fontSize: '13px', fontWeight: 500, color: color }}>${Math.round(plato.precio * (1 - (promoDetalle.valor || 0) / 100)).toLocaleString('es-CO')}</span>
+                                </>
+                              ) : (
+                                <>
+                                  <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', textDecoration: 'line-through' }}>${plato.precio.toLocaleString('es-CO')}</span>
+                                  <span style={{ fontSize: '13px', fontWeight: 500, color: color }}>${parseInt(promoDetalle.valor || '0').toLocaleString('es-CO')}</span>
+                                </>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -660,7 +697,7 @@ export default function MenuPublicoPage() {
                       padding: '16px', textAlign: 'center', fontSize: '15px',
                       fontWeight: 500, cursor: 'pointer', marginTop: '12px',
                     }}>
-                      Agregar {promoSeleccion.length} plato{promoSeleccion.length > 1 ? 's' : ''} al pedido
+                      Agregar al pedido
                     </div>
                   )}
                 </div>
@@ -739,14 +776,18 @@ export default function MenuPublicoPage() {
                   <div key={item.plato.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--border-light)' }}>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: '13px', fontWeight: 500 }}>{item.plato.nombre}</div>
-                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>${item.plato.precio.toLocaleString('es-CO')} c/u</div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                        {item.promo ? (
+                          <><span style={{ textDecoration: 'line-through', marginRight: '4px' }}>${item.plato.precio.toLocaleString('es-CO')}</span><span style={{ color: color, fontWeight: 500 }}>${item.promo.precioUnitario.toLocaleString('es-CO')} c/u</span> <span style={{ fontSize: '10px', color: 'var(--color-green)' }}>({item.promo.etiqueta})</span></>
+                        ) : `$${item.plato.precio.toLocaleString('es-CO')} c/u`}
+                      </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <div onClick={() => quitarDelPedido(item.plato.id)} style={{ width: '24px', height: '24px', borderRadius: '50%', border: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', cursor: 'pointer' }}>-</div>
                       <span style={{ fontSize: '14px', fontWeight: 500, minWidth: '16px', textAlign: 'center' }}>{item.cantidad}</span>
                       <div onClick={() => agregarAlPedido(item.plato.id)} style={{ width: '24px', height: '24px', borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '14px', cursor: 'pointer' }}>+</div>
                     </div>
-                    <div style={{ fontSize: '13px', fontWeight: 500, minWidth: '70px', textAlign: 'right' }}>${(item.plato.precio * item.cantidad).toLocaleString('es-CO')}</div>
+                    <div style={{ fontSize: '13px', fontWeight: 500, minWidth: '70px', textAlign: 'right' }}>${((item.promo ? item.promo.precioUnitario : item.plato.precio) * item.cantidad).toLocaleString('es-CO')}</div>
                   </div>
                 ))}
                 <div style={{ marginTop: '14px' }}>
