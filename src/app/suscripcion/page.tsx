@@ -1,12 +1,45 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { useAuth } from '@/hooks'
+import { createClient } from '@/lib/supabase-browser'
 
 export default function SuscripcionPage() {
   const router = useRouter()
+  const { usuario, restaurante: rest, cargando } = useAuth()
   const [periodo, setPeriodo] = useState<'mensual' | 'anual'>('mensual')
-  const planActual = 'basico' // Demo: cambiar a 'gratis', 'basico', 'pro'
+  const [cambiando, setCambiando] = useState(false)
+  const planActual = (rest?.plan || 'gratis') as string
+  const periodoActual = (rest?.periodo_plan || 'mensual') as string
+
+  useEffect(() => {
+    if (!cargando && !usuario) {
+      router.push('/login')
+    }
+  }, [cargando, usuario, router])
+
+  async function cambiarPlan(nuevoPlan: string) {
+    if (!rest?.id) return
+    setCambiando(true)
+    const supabase = createClient()
+    await supabase.from('restaurantes').update({ plan: nuevoPlan, periodo_plan: periodo }).eq('id', rest.id)
+    setCambiando(false)
+    router.push('/dashboard')
+  }
+
+  if (cargando) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-primary)' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '24px', fontWeight: 500, fontFamily: 'var(--font-display)' }}>Menu<span style={{ color: 'var(--color-accent)' }}>App</span></div>
+          <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '8px' }}>Cargando...</div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!usuario) return null
 
   const planes = [
     {
@@ -48,7 +81,9 @@ export default function SuscripcionPage() {
               <div style={{ fontSize: '16px', fontWeight: 500, color: 'var(--color-info)', marginTop: '2px' }}>
                 Plan {planes.find(p => p.id === planActual)?.nombre}
               </div>
-              <div style={{ fontSize: '12px', color: 'var(--color-info)', opacity: 0.7, marginTop: '2px' }}>Renueva el 15 de abril</div>
+              <div style={{ fontSize: '12px', color: 'var(--color-info)', opacity: 0.7, marginTop: '2px' }}>
+                {planActual === 'gratis' ? 'Sin fecha de renovación' : 'Pago pendiente — Wompi próximamente'}
+              </div>
             </div>
             <div style={{ fontSize: '20px', fontWeight: 500, color: 'var(--color-info)' }}>
               ${planes.find(p => p.id === planActual)?.precioMensual.toLocaleString('es-CO')}
@@ -94,7 +129,7 @@ export default function SuscripcionPage() {
                 border: esActual ? '2px solid var(--color-info)' : '1px solid var(--border-light)',
                 borderRadius: 'var(--radius-md)', padding: '16px', position: 'relative',
               }}>
-                {esActual && (
+                {esActual && periodo === periodoActual && (
                   <div style={{
                     position: 'absolute', top: '-1px', right: '16px',
                     background: 'var(--color-info)', color: 'white',
@@ -137,10 +172,12 @@ export default function SuscripcionPage() {
                 )}
 
                 {/* Botón */}
-                {!esActual && (
-                  <button className={plan.id === 'gratis' ? 'btn-outline' : plan.id === 'pro' ? 'btn-accent' : 'btn-primary'}
-                    style={{ width: '100%', padding: '12px', fontSize: '13px', marginTop: '10px' }}>
-                    {plan.id === 'gratis' ? 'Bajar a Gratis' : `Subir a ${plan.nombre}`}
+                {!(esActual && periodo === (rest?.periodo_plan || 'mensual')) && (
+                  <button onClick={() => cambiarPlan(plan.id)}
+                    className={plan.id === 'gratis' ? 'btn-outline' : plan.id === 'pro' ? 'btn-accent' : 'btn-primary'}
+                    style={{ width: '100%', padding: '12px', fontSize: '13px', marginTop: '10px' }}
+                    disabled={cambiando}>
+                    {cambiando ? 'Cambiando...' : plan.id === 'gratis' ? 'Bajar a Gratis' : `Subir a ${plan.nombre}`}
                   </button>
                 )}
               </div>
@@ -149,49 +186,39 @@ export default function SuscripcionPage() {
         })}
 
         {/* Método de pago */}
-        <div style={{ padding: '0 20px', marginBottom: '10px', marginTop: '6px' }}>
-          <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Método de pago</div>
-          <div className="card" style={{ overflow: 'hidden' }}>
-            <div style={{ padding: '13px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-light)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{
-                  width: '32px', height: '20px', borderRadius: '4px', background: 'var(--bg-tertiary)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '9px', color: 'var(--text-tertiary)', fontWeight: 500,
-                }}>Neq</div>
-                <div>
-                  <div style={{ fontSize: '13px' }}>Nequi</div>
-                  <div style={{ fontSize: '11px', color: 'var(--color-green)' }}>Activo</div>
-                </div>
-              </div>
-              <span style={{ fontSize: '12px', color: 'var(--color-info)', cursor: 'pointer' }}>Cambiar</span>
-            </div>
-            <div style={{ padding: '13px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
-              <span style={{ fontSize: '13px', color: 'var(--color-info)' }}>+ Agregar otro método</span>
-              <span style={{ color: 'var(--text-tertiary)' }}>→</span>
+        {planActual !== 'gratis' && (
+          <div style={{ padding: '0 20px', marginBottom: '10px', marginTop: '6px' }}>
+            <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Método de pago</div>
+            <div className="card" style={{ padding: '16px', textAlign: 'center' }}>
+              <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Pagos con Wompi próximamente</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '4px' }}>Nequi, Bancolombia, tarjeta de crédito/débito</div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Crédito referidos */}
         <div style={{ padding: '0 20px', marginBottom: '16px' }}>
-          <div style={{
+          <div onClick={() => router.push('/referidos')} style={{
             background: 'var(--color-green-light)', border: '1px solid var(--color-green)',
             borderRadius: 'var(--radius-md)', padding: '14px',
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer',
           }}>
             <div>
-              <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--color-green)' }}>Crédito por referidos</div>
-              <div style={{ fontSize: '11px', color: 'var(--color-green)', opacity: 0.7, marginTop: '2px' }}>Se aplica en tu próxima factura</div>
+              <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--color-green)' }}>Invita restaurantes</div>
+              <div style={{ fontSize: '11px', color: 'var(--color-green)', opacity: 0.7, marginTop: '2px' }}>Gana meses gratis por cada referido</div>
             </div>
-            <div style={{ fontSize: '18px', fontWeight: 500, color: 'var(--color-green)' }}>2 meses</div>
+            <span style={{ fontSize: '12px', color: 'var(--color-green)', fontWeight: 500 }}>Ver →</span>
           </div>
         </div>
 
         {/* Cancelar */}
-        <div style={{ padding: '0 20px', marginBottom: '16px', textAlign: 'center' }}>
-          <span style={{ fontSize: '12px', color: 'var(--color-danger)', cursor: 'pointer' }}>Cancelar suscripción</span>
-        </div>
+        {planActual !== 'gratis' && (
+          <div style={{ padding: '0 20px', marginBottom: '16px', textAlign: 'center' }}>
+            <span onClick={() => cambiarPlan('gratis')} style={{ fontSize: '12px', color: 'var(--color-danger)', cursor: 'pointer' }}>
+              {cambiando ? 'Cancelando...' : 'Cancelar suscripción'}
+            </span>
+          </div>
+        )}
 
       </div>
     </div>

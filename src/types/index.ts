@@ -30,6 +30,7 @@ export interface Restaurante {
   color_principal: string
   tema: 'claro' | 'oscuro' | 'natural' | 'premium'
   created_at: string
+  periodo_plan?: string
 }
 
 export type TipoNegocio =

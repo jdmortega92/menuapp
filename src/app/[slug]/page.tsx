@@ -192,6 +192,9 @@ export default function MenuPublicoPage() {
   }, [platoDetalle, restaurante])
 
   const color = restaurante?.color_principal || '#E85D24'
+  const planRest = restaurante?.plan || 'gratis'
+  const esProPublico = planRest === 'pro'
+  const esBasicoPublico = planRest === 'basico' || planRest === 'pro'
   const todosLosPlatos = [
     ...categorias.flatMap((c: any) => c.platos),
     ...combosPublico.map((c: any) => ({ id: c.id, nombre: c.nombre, precio: c.precio, descripcion: c.descripcion || '', disponible: true, foto_url: null })),
@@ -429,8 +432,8 @@ export default function MenuPublicoPage() {
         {/* Filtros */}
         <div style={{ padding: '4px 16px 10px', display: 'flex', gap: '6px', overflowX: 'auto' }}>
           <div onClick={() => setCategoriaAbierta(categoriaAbierta ? null : 'open')} style={{ padding: '6px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 500, background: color, color: 'white', cursor: 'pointer', whiteSpace: 'nowrap' }}>Categorías ↓</div>
-          {config?.combos_activo && combosPublico.length > 0 && <div onClick={() => setMostrarCombos(!mostrarCombos)} style={{ padding: '6px 12px', borderRadius: '20px', fontSize: '11px', border: mostrarCombos ? 'none' : '1px solid var(--border-light)', color: mostrarCombos ? 'white' : 'var(--text-secondary)', background: mostrarCombos ? color : 'var(--bg-secondary)', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.2s' }}>Combos</div>}
-          {config?.promos_activo && promosPublico.length > 0 && <div onClick={() => setMostrarPromos(!mostrarPromos)} style={{ padding: '6px 12px', borderRadius: '20px', fontSize: '11px', border: mostrarPromos ? 'none' : '1px solid var(--border-light)', color: mostrarPromos ? 'white' : 'var(--text-secondary)', background: mostrarPromos ? color : 'var(--bg-secondary)', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.2s' }}>Promos</div>}
+          {esProPublico && config?.combos_activo && combosPublico.length > 0 && <div onClick={() => setMostrarCombos(!mostrarCombos)} style={{ padding: '6px 12px', borderRadius: '20px', fontSize: '11px', border: mostrarCombos ? 'none' : '1px solid var(--border-light)', color: mostrarCombos ? 'white' : 'var(--text-secondary)', background: mostrarCombos ? color : 'var(--bg-secondary)', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.2s' }}>Combos</div>}
+          {esProPublico && config?.promos_activo && promosPublico.length > 0 && <div onClick={() => setMostrarPromos(!mostrarPromos)} style={{ padding: '6px 12px', borderRadius: '20px', fontSize: '11px', border: mostrarPromos ? 'none' : '1px solid var(--border-light)', color: mostrarPromos ? 'white' : 'var(--text-secondary)', background: mostrarPromos ? color : 'var(--bg-secondary)', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.2s' }}>Promos</div>}
         </div>
 
         {/* Dropdown categorías */}
@@ -449,7 +452,7 @@ export default function MenuPublicoPage() {
         )}
 
         {/* Plato del día */}
-        {config?.plato_dia_activo && platoDia && !busqueda.trim() && (
+        {esProPublico && config?.plato_dia_activo && platoDia && !busqueda.trim() && (
           <div style={{ padding: '0 16px 10px' }}>
             <div style={{ background: `${color}10`, border: `1px solid ${color}30`, borderRadius: '10px', padding: '12px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
@@ -518,7 +521,7 @@ export default function MenuPublicoPage() {
           </div>
         )}
         {/* Combos */}
-        {mostrarCombos && combosPublico.length > 0 && !busqueda.trim() && (
+        {esProPublico && mostrarCombos && combosPublico.length > 0 && !busqueda.trim() && (
           <div id="combos-section" style={{ padding: '0 16px', marginBottom: '14px' }}>
             <div style={{ fontSize: '14px', fontWeight: 500, marginBottom: '8px', paddingTop: '4px' }}>🍱 Combos</div>
             {combosPublico.map((combo: any) => (
@@ -720,7 +723,7 @@ export default function MenuPublicoPage() {
                   background: `${color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px', fontWeight: 500, color: color,
                   overflow: 'hidden',
                 }}>
-                  {plato.foto_url ? (
+                  {esBasicoPublico && plato.foto_url ? (
                     <img src={plato.foto_url} alt={plato.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   ) : plato.nombre.charAt(0)}
                 </div>
@@ -969,7 +972,7 @@ export default function MenuPublicoPage() {
               <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 70, background: 'var(--bg-secondary)', borderRadius: '16px 16px 0 0', maxHeight: '85vh', overflowY: 'auto', animation: 'slideUp 0.3s ease' }}>
                 {/* Foto grande */}
                 <div style={{ height: '200px', background: `${color}15`, borderRadius: '16px 16px 0 0', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}>
-                  {plato.foto_url ? (
+                  {esBasicoPublico && plato.foto_url ? (
                     <img src={plato.foto_url} alt={plato.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   ) : (
                     <span style={{ fontSize: '60px', fontWeight: 500, color: color, opacity: 0.3 }}>{plato.nombre.charAt(0)}</span>
