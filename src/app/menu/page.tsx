@@ -45,6 +45,8 @@ export default function MiMenuPage() {
   const [nuevoCombo, setNuevoCombo] = useState({ nombre: '', platoIds: [] as string[], precio: '' })
   const [nuevaPromo, setNuevaPromo] = useState({ nombre: '', tipo: '', valor: '', dias: [] as string[] })
   const [platoDiaConfig, setPlatoDiaConfig] = useState({ platoId: '', precioEspecial: '', horaInicio: '11:00', horaFin: '15:00' })
+  const [guardandoPlatoDia, setGuardandoPlatoDia] = useState(false)
+  const [platoDiaActivo, setPlatoDiaActivo] = useState(false)
 
   const [combos, setCombos] = useState([
     { id: 'cb1', nombre: 'Combo paisa', platos: ['Bandeja paisa', 'Limonada de coco'], precio: 22000, precioIndividual: 24000, activo: true },
@@ -53,7 +55,37 @@ export default function MiMenuPage() {
     { id: 'pr1', nombre: 'Happy Hour Bebidas', tipo: 'dos_por_uno', valor: '', dias: ['vie', 'sab'], activo: true },
   ])
 
-  
+  async function guardarPlatoDia() {
+    if (!platoDiaConfig.platoId || !platoDiaConfig.precioEspecial || !rest?.id) return
+    setGuardandoPlatoDia(true)
+    const supabase = createClient()
+    const fechaColombia = new Date(new Date().getTime() - 5 * 60 * 60 * 1000).toISOString().split('T')[0]
+
+    // Desactivar cualquier plato del día anterior
+    await supabase.from('plato_del_dia').update({ activo: false }).eq('restaurante_id', rest.id)
+
+    // Insertar nuevo
+    await supabase.from('plato_del_dia').insert({
+      restaurante_id: rest.id,
+      plato_id: platoDiaConfig.platoId,
+      precio_especial: parseInt(platoDiaConfig.precioEspecial),
+      horario_inicio: platoDiaConfig.horaInicio,
+      horario_fin: platoDiaConfig.horaFin,
+      activo: true,
+      fecha: fechaColombia,
+    })
+
+    setPlatoDiaActivo(true)
+    setGuardandoPlatoDia(false)
+  }
+
+  async function desactivarPlatoDia() {
+    if (!rest?.id) return
+    const supabase = createClient()
+    await supabase.from('plato_del_dia').update({ activo: false }).eq('restaurante_id', rest.id)
+    setPlatoDiaActivo(false)
+    setPlatoDiaConfig({ platoId: '', precioEspecial: '', horaInicio: '11:00', horaFin: '15:00' })
+  }
 
   function agregarPromo() {
     if (!nuevaPromo.nombre || !nuevaPromo.tipo || nuevaPromo.dias.length === 0) return
@@ -169,6 +201,23 @@ export default function MiMenuPage() {
             })),
         }))
         setCategorias(categoriasConPlatos)
+      }
+      // Cargar plato del día
+      const { data: pdData } = await supabase
+        .from('plato_del_dia')
+        .select('*')
+        .eq('restaurante_id', rest!.id)
+        .eq('activo', true)
+        .maybeSingle()
+
+      if (pdData) {
+        setPlatoDiaConfig({
+          platoId: pdData.plato_id || '',
+          precioEspecial: pdData.precio_especial?.toString() || '',
+          horaInicio: pdData.horario_inicio || '11:00',
+          horaFin: pdData.horario_fin || '15:00',
+        })
+        setPlatoDiaActivo(true)
       }
       setCargandoMenu(false)
     }
@@ -632,7 +681,7 @@ export default function MiMenuPage() {
                   padding: '12px 24px', borderRadius: 'var(--radius-md)', fontSize: '13px',
                   fontWeight: 500, cursor: 'pointer',
                 }}>
-                  Ver Plan Pro — $25.000/mes
+                  Ver Plan Pro — $29.000/mes
                 </div>
               </div>
             ) : (
@@ -886,9 +935,14 @@ export default function MiMenuPage() {
                     </div>
                   )}
 
-                  <button onClick={() => { if (platoDiaConfig.platoId) alert('Plato del día guardado') }} className="btn-primary" style={{ width: '100%', padding: '12px', fontSize: '13px' }}>
-                    Guardar plato del día
+                  <button onClick={guardarPlatoDia} className="btn-primary" style={{ width: '100%', padding: '12px', fontSize: '13px' }}>
+                    {guardandoPlatoDia ? 'Guardando...' : platoDiaActivo ? 'Actualizar plato del día' : 'Guardar plato del día'}
                   </button>
+                  {platoDiaActivo && (
+                    <button onClick={desactivarPlatoDia} className="btn-outline" style={{ width: '100%', padding: '12px', fontSize: '13px', marginTop: '8px', color: 'var(--color-danger)' }}>
+                      Desactivar plato del día
+                    </button>
+                  )}
                 </div>
               </div>
             )}

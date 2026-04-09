@@ -115,7 +115,7 @@ export default function MenuPublicoPage() {
         setPlatoDia({
           id: pd.platos.id, nombre: pd.platos.nombre,
           precio: pd.platos.precio, precioEspecial: pd.precio_especial,
-          descripcion: pd.platos.descripcion, horaFin: pd.hora_fin || '3:00 pm',
+          descripcion: pd.platos.descripcion, horaFin: pd.horario_fin || '15:00',
         })
       }
 
