@@ -220,9 +220,38 @@ export default function MenuPublicoPage() {
 
   const [sorpresaPlatos, setSorpresaPlatos] = useState<typeof todosLosPlatos>([])
   function sorprendeme() {
-    const d = todosLosPlatos.filter((p: any) => p.disponible)
-    if (d.length < 3) return
-    setSorpresaPlatos([...d].sort(() => Math.random() - 0.5).slice(0, 3))
+    
+    const resultado: any[] = []
+    
+    // Si hay categorías configuradas para sorpréndeme, usar esas
+    const catsSorprendeme = config?.sorprendeme_categorias || []
+    
+    
+    if (catsSorprendeme.length === 2) {
+      catsSorprendeme.forEach((catId: string) => {
+        const cat = categorias.find((c: any) => c.id === catId)
+        if (cat) {
+          const disponibles = cat.platos.filter((p: any) => p.disponible)
+          if (disponibles.length > 0) {
+            resultado.push(disponibles[Math.floor(Math.random() * disponibles.length)])
+          }
+        }
+      })
+    } else {
+      // Fallback: uno de cada categoría diferente
+      const catsConPlatos = categorias.filter((c: any) => c.platos.some((p: any) => p.disponible))
+      const catsRandom = [...catsConPlatos].sort(() => Math.random() - 0.5)
+      for (const cat of catsRandom) {
+        if (resultado.length >= 3) break
+        const disponibles = cat.platos.filter((p: any) => p.disponible && !resultado.find((r: any) => r.id === p.id))
+        if (disponibles.length > 0) {
+          resultado.push(disponibles[Math.floor(Math.random() * disponibles.length)])
+        }
+      }
+    }
+
+    if (resultado.length === 0) return
+    setSorpresaPlatos(resultado)
     setMostrarSorpresa(true)
   }
 
@@ -475,7 +504,7 @@ export default function MenuPublicoPage() {
         )}
 
         {/* Sorpréndeme botón */}
-        {config?.sorprendeme_activo && !busqueda.trim() && (
+        {esBasicoPublico && config?.sorprendeme_activo && !busqueda.trim() && (
           <div style={{ padding: '0 16px 10px' }}>
             <div onClick={sorprendeme} style={{
               border: mostrarSorpresa ? `1px solid ${color}` : '1px dashed var(--border-medium)',
@@ -490,7 +519,7 @@ export default function MenuPublicoPage() {
         )}
 
         {/* Sorpréndeme resultado */}
-        {mostrarSorpresa && (
+        {esBasicoPublico && mostrarSorpresa && (
           <div style={{ padding: '0 16px 14px' }}>
             <div style={{ background: `${color}08`, border: `1px solid ${color}20`, borderRadius: '10px', padding: '12px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>

@@ -18,8 +18,9 @@ export default function MiMenuPage() {
   const { usuario, restaurante: rest, cargando: cargandoAuth } = useAuth()
   const plan = (rest?.plan || 'gratis') as string
   const esPro = plan === 'pro'
+  const esBasico = plan === 'basico' || plan === 'pro'
   const [cargandoMenu, setCargandoMenu] = useState(true)
-  const [tabActiva, setTabActiva] = useState<'platos' | 'combos'>('platos')
+  const [tabActiva, setTabActiva] = useState<'platos' | 'combos' | 'sorprendeme'>('platos')
   const [busqueda, setBusqueda] = useState('')
   const [mostrarFormCategoria, setMostrarFormCategoria] = useState(false)
   const [nuevaCategoria, setNuevaCategoria] = useState('')
@@ -47,10 +48,18 @@ export default function MiMenuPage() {
   const [platoDiaConfig, setPlatoDiaConfig] = useState({ platoId: '', precioEspecial: '', horaInicio: '11:00', horaFin: '15:00' })
   const [guardandoPlatoDia, setGuardandoPlatoDia] = useState(false)
   const [platoDiaActivo, setPlatoDiaActivo] = useState(false)
+  const [sorprendemeCatsMenu, setSorprendemeCatsMenu] = useState<string[]>([])
 
   const [combos, setCombos] = useState<any[]>([])
   const [promos, setPromos] = useState<any[]>([])
 
+  async function actualizarSorprendemeCats(nuevas: string[]) {
+    setSorprendemeCatsMenu(nuevas)
+    if (!rest?.id) return
+    const supabase = createClient()
+    await supabase.from('config_restaurante').update({ sorprendeme_categorias: nuevas }).eq('restaurante_id', rest.id)
+  }
+  
   async function guardarPlatoDia() {
     if (!platoDiaConfig.platoId || !platoDiaConfig.precioEspecial || !rest?.id) return
     setGuardandoPlatoDia(true)
@@ -287,6 +296,16 @@ export default function MiMenuPage() {
           }) || [],
         })))
       }
+    // Cargar config sorpréndeme
+      const { data: confData } = await supabase
+        .from('config_restaurante')
+        .select('sorprendeme_categorias')
+        .eq('restaurante_id', rest!.id)
+        .maybeSingle()
+
+      if (confData?.sorprendeme_categorias) {
+        setSorprendemeCatsMenu(confData.sorprendeme_categorias)
+      }
       setCargandoMenu(false)
     }
 
@@ -515,25 +534,24 @@ export default function MiMenuPage() {
         {/* Header */}
         <div style={{ padding: '16px 20px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ fontSize: '18px', fontWeight: 500 }}>Mi menú</div>
-          {tabActiva === 'platos' && (
-            <button onClick={() => setMostrarFormCategoria(true)}
-              className="btn-primary" style={{ padding: '8px 14px', fontSize: '13px' }}>
-              + Categoría
-            </button>
-          )}
+          
         </div>
 
         {/* Tabs */}
-        <div style={{ padding: '12px 20px 0', display: 'flex' }}>
-          {['platos', 'combos'].map((tab) => (
-            <div key={tab} onClick={() => setTabActiva(tab as 'platos' | 'combos')}
+        <div style={{ padding: '12px 20px 0', display: 'flex', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          {['platos', 'combos', 'sorprendeme'].map((tab) => (
+            <div key={tab} onClick={() => {
+              if (tab === 'sorprendeme') { setTabActiva('sorprendeme' as any) }
+              else { setTabActiva(tab as 'platos' | 'combos') }
+            }}
               style={{
                 flex: 1, padding: '10px', textAlign: 'center', fontSize: '13px', cursor: 'pointer',
                 fontWeight: tabActiva === tab ? 500 : 400,
                 color: tabActiva === tab ? 'var(--color-info)' : 'var(--text-tertiary)',
                 borderBottom: `2px solid ${tabActiva === tab ? 'var(--color-info)' : 'var(--border-light)'}`,
+                whiteSpace: 'nowrap', minWidth: 'fit-content',
               }}>
-              {tab === 'platos' ? 'Platos' : 'Combos / Promos'}
+              {tab === 'platos' ? 'Platos' : tab === 'combos' ? 'Combos / Promos' : 'Sorpréndeme'}
             </div>
           ))}
         </div>
@@ -549,6 +567,14 @@ export default function MiMenuPage() {
                   <span onClick={() => setBusqueda('')} style={{ fontSize: '12px', color: 'var(--color-info)', cursor: 'pointer' }}>Limpiar</span>
                 </div>
               )}
+            </div>
+
+            {/* Botón agregar categoría */}
+            <div style={{ padding: '0 20px 12px' }}>
+              <button onClick={() => setMostrarFormCategoria(true)}
+                className="btn-primary" style={{ padding: '10px 16px', fontSize: '13px' }}>
+                + Categoría
+              </button>
             </div>
 
             {/* Form nueva categoría */}
@@ -785,7 +811,7 @@ export default function MiMenuPage() {
             ) : (
             <>
             {/* Sub-tabs */}
-            <div style={{ padding: '12px 20px 0', display: 'flex', gap: '8px' }}>
+            <div style={{ padding: '12px 20px 0', display: 'flex', gap: '8px', justifyContent: 'center' }}>
               {['combos', 'promos', 'plato-dia'].map((sub) => (
                 <div key={sub} onClick={() => setSubTab(sub as typeof subTab)}
                   style={{
@@ -1076,10 +1102,78 @@ export default function MiMenuPage() {
                 </div>
               </div>
             )}
+          
             </>
             )}
           </>
         )}
+
+        {/* === SORPRÉNDEME === */}
+        {tabActiva === 'sorprendeme' && !(plan === 'basico' || plan === 'pro') && (
+          <div style={{ padding: '40px 20px', textAlign: 'center' }}>
+            <div style={{ fontSize: '40px', marginBottom: '12px' }}>🔒</div>
+            <div style={{ fontSize: '16px', fontWeight: 500, marginBottom: '6px' }}>Sorpréndeme</div>
+            <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '20px', lineHeight: 1.6 }}>
+              Configura una combinación aleatoria para tus clientes. Disponible desde el Plan Básico.
+            </div>
+            <div onClick={() => router.push('/suscripcion')} style={{
+              display: 'inline-block', background: 'var(--text-primary)', color: 'white',
+              padding: '12px 24px', borderRadius: 'var(--radius-md)', fontSize: '13px',
+              fontWeight: 500, cursor: 'pointer',
+            }}>
+              Ver Planes
+            </div>
+          </div>
+        )}
+        {tabActiva === 'sorprendeme' && (plan === 'basico' || plan === 'pro') && (
+              <div style={{ padding: '14px 20px' }}>
+                <div className="card" style={{ padding: '14px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '6px' }}>Configurar Sorpréndeme</div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '14px' }}>
+                    Selecciona 2 categorías. Cuando el cliente toque "Sorpréndeme", verá un plato aleatorio de cada una.
+                  </div>
+                  <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                  {categorias.map((cat: any) => {
+                    const seleccionada = sorprendemeCatsMenu.includes(cat.id)
+                    const puedeSeleccionar = seleccionada || sorprendemeCatsMenu.length < 2
+                    return (
+                      <div key={cat.id} onClick={() => {
+                        if (seleccionada) {
+                          actualizarSorprendemeCats(sorprendemeCatsMenu.filter((id: string) => id !== cat.id))
+                        } else if (puedeSeleccionar) {
+                          actualizarSorprendemeCats([...sorprendemeCatsMenu, cat.id])
+                        }
+                      }} style={{
+                        padding: '12px', borderRadius: '10px', marginBottom: '8px', cursor: puedeSeleccionar || seleccionada ? 'pointer' : 'default',
+                        border: seleccionada ? '2px solid var(--color-info)' : '1px solid var(--border-light)',
+                        background: seleccionada ? 'var(--color-info-light)' : 'transparent',
+                        opacity: !puedeSeleccionar && !seleccionada ? 0.4 : 1,
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      }}>
+                        <div>
+                          <span style={{ fontSize: '13px', fontWeight: 500 }}>{cat.nombre}</span>
+                          <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{cat.platos.length} platos</div>
+                        </div>
+                        {seleccionada && <span style={{ color: 'var(--color-info)', fontSize: '16px' }}>✓</span>}
+                      </div>
+                    )
+                  })}
+                  </div>
+                  {sorprendemeCatsMenu.length === 2 && (
+                    <div style={{ background: 'var(--color-green-light)', borderRadius: '8px', padding: '12px', marginTop: '8px' }}>
+                      <div style={{ fontSize: '12px', color: 'var(--color-green)', fontWeight: 500 }}>✓ Configuración lista</div>
+                      <div style={{ fontSize: '11px', color: 'var(--color-green)', marginTop: '2px' }}>El Sorpréndeme mostrará un plato de cada categoría seleccionada</div>
+                    </div>
+                  )}
+                  {sorprendemeCatsMenu.length < 2 && (
+                    <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', textAlign: 'center', marginTop: '8px' }}>
+                      Selecciona {2 - sorprendemeCatsMenu.length} categoría{sorprendemeCatsMenu.length === 1 ? '' : 's'} más
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
         {/* Modal recorte de imagen */}
         {cropModal && (
           <>

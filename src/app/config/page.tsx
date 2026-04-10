@@ -44,6 +44,8 @@ export default function ConfigPage() {
   ])
   const [guardandoHorarios, setGuardandoHorarios] = useState(false)
   const [guardadoHorarios, setGuardadoHorarios] = useState(false)
+  const [sorprendemeCats, setSorprendemeCats] = useState<string[]>([])
+  const [categoriasDisponibles, setCategoriasDisponibles] = useState<any[]>([])
   const [logoUrl, setLogoUrl] = useState<string | null>(null)
   const [bannerUrl, setBannerUrl] = useState<string | null>(null)
   const [subiendoImagen, setSubiendoImagen] = useState(false)
@@ -117,6 +119,15 @@ export default function ConfigPage() {
         })
         setHorarios(horariosOrdenados)
       }
+      // Cargar categorías para sorpréndeme
+      const { data: catsData } = await supabase
+        .from('categorias')
+        .select('id, nombre')
+        .eq('restaurante_id', rest!.id)
+        .order('orden', { ascending: true })
+
+      if (catsData) setCategoriasDisponibles(catsData)
+      if (conf?.sorprendeme_categorias) setSorprendemeCats(conf.sorprendeme_categorias)
       setCargandoConfig(false)
     }
     cargar()
@@ -224,6 +235,12 @@ export default function ConfigPage() {
     }
 
     setSubiendoImagen(false)
+  }
+  async function guardarSorprendemeCats(nuevas: string[]) {
+    setSorprendemeCats(nuevas)
+    if (!rest?.id) return
+    const supabase = createClient()
+    await supabase.from('config_restaurante').update({ sorprendeme_categorias: nuevas }).eq('restaurante_id', rest.id)
   }
   async function guardarHorarios() {
     if (!rest?.id) return
