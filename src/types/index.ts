@@ -31,6 +31,7 @@ export interface Restaurante {
   tema: 'claro' | 'oscuro' | 'natural' | 'premium'
   created_at: string
   periodo_plan?: string
+  codigo_referido?: string
 }
 
 export type TipoNegocio =

@@ -1,28 +1,59 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { useAuth } from '@/hooks'
+import { createClient } from '@/lib/supabase-browser'
 
 export default function ReferidosPage() {
   const router = useRouter()
+  const { usuario, restaurante: rest, cargando: cargandoAuth } = useAuth()
   const [copiado, setCopiado] = useState(false)
+  const [referidos, setReferidos] = useState<any[]>([])
+  const [cargando, setCargando] = useState(true)
 
-  const restaurante = {
-    nombre: 'La Parrilla de Juan',
-    slug: 'la-parrilla-de-juan',
-  }
+  useEffect(() => {
+    if (!cargandoAuth && !usuario) router.push('/login')
+  }, [cargandoAuth, usuario, router])
 
-  const enlaceReferido = `menuapp.co/invitar/${restaurante.slug}`
+  useEffect(() => {
+    if (!rest?.id) return
 
-  const referidos = [
-    { id: '1', nombre: 'El Buen Sabor', iniciales: 'EB', estado: 'activo', tiempo: 'Se unió hace 3 semanas' },
-    { id: '2', nombre: 'Doña Carmen', iniciales: 'DC', estado: 'activo', tiempo: 'Se unió hace 1 semana' },
-    { id: '3', nombre: 'La Tiendita', iniciales: 'LT', estado: 'pendiente', tiempo: 'Se registró hace 5 días' },
-  ]
+    async function cargar() {
+      const supabase = createClient()
 
+      // Si no tiene código, generar uno
+      if (!rest!.codigo_referido) {
+        const codigo = rest!.nombre.replace(/[^a-zA-Z]/g, '').slice(0, 4).toUpperCase() + Math.random().toString(36).slice(2, 5).toUpperCase()
+        await supabase.from('restaurantes').update({ codigo_referido: codigo }).eq('id', rest!.id)
+      }
+
+      // Cargar referidos
+      const { data: refs } = await supabase
+        .from('referidos')
+        .select('*, restaurantes!referidos_referido_id_fkey(nombre)')
+        .eq('referidor_id', rest!.id)
+        .order('created_at', { ascending: false })
+
+      if (refs) {
+        setReferidos(refs.map((r: any) => ({
+          id: r.id,
+          nombre: r.restaurantes?.nombre || 'Restaurante pendiente',
+          estado: r.estado,
+          beneficio: r.beneficio_aplicado,
+          fecha: new Date(r.created_at).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' }),
+        })))
+      }
+
+      setCargando(false)
+    }
+    cargar()
+  }, [rest?.id])
+
+  const codigo = rest?.codigo_referido || ''
+  const enlaceReferido = `menuapp-iota.vercel.app/registro?ref=${codigo}`
   const activos = referidos.filter(r => r.estado === 'activo').length
   const pendientes = referidos.filter(r => r.estado === 'pendiente').length
-  const mesesGanados = activos
 
   function copiarEnlace() {
     navigator.clipboard.writeText(`https://${enlaceReferido}`)
@@ -30,13 +61,43 @@ export default function ReferidosPage() {
     setTimeout(() => setCopiado(false), 2000)
   }
 
+  function compartirWhatsApp() {
+    const msg = `¡Hola! Te invito a crear el menú digital de tu restaurante con MenuApp. Es gratis para empezar y súper fácil. Regístrate con mi enlace y ambos ganamos 1 mes gratis: https://${enlaceReferido}`
+    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank')
+  }
+
+  function compartirGeneral() {
+    if (navigator.share) {
+      navigator.share({
+        title: 'MenuApp — Menú digital para tu restaurante',
+        text: 'Crea tu menú digital gratis con MenuApp',
+        url: `https://${enlaceReferido}`,
+      })
+    } else {
+      copiarEnlace()
+    }
+  }
+
+  if (cargandoAuth || cargando) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-primary)' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '24px', fontWeight: 500, fontFamily: 'var(--font-display)' }}>Menu<span style={{ color: 'var(--color-accent)' }}>App</span></div>
+          <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '8px' }}>Cargando...</div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!usuario) return null
+
   return (
     <div style={{ background: 'var(--bg-primary)', minHeight: '100vh' }}>
       <div style={{ maxWidth: '500px', margin: '0 auto', paddingBottom: '40px' }}>
 
         {/* Header */}
         <div style={{ padding: '16px 20px 12px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <span onClick={() => router.back()} style={{ fontSize: '18px', color: 'var(--text-secondary)', cursor: 'pointer' }}>←</span>
+          <span onClick={() => router.push('/dashboard')} style={{ fontSize: '18px', color: 'var(--text-secondary)', cursor: 'pointer' }}>←</span>
           <span style={{ fontSize: '18px', fontWeight: 500 }}>Invitar restaurantes</span>
         </div>
 
@@ -60,9 +121,9 @@ export default function ReferidosPage() {
           <div className="card" style={{
             padding: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           }}>
-            <div style={{ fontSize: '13px', color: 'var(--color-info)' }}>{enlaceReferido}</div>
+            <div style={{ fontSize: '12px', color: 'var(--color-info)', wordBreak: 'break-all' }}>{enlaceReferido}</div>
             <span onClick={copiarEnlace} style={{
-              fontSize: '12px', fontWeight: 500, cursor: 'pointer',
+              fontSize: '12px', fontWeight: 500, cursor: 'pointer', flexShrink: 0, marginLeft: '10px',
               color: copiado ? 'var(--color-green)' : 'var(--color-info)',
             }}>
               {copiado ? '✓ Copiado' : 'Copiar'}
@@ -70,22 +131,31 @@ export default function ReferidosPage() {
           </div>
         </div>
 
+        {/* Código de referido */}
+        <div style={{ padding: '0 20px', marginBottom: '16px' }}>
+          <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Tu código</div>
+          <div className="card" style={{ padding: '14px', textAlign: 'center' }}>
+            <div style={{ fontSize: '24px', fontWeight: 600, letterSpacing: '4px', color: 'var(--text-primary)' }}>{codigo}</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '4px' }}>El restaurante puede ingresarlo al registrarse</div>
+          </div>
+        </div>
+
         {/* Compartir por */}
         <div style={{ padding: '0 20px', marginBottom: '16px' }}>
           <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Compartir por</div>
           <div style={{ display: 'flex', gap: '10px' }}>
-            {[
-              { icon: '💬', label: 'WhatsApp' },
-              { icon: '📷', label: 'Instagram' },
-              { icon: '↗', label: 'Otro' },
-            ].map((red, i) => (
-              <div key={i} className="card" style={{
-                flex: 1, padding: '14px', textAlign: 'center', cursor: 'pointer',
-              }}>
-                <div style={{ fontSize: '20px', marginBottom: '4px' }}>{red.icon}</div>
-                <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{red.label}</div>
-              </div>
-            ))}
+            <div onClick={compartirWhatsApp} className="card" style={{ flex: 1, padding: '14px', textAlign: 'center', cursor: 'pointer' }}>
+              <div style={{ fontSize: '20px', marginBottom: '4px' }}>💬</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>WhatsApp</div>
+            </div>
+            <div onClick={copiarEnlace} className="card" style={{ flex: 1, padding: '14px', textAlign: 'center', cursor: 'pointer' }}>
+              <div style={{ fontSize: '20px', marginBottom: '4px' }}>📋</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Copiar</div>
+            </div>
+            <div onClick={compartirGeneral} className="card" style={{ flex: 1, padding: '14px', textAlign: 'center', cursor: 'pointer' }}>
+              <div style={{ fontSize: '20px', marginBottom: '4px' }}>↗</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Otro</div>
+            </div>
           </div>
         </div>
 
@@ -105,7 +175,7 @@ export default function ReferidosPage() {
               flex: 1, padding: '14px', textAlign: 'center', borderRadius: 'var(--radius-md)',
               background: 'var(--color-green-light)', border: '1px solid var(--color-green)',
             }}>
-              <div style={{ fontSize: '22px', fontWeight: 500, color: 'var(--color-green)' }}>{mesesGanados}</div>
+              <div style={{ fontSize: '22px', fontWeight: 500, color: 'var(--color-green)' }}>{activos}</div>
               <div style={{ fontSize: '11px', color: 'var(--color-green)', marginTop: '2px' }}>Meses ganados</div>
             </div>
           </div>
@@ -114,42 +184,50 @@ export default function ReferidosPage() {
         {/* Historial de invitaciones */}
         <div style={{ padding: '0 20px', marginBottom: '16px' }}>
           <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Tus invitaciones</div>
-          <div className="card" style={{ overflow: 'hidden' }}>
-            {referidos.map((ref, i) => (
-              <div key={ref.id} style={{
-                padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                borderBottom: i < referidos.length - 1 ? '1px solid var(--border-light)' : 'none',
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <div style={{
-                    width: '32px', height: '32px', borderRadius: '8px',
-                    background: 'var(--bg-tertiary)', display: 'flex',
-                    alignItems: 'center', justifyContent: 'center',
-                    fontSize: '12px', fontWeight: 500, color: 'var(--text-tertiary)',
-                  }}>
-                    {ref.iniciales}
+          {referidos.length === 0 ? (
+            <div className="card" style={{ padding: '30px 14px', textAlign: 'center' }}>
+              <div style={{ fontSize: '28px', marginBottom: '8px' }}>📨</div>
+              <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Aún no has invitado a nadie</div>
+              <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '4px' }}>Comparte tu enlace y empieza a ganar meses gratis</div>
+            </div>
+          ) : (
+            <div className="card" style={{ overflow: 'hidden' }}>
+              {referidos.map((ref: any, i: number) => (
+                <div key={ref.id} style={{
+                  padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  borderBottom: i < referidos.length - 1 ? '1px solid var(--border-light)' : 'none',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{
+                      width: '32px', height: '32px', borderRadius: '8px',
+                      background: 'var(--bg-tertiary)', display: 'flex',
+                      alignItems: 'center', justifyContent: 'center',
+                      fontSize: '12px', fontWeight: 500, color: 'var(--text-tertiary)',
+                    }}>
+                      {ref.nombre.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()}
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '13px', fontWeight: 500 }}>{ref.nombre}</div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{ref.fecha}</div>
+                    </div>
                   </div>
                   <div>
-                    <div style={{ fontSize: '13px', fontWeight: 500 }}>{ref.nombre}</div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{ref.tiempo}</div>
+                    {ref.estado === 'activo' ? (
+                      <span style={{
+                        fontSize: '10px', fontWeight: 500, padding: '3px 8px', borderRadius: '4px',
+                        background: 'var(--color-green-light)', color: 'var(--color-green)',
+                      }}>+1 mes gratis</span>
+                    ) : (
+                      <span style={{
+                        fontSize: '10px', fontWeight: 500, padding: '3px 8px', borderRadius: '4px',
+                        background: 'var(--color-warning-light)', color: 'var(--color-warning)',
+                      }}>Pendiente</span>
+                    )}
                   </div>
                 </div>
-                <div>
-                  {ref.estado === 'activo' ? (
-                    <span style={{
-                      fontSize: '10px', fontWeight: 500, padding: '3px 8px', borderRadius: '4px',
-                      background: 'var(--color-green-light)', color: 'var(--color-green)',
-                    }}>+1 mes gratis</span>
-                  ) : (
-                    <span style={{
-                      fontSize: '10px', fontWeight: 500, padding: '3px 8px', borderRadius: '4px',
-                      background: 'var(--color-warning-light)', color: 'var(--color-warning)',
-                    }}>Pendiente</span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Cómo funciona */}
