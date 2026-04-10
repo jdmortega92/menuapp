@@ -98,7 +98,7 @@ export default function MenuPublicoPage() {
 
       if (cats && platos) {
         setCategorias(cats.map(cat => ({
-          id: cat.id, nombre: cat.nombre,
+          id: cat.id, nombre: cat.nombre, hora_inicio: cat.hora_inicio || null, hora_fin: cat.hora_fin || null,
           platos: platos
             .filter((p: any) => p.categoria_id === cat.id)
             .map((p: any) => ({
@@ -200,9 +200,20 @@ export default function MenuPublicoPage() {
     ...combosPublico.map((c: any) => ({ id: c.id, nombre: c.nombre, precio: c.precio, descripcion: c.descripcion || '', disponible: true, foto_url: null })),
   ]
 
-  const categoriasFiltradas = busqueda.trim()
-    ? categorias.map((cat: any) => ({ ...cat, platos: cat.platos.filter((p: any) => p.nombre.toLowerCase().includes(busqueda.toLowerCase()) || p.descripcion?.toLowerCase().includes(busqueda.toLowerCase())) })).filter((cat: any) => cat.platos.length > 0)
+  // Filtrar por horario si está activo
+  const ahora = new Date(new Date().getTime() - 5 * 60 * 60 * 1000)
+  const horaActual = `${ahora.getHours().toString().padStart(2, '0')}:${ahora.getMinutes().toString().padStart(2, '0')}`
+
+  const categoriasPorHorario = config?.menu_por_horario_activo
+    ? categorias.filter((cat: any) => {
+        if (!cat.hora_inicio || !cat.hora_fin) return true
+        return horaActual >= cat.hora_inicio && horaActual <= cat.hora_fin
+      })
     : categorias
+
+  const categoriasFiltradas = busqueda.trim()
+    ? categoriasPorHorario.map((cat: any) => ({ ...cat, platos: cat.platos.filter((p: any) => p.nombre.toLowerCase().includes(busqueda.toLowerCase()) || p.descripcion?.toLowerCase().includes(busqueda.toLowerCase())) })).filter((cat: any) => cat.platos.length > 0)
+    : categoriasPorHorario
 
   function agregarAlPedido(platoId: string) { setPedido({ ...pedido, [platoId]: (pedido[platoId] || 0) + 1 }) }
   function quitarDelPedido(platoId: string) {

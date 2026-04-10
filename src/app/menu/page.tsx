@@ -10,7 +10,7 @@ interface Plato {
   id: string; nombre: string; precio: number; descripcion: string; disponible: boolean; foto_url: string | null
 }
 interface Categoria {
-  id: string; nombre: string; orden: number; platos: Plato[]
+  id: string; nombre: string; orden: number; platos: Plato[]; hora_inicio?: string | null; hora_fin?: string | null
 }
 
 export default function MiMenuPage() {
@@ -49,10 +49,24 @@ export default function MiMenuPage() {
   const [guardandoPlatoDia, setGuardandoPlatoDia] = useState(false)
   const [platoDiaActivo, setPlatoDiaActivo] = useState(false)
   const [sorprendemeCatsMenu, setSorprendemeCatsMenu] = useState<string[]>([])
+  const [horarioCategoria, setHorarioCategoria] = useState<string | null>(null)
+  const [horarioCatInicio, setHorarioCatInicio] = useState('')
+  const [horarioCatFin, setHorarioCatFin] = useState('')
 
   const [combos, setCombos] = useState<any[]>([])
   const [promos, setPromos] = useState<any[]>([])
 
+  async function guardarHorarioCategoria() {
+    if (!horarioCategoria || !rest?.id) return
+    const supabase = createClient()
+    await supabase.from('categorias').update({
+      hora_inicio: horarioCatInicio || null,
+      hora_fin: horarioCatFin || null,
+    }).eq('id', horarioCategoria)
+    setCategorias(categorias.map(c => c.id === horarioCategoria ? { ...c, hora_inicio: horarioCatInicio || null, hora_fin: horarioCatFin || null } as any : c))
+    setHorarioCategoria(null)
+  }
+  
   async function actualizarSorprendemeCats(nuevas: string[]) {
     setSorprendemeCatsMenu(nuevas)
     if (!rest?.id) return
@@ -225,6 +239,8 @@ export default function MiMenuPage() {
           id: cat.id,
           nombre: cat.nombre,
           orden: cat.orden,
+          hora_inicio: cat.hora_inicio || null,
+          hora_fin: cat.hora_fin || null,
           platos: (platos || [])
             .filter(p => p.categoria_id === cat.id)
             .map(p => ({
@@ -626,6 +642,11 @@ export default function MiMenuPage() {
                       </div>
                       <span style={{ fontSize: '14px', fontWeight: 500 }}>{cat.nombre}</span>
                       <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', background: 'var(--bg-tertiary)', padding: '2px 6px', borderRadius: '4px' }}>{cat.platos.length}</span>
+                      {(cat as any).hora_inicio && (cat as any).hora_fin && (
+                        <span style={{ fontSize: '10px', color: 'var(--color-info)', background: 'var(--color-info-light)', padding: '2px 6px', borderRadius: '4px' }}>
+                          {(cat as any).hora_inicio}–{(cat as any).hora_fin}
+                        </span>
+                      )}
                     </div>
                     <div style={{ display: 'flex', gap: '12px' }}>
                       <span onClick={() => setMostrarFormPlato(mostrarFormPlato === cat.id ? null : cat.id)}
@@ -648,6 +669,14 @@ export default function MiMenuPage() {
                     }}>
                       <div onClick={() => { setNombreEditCategoria(cat.nombre); setEditandoCategoria(cat.id); setMenuCategoria(null) }}
                         style={{ padding: '10px 14px', fontSize: '13px', cursor: 'pointer', borderBottom: '1px solid var(--border-light)' }}>Renombrar</div>
+                      <div onClick={() => {
+                        const c = categorias.find(x => x.id === cat.id) as any
+                        setHorarioCatInicio(c?.hora_inicio || '')
+                        setHorarioCatFin(c?.hora_fin || '')
+                        setHorarioCategoria(cat.id)
+                        setMenuCategoria(null)
+                      }}
+                        style={{ padding: '10px 14px', fontSize: '13px', cursor: 'pointer', borderBottom: '1px solid var(--border-light)' }}>Horario de visibilidad</div>
                       <div onClick={() => eliminarCategoria(cat.id)}
                         style={{ padding: '10px 14px', fontSize: '13px', color: 'var(--color-danger)', cursor: 'pointer' }}>Eliminar categoría</div>
                     </div>
@@ -1173,6 +1202,48 @@ export default function MiMenuPage() {
                 </div>
               </div>
             )}
+        {/* Modal horario categoría */}
+        {horarioCategoria && (() => {
+          const cat = categorias.find(c => c.id === horarioCategoria)
+          return (
+            <>
+              <div onClick={() => setHorarioCategoria(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 60 }} />
+              <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 70, background: 'var(--bg-secondary)', borderRadius: '16px 16px 0 0', padding: '20px', animation: 'slideUp 0.3s ease' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                  <span style={{ fontSize: '16px', fontWeight: 500 }}>Horario de "{cat?.nombre}"</span>
+                  <span onClick={() => setHorarioCategoria(null)} style={{ fontSize: '18px', color: 'var(--text-tertiary)', cursor: 'pointer' }}>✕</span>
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '14px' }}>
+                  Define en qué horario esta categoría es visible en el menú. Déjalo vacío para que se muestre siempre.
+                </div>
+                <div style={{ display: 'flex', gap: '10px', marginBottom: '14px' }}>
+                  <div style={{ flex: 1 }}>
+                    <label className="label">Desde</label>
+                    <input className="input" type="time" value={horarioCatInicio}
+                      onChange={(e) => setHorarioCatInicio(e.target.value)} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label className="label">Hasta</label>
+                    <input className="input" type="time" value={horarioCatFin}
+                      onChange={(e) => setHorarioCatFin(e.target.value)} />
+                  </div>
+                </div>
+                {horarioCatInicio && horarioCatFin && (
+                  <div style={{ fontSize: '12px', color: 'var(--color-info)', marginBottom: '14px', background: 'var(--color-info-light)', padding: '10px', borderRadius: '8px' }}>
+                    "{cat?.nombre}" será visible de {horarioCatInicio} a {horarioCatFin}
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button onClick={guardarHorarioCategoria} className="btn-primary" style={{ flex: 1, padding: '12px', fontSize: '13px' }}>Guardar</button>
+                  <button onClick={() => {
+                    setHorarioCatInicio('')
+                    setHorarioCatFin('')
+                  }} className="btn-outline" style={{ padding: '12px 16px', fontSize: '13px' }}>Limpiar</button>
+                </div>
+              </div>
+            </>
+          )
+        })()}
 
         {/* Modal recorte de imagen */}
         {cropModal && (
