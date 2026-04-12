@@ -50,21 +50,84 @@ export default function MiMenuPage() {
   const [platoDiaActivo, setPlatoDiaActivo] = useState(false)
   const [sorprendemeCatsMenu, setSorprendemeCatsMenu] = useState<string[]>([])
   const [horarioCategoria, setHorarioCategoria] = useState<string | null>(null)
+  const [avisoHorario, setAvisoHorario] = useState<string[]>([])
+  const [confirmarHorario, setConfirmarHorario] = useState(false)
   const [horarioCatInicio, setHorarioCatInicio] = useState('')
   const [horarioCatFin, setHorarioCatFin] = useState('')
 
   const [combos, setCombos] = useState<any[]>([])
   const [promos, setPromos] = useState<any[]>([])
 
+  // Helper: obtener horario de la categoría de un plato
+  function getHorarioPlato(platoId: string): { hora_inicio: string; hora_fin: string } | null {
+    for (const cat of categorias) {
+      if (cat.platos.some(p => p.id === platoId)) {
+        if (cat.hora_inicio && cat.hora_fin) {
+          return { hora_inicio: cat.hora_inicio, hora_fin: cat.hora_fin }
+        }
+        return null
+      }
+    }
+    return null
+  }
+
+  // Helper: detectar qué se afecta al poner horario a una categoría
+  function detectarAfectados(catId: string): string[] {
+    const cat = categorias.find(c => c.id === catId)
+    if (!cat) return []
+    const platosIds = cat.platos.map(p => p.id)
+    const afectados: string[] = []
+
+    // Combos
+    combos.forEach(combo => {
+      if (combo.platosIds?.some((id: string) => platosIds.includes(id))) {
+        afectados.push(`Combo "${combo.nombre}" — solo visible en este horario`)
+      }
+    })
+
+    // Promos
+    promos.forEach(promo => {
+      const promoPlatos = categorias.flatMap(c => c.platos).filter(p => promo.platos?.includes(p.nombre))
+      if (promoPlatos.some(p => platosIds.includes(p.id))) {
+        afectados.push(`Promo "${promo.nombre}" — solo visible en este horario`)
+      }
+    })
+
+    // Plato del día
+    if (platoDiaActivo && platosIds.includes(platoDiaConfig.platoId)) {
+      const platoNombre = cat.platos.find(p => p.id === platoDiaConfig.platoId)?.nombre || 'Plato'
+      afectados.push(`Plato del día "${platoNombre}" — solo visible en este horario`)
+    }
+
+    // Sorpréndeme
+    if (sorprendemeCatsMenu.includes(catId)) {
+      afectados.push(`Sorpréndeme — esta categoría está seleccionada, solo funcionará en este horario`)
+    }
+
+    return afectados
+  }
+
   async function guardarHorarioCategoria() {
     if (!horarioCategoria || !rest?.id) return
+
+    // Si tiene horario nuevo, revisar afectados
+    if (horarioCatInicio && horarioCatFin && !confirmarHorario) {
+      const afectados = detectarAfectados(horarioCategoria)
+      if (afectados.length > 0) {
+        setAvisoHorario(afectados)
+        return
+      }
+    }
+
     const supabase = createClient()
     await supabase.from('categorias').update({
       hora_inicio: horarioCatInicio || null,
       hora_fin: horarioCatFin || null,
     }).eq('id', horarioCategoria)
-    setCategorias(categorias.map(c => c.id === horarioCategoria ? { ...c, hora_inicio: horarioCatInicio || null, hora_fin: horarioCatFin || null } as any : c))
+    setCategorias(categorias.map(c => c.id === horarioCategoria ? { ...c, hora_inicio: horarioCatInicio || null, hora_fin: horarioCatFin || null } : c))
     setHorarioCategoria(null)
+    setAvisoHorario([])
+    setConfirmarHorario(false)
   }
   
   async function actualizarSorprendemeCats(nuevas: string[]) {
@@ -892,7 +955,10 @@ export default function MiMenuPage() {
                           borderBottom: '1px solid var(--border-light)', cursor: 'pointer',
                           background: nuevoCombo.platoIds.includes(p.id) ? 'var(--color-info-light)' : 'transparent',
                         }}>
+                          <div>
                           <span style={{ fontSize: '12px' }}>{p.nombre}</span>
+                          {(() => { const h = getHorarioPlato(p.id); return h ? <span style={{ fontSize: '9px', color: 'var(--color-warning)', marginLeft: '4px' }}>⏰ {h.hora_inicio}–{h.hora_fin}</span> : null })()}
+                        </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>${p.precio.toLocaleString('es-CO')}</span>
                             {nuevoCombo.platoIds.includes(p.id) && <span style={{ color: 'var(--color-info)', fontSize: '12px' }}>✓</span>}
@@ -907,6 +973,16 @@ export default function MiMenuPage() {
                         Ahorro: ${(precioIndividualCombo - parseInt(nuevoCombo.precio || '0')).toLocaleString('es-CO')} ({Math.round(((precioIndividualCombo - parseInt(nuevoCombo.precio || '0')) / precioIndividualCombo) * 100)}% descuento)
                       </div>
                     )}
+                    {nuevoCombo.platoIds.length > 0 && (() => {
+                      const platosConHorario = nuevoCombo.platoIds.map(id => ({ id, horario: getHorarioPlato(id) })).filter(p => p.horario)
+                      if (platosConHorario.length === 0) return null
+                      const horarios = platosConHorario.map(p => `${p.horario!.hora_inicio}–${p.horario!.hora_fin}`)
+                      return (
+                        <div style={{ fontSize: '11px', color: 'var(--color-warning)', background: 'var(--color-warning-light)', padding: '8px 10px', borderRadius: '6px', marginBottom: '8px' }}>
+                          ⚠ Este combo incluye platos con horario restringido ({horarios.join(', ')}). El combo solo será visible cuando todos los platos estén activos.
+                        </div>
+                      )
+                    })()}
                     <div style={{ display: 'flex', gap: '8px' }}>
                       <button onClick={agregarCombo} className="btn-primary" style={{ flex: 1, padding: '10px', fontSize: '13px' }}>Crear</button>
                       <button onClick={() => setMostrarFormCombo(false)} className="btn-outline" style={{ flex: 1, padding: '10px', fontSize: '13px' }}>Cancelar</button>
@@ -1005,7 +1081,10 @@ export default function MiMenuPage() {
                           borderBottom: '1px solid var(--border-light)', cursor: 'pointer',
                           background: nuevaPromo.platoIds.includes(p.id) ? 'var(--color-info-light)' : 'transparent',
                         }}>
+                          <div>
                           <span style={{ fontSize: '12px' }}>{p.nombre}</span>
+                          {(() => { const h = getHorarioPlato(p.id); return h ? <span style={{ fontSize: '9px', color: 'var(--color-warning)', marginLeft: '4px' }}>⏰ {h.hora_inicio}–{h.hora_fin}</span> : null })()}
+                        </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>${p.precio.toLocaleString('es-CO')}</span>
                             {nuevaPromo.platoIds.includes(p.id) && <span style={{ color: 'var(--color-info)', fontSize: '12px' }}>✓</span>}
@@ -1032,6 +1111,16 @@ export default function MiMenuPage() {
                         )
                       })}
                     </div>
+                    {nuevaPromo.platoIds.length > 0 && (() => {
+                      const platosConHorario = nuevaPromo.platoIds.map(id => ({ id, horario: getHorarioPlato(id) })).filter(p => p.horario)
+                      if (platosConHorario.length === 0) return null
+                      const horarios = platosConHorario.map(p => `${p.horario!.hora_inicio}–${p.horario!.hora_fin}`)
+                      return (
+                        <div style={{ fontSize: '11px', color: 'var(--color-warning)', background: 'var(--color-warning-light)', padding: '8px 10px', borderRadius: '6px', marginBottom: '8px' }}>
+                          ⚠ Esta promo incluye platos con horario restringido ({horarios.join(', ')}). La promo solo será visible cuando todos los platos estén activos.
+                        </div>
+                      )
+                    })()}
                     <div style={{ display: 'flex', gap: '8px' }}>
                       <button onClick={agregarPromo} className="btn-primary" style={{ flex: 1, padding: '10px', fontSize: '13px' }}>Crear</button>
                       <button onClick={() => setMostrarFormPromo(false)} className="btn-outline" style={{ flex: 1, padding: '10px', fontSize: '13px' }}>Cancelar</button>
@@ -1080,9 +1169,18 @@ export default function MiMenuPage() {
                     style={{ appearance: 'none', marginBottom: '8px' }}>
                     <option value="">Seleccionar plato</option>
                     {categorias.flatMap(c => c.platos).map(p => (
-                      <option key={p.id} value={p.id}>{p.nombre} — ${p.precio.toLocaleString('es-CO')}</option>
+                      <option key={p.id} value={p.id}>{p.nombre} — ${p.precio.toLocaleString('es-CO')}{(() => { const h = getHorarioPlato(p.id); return h ? ` (⏰ ${h.hora_inicio}–${h.hora_fin})` : '' })()}</option>
                     ))}
                   </select>
+                  {platoDiaConfig.platoId && (() => {
+                    const h = getHorarioPlato(platoDiaConfig.platoId)
+                    if (!h) return null
+                    return (
+                      <div style={{ fontSize: '11px', color: 'var(--color-warning)', background: 'var(--color-warning-light)', padding: '8px 10px', borderRadius: '6px', marginBottom: '8px' }}>
+                        ⚠ Este plato pertenece a una categoría visible solo de {h.hora_inicio} a {h.hora_fin}. El plato del día solo se mostrará en ese horario.
+                      </div>
+                    )
+                  })()}
                   <input className="input" type="number" placeholder="Precio especial" value={platoDiaConfig.precioEspecial}
                     onChange={(e) => setPlatoDiaConfig({ ...platoDiaConfig, precioEspecial: e.target.value })} style={{ marginBottom: '8px' }} />
                   <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
@@ -1181,19 +1279,36 @@ export default function MiMenuPage() {
                       }}>
                         <div>
                           <span style={{ fontSize: '13px', fontWeight: 500 }}>{cat.nombre}</span>
-                          <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{cat.platos.length} platos</div>
+                          <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
+                            {cat.platos.length} platos
+                            {cat.hora_inicio && cat.hora_fin && (
+                              <span style={{ color: 'var(--color-warning)', marginLeft: '6px' }}>⏰ {cat.hora_inicio}–{cat.hora_fin}</span>
+                            )}
+                          </div>
                         </div>
                         {seleccionada && <span style={{ color: 'var(--color-info)', fontSize: '16px' }}>✓</span>}
                       </div>
                     )
                   })}
                   </div>
-                  {sorprendemeCatsMenu.length === 2 && (
-                    <div style={{ background: 'var(--color-green-light)', borderRadius: '8px', padding: '12px', marginTop: '8px' }}>
-                      <div style={{ fontSize: '12px', color: 'var(--color-green)', fontWeight: 500 }}>✓ Configuración lista</div>
-                      <div style={{ fontSize: '11px', color: 'var(--color-green)', marginTop: '2px' }}>El Sorpréndeme mostrará un plato de cada categoría seleccionada</div>
-                    </div>
-                  )}
+                  {sorprendemeCatsMenu.length === 2 && (() => {
+                    const catsConHorario = sorprendemeCatsMenu.map(id => categorias.find(c => c.id === id)).filter(c => c?.hora_inicio && c?.hora_fin)
+                    return (
+                      <>
+                        <div style={{ background: 'var(--color-green-light)', borderRadius: '8px', padding: '12px', marginTop: '8px' }}>
+                          <div style={{ fontSize: '12px', color: 'var(--color-green)', fontWeight: 500 }}>✓ Configuración lista</div>
+                          <div style={{ fontSize: '11px', color: 'var(--color-green)', marginTop: '2px' }}>El Sorpréndeme mostrará un plato de cada categoría seleccionada</div>
+                        </div>
+                        {catsConHorario.length > 0 && (
+                          <div style={{ background: 'var(--color-warning-light)', borderRadius: '8px', padding: '10px', marginTop: '8px' }}>
+                            <div style={{ fontSize: '11px', color: 'var(--color-warning)' }}>
+                              ⚠ {catsConHorario.length === 1 ? `La categoría "${catsConHorario[0]?.nombre}" tiene horario (${catsConHorario[0]?.hora_inicio}–${catsConHorario[0]?.hora_fin}).` : 'Ambas categorías tienen horario.'} El Sorpréndeme solo funcionará cuando {catsConHorario.length === 1 ? 'esta categoría esté' : 'ambas estén'} activa{catsConHorario.length === 1 ? '' : 's'}.
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )
+                  })()}
                   {sorprendemeCatsMenu.length < 2 && (
                     <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', textAlign: 'center', marginTop: '8px' }}>
                       Selecciona {2 - sorprendemeCatsMenu.length} categoría{sorprendemeCatsMenu.length === 1 ? '' : 's'} más
@@ -1207,11 +1322,11 @@ export default function MiMenuPage() {
           const cat = categorias.find(c => c.id === horarioCategoria)
           return (
             <>
-              <div onClick={() => setHorarioCategoria(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 60 }} />
-              <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 70, background: 'var(--bg-secondary)', borderRadius: '16px 16px 0 0', padding: '20px', animation: 'slideUp 0.3s ease' }}>
+              <div onClick={() => { setHorarioCategoria(null); setAvisoHorario([]); setConfirmarHorario(false) }} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 60 }} />
+              <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 70, background: 'var(--bg-secondary)', borderRadius: '16px 16px 0 0', padding: '20px', animation: 'slideUp 0.3s ease', maxHeight: '80vh', overflowY: 'auto' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                   <span style={{ fontSize: '16px', fontWeight: 500 }}>Horario de "{cat?.nombre}"</span>
-                  <span onClick={() => setHorarioCategoria(null)} style={{ fontSize: '18px', color: 'var(--text-tertiary)', cursor: 'pointer' }}>✕</span>
+                  <span onClick={() => { setHorarioCategoria(null); setAvisoHorario([]); setConfirmarHorario(false) }} style={{ fontSize: '18px', color: 'var(--text-tertiary)', cursor: 'pointer' }}>✕</span>
                 </div>
                 <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '14px' }}>
                   Define en qué horario esta categoría es visible en el menú. Déjalo vacío para que se muestre siempre.
@@ -1220,25 +1335,58 @@ export default function MiMenuPage() {
                   <div style={{ flex: 1 }}>
                     <label className="label">Desde</label>
                     <input className="input" type="time" value={horarioCatInicio}
-                      onChange={(e) => setHorarioCatInicio(e.target.value)} />
+                      onChange={(e) => { setHorarioCatInicio(e.target.value); setAvisoHorario([]); setConfirmarHorario(false) }} />
                   </div>
                   <div style={{ flex: 1 }}>
                     <label className="label">Hasta</label>
                     <input className="input" type="time" value={horarioCatFin}
-                      onChange={(e) => setHorarioCatFin(e.target.value)} />
+                      onChange={(e) => { setHorarioCatFin(e.target.value); setAvisoHorario([]); setConfirmarHorario(false) }} />
                   </div>
                 </div>
-                {horarioCatInicio && horarioCatFin && (
+                {horarioCatInicio && horarioCatFin && avisoHorario.length === 0 && (
                   <div style={{ fontSize: '12px', color: 'var(--color-info)', marginBottom: '14px', background: 'var(--color-info-light)', padding: '10px', borderRadius: '8px' }}>
                     "{cat?.nombre}" será visible de {horarioCatInicio} a {horarioCatFin}
                   </div>
                 )}
+                {avisoHorario.length > 0 && (
+                  <div style={{ marginBottom: '14px', background: 'var(--color-warning-light)', border: '1px solid var(--color-warning)', borderRadius: '8px', padding: '12px' }}>
+                    <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--color-warning)', marginBottom: '8px' }}>
+                      Esto afectará otras funciones
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '10px' }}>
+                      Al asignar horario a "{cat?.nombre}", lo siguiente solo será visible de {horarioCatInicio} a {horarioCatFin}:
+                    </div>
+                    {avisoHorario.map((a, i) => (
+                      <div key={i} style={{ fontSize: '12px', color: 'var(--text-primary)', padding: '6px 0', borderBottom: i < avisoHorario.length - 1 ? '1px solid var(--border-light)' : 'none', display: 'flex', gap: '6px', alignItems: 'start' }}>
+                        <span style={{ color: 'var(--color-warning)' }}>⚠</span>
+                        <span>{a}</span>
+                      </div>
+                    ))}
+                    <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '10px' }}>
+                      Puedes revisar combos, promos y sorpréndeme después si necesitas ajustarlos.
+                    </div>
+                  </div>
+                )}
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  <button onClick={guardarHorarioCategoria} className="btn-primary" style={{ flex: 1, padding: '12px', fontSize: '13px' }}>Guardar</button>
-                  <button onClick={() => {
-                    setHorarioCatInicio('')
-                    setHorarioCatFin('')
-                  }} className="btn-outline" style={{ padding: '12px 16px', fontSize: '13px' }}>Limpiar</button>
+                  {avisoHorario.length > 0 ? (
+                    <>
+                      <button onClick={() => { setConfirmarHorario(true); setTimeout(() => guardarHorarioCategoria(), 50) }} className="btn-primary" style={{ flex: 1, padding: '12px', fontSize: '13px' }}>
+                        Entendido, guardar
+                      </button>
+                      <button onClick={() => { setAvisoHorario([]); setConfirmarHorario(false) }} className="btn-outline" style={{ flex: 1, padding: '12px', fontSize: '13px' }}>
+                        Cancelar
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button onClick={guardarHorarioCategoria} className="btn-primary" style={{ flex: 1, padding: '12px', fontSize: '13px' }}>Guardar</button>
+                      <button onClick={() => {
+                        setHorarioCatInicio('')
+                        setHorarioCatFin('')
+                        setAvisoHorario([])
+                      }} className="btn-outline" style={{ padding: '12px 16px', fontSize: '13px' }}>Limpiar</button>
+                    </>
+                  )}
                 </div>
               </div>
             </>

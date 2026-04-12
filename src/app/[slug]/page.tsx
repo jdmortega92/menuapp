@@ -210,7 +210,34 @@ export default function MenuPublicoPage() {
         return horaActual >= cat.hora_inicio && horaActual <= cat.hora_fin
       })
     : categorias
+  
+  // IDs de platos visibles por horario
+  const platosVisiblesIds = new Set(categoriasPorHorario.flatMap((c: any) => c.platos.map((p: any) => p.id)))
 
+  // Filtrar combos: solo mostrar si TODOS sus platos son visibles
+  const combosVisibles = combosPublico.filter((combo: any) => {
+    if (!config?.menu_por_horario_activo) return true
+    const platosDelCombo = categorias.flatMap((c: any) => c.platos).filter((p: any) => combo.platos?.includes(p.nombre))
+    return platosDelCombo.every((p: any) => platosVisiblesIds.has(p.id))
+  })
+
+  // Filtrar promos: solo mostrar si TODOS sus platos son visibles
+  const promosVisibles = promosPublico.filter((promo: any) => {
+    if (!config?.menu_por_horario_activo) return true
+    return promo.platosIds?.every((id: string) => platosVisiblesIds.has(id))
+  })
+
+  // Plato del día: verificar si es visible
+  const platoDiaVisible = platoDia && (!config?.menu_por_horario_activo || platosVisiblesIds.has(platoDia.id))
+
+  // Sorpréndeme: verificar si ambas categorías están activas
+  const sorprendemeVisible = (() => {
+    if (!config?.menu_por_horario_activo) return true
+    const catsSorprendeme = config?.sorprendeme_categorias || []
+    if (catsSorprendeme.length !== 2) return true
+    return catsSorprendeme.every((catId: string) => categoriasPorHorario.some((c: any) => c.id === catId))
+  })()
+  
   const categoriasFiltradas = busqueda.trim()
     ? categoriasPorHorario.map((cat: any) => ({ ...cat, platos: cat.platos.filter((p: any) => p.nombre.toLowerCase().includes(busqueda.toLowerCase()) || p.descripcion?.toLowerCase().includes(busqueda.toLowerCase())) })).filter((cat: any) => cat.platos.length > 0)
     : categoriasPorHorario
@@ -472,8 +499,8 @@ export default function MenuPublicoPage() {
         {/* Filtros */}
         <div style={{ padding: '4px 16px 10px', display: 'flex', gap: '6px', overflowX: 'auto' }}>
           <div onClick={() => setCategoriaAbierta(categoriaAbierta ? null : 'open')} style={{ padding: '6px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 500, background: color, color: 'white', cursor: 'pointer', whiteSpace: 'nowrap' }}>Categorías ↓</div>
-          {esProPublico && config?.combos_activo && combosPublico.length > 0 && <div onClick={() => setMostrarCombos(!mostrarCombos)} style={{ padding: '6px 12px', borderRadius: '20px', fontSize: '11px', border: mostrarCombos ? 'none' : '1px solid var(--border-light)', color: mostrarCombos ? 'white' : 'var(--text-secondary)', background: mostrarCombos ? color : 'var(--bg-secondary)', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.2s' }}>Combos</div>}
-          {esProPublico && config?.promos_activo && promosPublico.length > 0 && <div onClick={() => setMostrarPromos(!mostrarPromos)} style={{ padding: '6px 12px', borderRadius: '20px', fontSize: '11px', border: mostrarPromos ? 'none' : '1px solid var(--border-light)', color: mostrarPromos ? 'white' : 'var(--text-secondary)', background: mostrarPromos ? color : 'var(--bg-secondary)', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.2s' }}>Promos</div>}
+          {esProPublico && config?.combos_activo && combosVisibles.length > 0 && <div onClick={() => setMostrarCombos(!mostrarCombos)} style={{ padding: '6px 12px', borderRadius: '20px', fontSize: '11px', border: mostrarCombos ? 'none' : '1px solid var(--border-light)', color: mostrarCombos ? 'white' : 'var(--text-secondary)', background: mostrarCombos ? color : 'var(--bg-secondary)', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.2s' }}>Combos</div>}
+          {esProPublico && config?.promos_activo && promosVisibles.length > 0 && <div onClick={() => setMostrarPromos(!mostrarPromos)} style={{ padding: '6px 12px', borderRadius: '20px', fontSize: '11px', border: mostrarPromos ? 'none' : '1px solid var(--border-light)', color: mostrarPromos ? 'white' : 'var(--text-secondary)', background: mostrarPromos ? color : 'var(--bg-secondary)', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.2s' }}>Promos</div>}
         </div>
 
         {/* Dropdown categorías */}
@@ -492,7 +519,7 @@ export default function MenuPublicoPage() {
         )}
 
         {/* Plato del día */}
-        {esProPublico && config?.plato_dia_activo && platoDia && !busqueda.trim() && (
+        {esProPublico && config?.plato_dia_activo && platoDiaVisible && !busqueda.trim() && (
           <div style={{ padding: '0 16px 10px' }}>
             <div style={{ background: `${color}10`, border: `1px solid ${color}30`, borderRadius: '10px', padding: '12px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
@@ -515,7 +542,7 @@ export default function MenuPublicoPage() {
         )}
 
         {/* Sorpréndeme botón */}
-        {esBasicoPublico && config?.sorprendeme_activo && !busqueda.trim() && (
+        {esBasicoPublico && config?.sorprendeme_activo && sorprendemeVisible && !busqueda.trim() && (
           <div style={{ padding: '0 16px 10px' }}>
             <div onClick={sorprendeme} style={{
               border: mostrarSorpresa ? `1px solid ${color}` : '1px dashed var(--border-medium)',
@@ -530,7 +557,7 @@ export default function MenuPublicoPage() {
         )}
 
         {/* Sorpréndeme resultado */}
-        {esBasicoPublico && mostrarSorpresa && (
+        {esBasicoPublico && sorprendemeVisible && mostrarSorpresa && (
           <div style={{ padding: '0 16px 14px' }}>
             <div style={{ background: `${color}08`, border: `1px solid ${color}20`, borderRadius: '10px', padding: '12px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
@@ -561,10 +588,10 @@ export default function MenuPublicoPage() {
           </div>
         )}
         {/* Combos */}
-        {esProPublico && mostrarCombos && combosPublico.length > 0 && !busqueda.trim() && (
+        {esProPublico && mostrarCombos && combosVisibles.length > 0 && !busqueda.trim() && (
           <div id="combos-section" style={{ padding: '0 16px', marginBottom: '14px' }}>
             <div style={{ fontSize: '14px', fontWeight: 500, marginBottom: '8px', paddingTop: '4px' }}>🍱 Combos</div>
-            {combosPublico.map((combo: any) => (
+            {combosVisibles.map((combo: any) => (
               <div key={combo.id} style={{
                 background: 'var(--bg-secondary)', border: `1px solid ${color}30`,
                 borderRadius: '10px', padding: '12px', marginBottom: '8px',
@@ -585,10 +612,10 @@ export default function MenuPublicoPage() {
           </div>
         )}
         {/* Promos */}
-        {mostrarPromos && promosPublico.length > 0 && !busqueda.trim() && (
+        {mostrarPromos && promosVisibles.length > 0 && !busqueda.trim() && (
           <div style={{ padding: '0 16px', marginBottom: '14px' }}>
             <div style={{ fontSize: '14px', fontWeight: 500, marginBottom: '8px', paddingTop: '4px' }}>🏷️ Promociones</div>
-            {promosPublico.map((promo: any) => {
+            {promosVisibles.map((promo: any) => {
               const diasTexto = promo.dias.map((d: string) => {
                 const nombres: Record<string, string> = { lun: 'Lunes', mar: 'Martes', mie: 'Miércoles', jue: 'Jueves', vie: 'Viernes', sab: 'Sábado', dom: 'Domingo' }
                 return nombres[d] || d
@@ -784,6 +811,27 @@ export default function MenuPublicoPage() {
             ))}
           </div>
         ))}
+
+        {/* Aviso platos no disponibles en pedido */}
+        {config?.menu_por_horario_activo && totalProductos > 0 && itemsPedido.some(i => !platosVisiblesIds.has(i.plato.id) && !combosVisibles.some((c: any) => c.id === i.plato.id)) && (
+          <div style={{ padding: '0 16px 10px' }}>
+            <div style={{ background: 'var(--color-warning-light)', border: '1px solid var(--color-warning)', borderRadius: '10px', padding: '12px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--color-warning)', marginBottom: '4px' }}>Algunos platos ya no están disponibles</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '8px' }}>Estos platos pertenecen a categorías fuera de horario y se eliminarán del pedido.</div>
+              <div onClick={() => {
+                const nuevoPedido = { ...pedido }
+                Object.keys(nuevoPedido).forEach(id => {
+                  if (!platosVisiblesIds.has(id) && !combosVisibles.some((c: any) => c.id === id)) {
+                    delete nuevoPedido[id]
+                  }
+                })
+                setPedido(nuevoPedido)
+              }} style={{ fontSize: '12px', color: 'var(--color-warning)', fontWeight: 500, cursor: 'pointer' }}>
+                Limpiar platos no disponibles →
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Bandeja flotante */}
         {totalProductos > 0 && !mostrarPedido && !platoDetalle && (
