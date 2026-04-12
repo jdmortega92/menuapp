@@ -846,7 +846,7 @@ export default function MiMenuPage() {
                           </span>
                         </div>
                         {/* Foto */}
-                        <div style={{ marginBottom: '10px' }}>
+                        {esBasico && <div style={{ marginBottom: '10px' }}>
                           <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Foto del plato</div>
                           {plato.foto_url && (
                             <div style={{ width: '100%', aspectRatio: '16/9', borderRadius: '8px', overflow: 'hidden', marginBottom: '8px' }}>
@@ -868,8 +868,8 @@ export default function MiMenuPage() {
                                 if (file) seleccionarFoto(plato.id, cat.id, file)
                               }} />
                           </label>
-                          <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '4px' }}>JPG o PNG · Máximo 10MB · Se redimensiona a 800px</div>
-                        </div>
+                        <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '4px' }}>JPG o PNG · Máximo 10MB · Se redimensiona a 800px</div>
+                        </div>}
                         <div style={{ display: 'flex', gap: '8px' }}>
                           <button onClick={() => guardarEdicionPlato(cat.id, plato.id)} className="btn-primary" style={{ flex: 1, padding: '10px', fontSize: '13px' }}>Guardar</button>
                           <button onClick={() => setPlatoExpandido(null)} className="btn-outline" style={{ flex: 1, padding: '10px', fontSize: '13px' }}>Cancelar</button>
