@@ -44,6 +44,13 @@ export default function ConfigPage() {
   ])
   const [guardandoHorarios, setGuardandoHorarios] = useState(false)
   const [guardadoHorarios, setGuardadoHorarios] = useState(false)
+  const [mostrarConfirmarEliminar, setMostrarConfirmarEliminar] = useState(false)
+  const [textoConfirmar, setTextoConfirmar] = useState('')
+  const [eliminando, setEliminando] = useState(false)
+  const [mostrarCambiarPass, setMostrarCambiarPass] = useState(false)
+  const [nuevaPassword, setNuevaPassword] = useState('')
+  const [guardandoPass, setGuardandoPass] = useState(false)
+  const [passGuardada, setPassGuardada] = useState(false)
   const [sorprendemeCats, setSorprendemeCats] = useState<string[]>([])
   const [categoriasDisponibles, setCategoriasDisponibles] = useState<any[]>([])
   const [logoUrl, setLogoUrl] = useState<string | null>(null)
@@ -236,6 +243,63 @@ export default function ConfigPage() {
 
     setSubiendoImagen(false)
   }
+
+  async function cambiarPassword() {
+    if (!nuevaPassword || nuevaPassword.length < 6) return
+    setGuardandoPass(true)
+    const supabase = createClient()
+    const { error } = await supabase.auth.updateUser({ password: nuevaPassword })
+    setGuardandoPass(false)
+    if (error) {
+      alert('Error al cambiar contraseña: ' + error.message)
+      return
+    }
+    setPassGuardada(true)
+    setNuevaPassword('')
+    setTimeout(() => { setPassGuardada(false); setMostrarCambiarPass(false) }, 3000)
+  }
+
+  async function eliminarCuenta() {
+    if (textoConfirmar !== 'ELIMINAR' || !rest?.id) return
+    setEliminando(true)
+    const supabase = createClient()
+
+    // Eliminar datos relacionados en orden
+    await supabase.from('vistas_platos').delete().eq('restaurante_id', rest.id)
+    await supabase.from('visitas_menu').delete().eq('restaurante_id', rest.id)
+    await supabase.from('pedidos_whatsapp').delete().eq('restaurante_id', rest.id)
+    await supabase.from('calificaciones').delete().eq('restaurante_id', rest.id)
+    await supabase.from('horarios').delete().eq('restaurante_id', rest.id)
+    await supabase.from('plato_del_dia').delete().eq('restaurante_id', rest.id)
+    
+    // Eliminar combo_platos y promos_platos primero
+    const { data: combosData } = await supabase.from('combos').select('id').eq('restaurante_id', rest.id)
+    if (combosData) {
+      for (const c of combosData) {
+        await supabase.from('combo_platos').delete().eq('combo_id', c.id)
+      }
+    }
+    await supabase.from('combos').delete().eq('restaurante_id', rest.id)
+
+    const { data: promosData } = await supabase.from('promos').select('id').eq('restaurante_id', rest.id)
+    if (promosData) {
+      for (const p of promosData) {
+        await supabase.from('promo_platos').delete().eq('promo_id', p.id)
+      }
+    }
+    await supabase.from('promos').delete().eq('restaurante_id', rest.id)
+
+    await supabase.from('platos').delete().eq('restaurante_id', rest.id)
+    await supabase.from('categorias').delete().eq('restaurante_id', rest.id)
+    await supabase.from('config_restaurante').delete().eq('restaurante_id', rest.id)
+    await supabase.from('referidos').delete().eq('referidor_id', rest.id)
+    await supabase.from('restaurantes').delete().eq('id', rest.id)
+
+    // Cerrar sesión
+    await supabase.auth.signOut()
+    router.push('/login')
+  }
+
   async function guardarSorprendemeCats(nuevas: string[]) {
     setSorprendemeCats(nuevas)
     if (!rest?.id) return
@@ -656,21 +720,69 @@ export default function ConfigPage() {
               </div>
               <div style={{ marginBottom: '12px' }}>
                 <label className="label">Contraseña</label>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-sm)' }}>
-                  <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>••••••••</span>
-                  <span style={{ fontSize: '12px', color: 'var(--color-info)', cursor: 'pointer' }}>Cambiar</span>
-                </div>
+                {!mostrarCambiarPass ? (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-sm)' }}>
+                    <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>••••••••</span>
+                    <span onClick={() => setMostrarCambiarPass(true)} style={{ fontSize: '12px', color: 'var(--color-info)', cursor: 'pointer' }}>Cambiar</span>
+                  </div>
+                ) : (
+                  <div style={{ background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-sm)', padding: '12px' }}>
+                    <input className="input" type="password" placeholder="Nueva contraseña (mínimo 6 caracteres)"
+                      value={nuevaPassword} onChange={(e) => setNuevaPassword(e.target.value)}
+                      style={{ marginBottom: '8px' }} />
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button onClick={cambiarPassword} disabled={nuevaPassword.length < 6 || guardandoPass}
+                        className="btn-primary" style={{ flex: 1, padding: '10px', fontSize: '12px', opacity: nuevaPassword.length < 6 ? 0.5 : 1 }}>
+                        {guardandoPass ? 'Guardando...' : passGuardada ? '✓ Contraseña actualizada' : 'Guardar nueva contraseña'}
+                      </button>
+                      <button onClick={() => { setMostrarCambiarPass(false); setNuevaPassword('') }}
+                        className="btn-outline" style={{ padding: '10px 14px', fontSize: '12px' }}>Cancelar</button>
+                    </div>
+                  </div>
+                )}
               </div>
-              <div style={{
-                padding: '12px', background: 'var(--color-danger-light)', borderRadius: 'var(--radius-sm)',
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              }}>
-                <div>
-                  <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--color-danger)' }}>Eliminar cuenta</div>
-                  <div style={{ fontSize: '11px', color: 'var(--color-danger)', opacity: 0.7, marginTop: '2px' }}>Se perderán todos tus datos</div>
+
+              {/* Eliminar cuenta */}
+              {!mostrarConfirmarEliminar ? (
+                <div onClick={() => setMostrarConfirmarEliminar(true)} style={{
+                  padding: '12px', background: 'var(--color-danger-light)', borderRadius: 'var(--radius-sm)',
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer',
+                }}>
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--color-danger)' }}>Eliminar cuenta</div>
+                    <div style={{ fontSize: '11px', color: 'var(--color-danger)', opacity: 0.7, marginTop: '2px' }}>Se perderán todos tus datos</div>
+                  </div>
+                  <span style={{ fontSize: '12px', color: 'var(--color-danger)' }}>Eliminar →</span>
                 </div>
-                <span style={{ fontSize: '12px', color: 'var(--color-danger)', cursor: 'pointer' }}>Eliminar →</span>
-              </div>
+              ) : (
+                <div style={{ padding: '14px', background: 'var(--color-danger-light)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-danger)' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--color-danger)', marginBottom: '8px' }}>¿Estás seguro?</div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '12px', lineHeight: 1.5 }}>
+                    Esta acción eliminará permanentemente tu restaurante, todos tus platos, combos, promos, calificaciones, estadísticas y configuración. No se puede deshacer.
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                    Escribe <strong>ELIMINAR</strong> para confirmar:
+                  </div>
+                  <input className="input" value={textoConfirmar} onChange={(e) => setTextoConfirmar(e.target.value)}
+                    placeholder="Escribe ELIMINAR" style={{ marginBottom: '10px' }} />
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button onClick={eliminarCuenta} disabled={textoConfirmar !== 'ELIMINAR' || eliminando}
+                      style={{
+                        flex: 1, padding: '10px', fontSize: '13px', fontWeight: 500,
+                        background: textoConfirmar === 'ELIMINAR' ? 'var(--color-danger)' : 'var(--border-light)',
+                        color: textoConfirmar === 'ELIMINAR' ? 'white' : 'var(--text-tertiary)',
+                        border: 'none', borderRadius: 'var(--radius-sm)', cursor: textoConfirmar === 'ELIMINAR' ? 'pointer' : 'default',
+                        fontFamily: 'var(--font-body)',
+                      }}>
+                      {eliminando ? 'Eliminando...' : 'Eliminar cuenta permanentemente'}
+                    </button>
+                    <button onClick={() => { setMostrarConfirmarEliminar(false); setTextoConfirmar('') }}
+                      className="btn-outline" style={{ padding: '10px 16px', fontSize: '13px' }}>
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
