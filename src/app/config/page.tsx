@@ -49,6 +49,7 @@ export default function ConfigPage() {
   const [eliminando, setEliminando] = useState(false)
   const [mostrarCambiarPass, setMostrarCambiarPass] = useState(false)
   const [nuevaPassword, setNuevaPassword] = useState('')
+  const [confirmarPassword, setConfirmarPassword] = useState('')
   const [guardandoPass, setGuardandoPass] = useState(false)
   const [passGuardada, setPassGuardada] = useState(false)
   const [sorprendemeCats, setSorprendemeCats] = useState<string[]>([])
@@ -246,6 +247,10 @@ export default function ConfigPage() {
 
   async function cambiarPassword() {
     if (!nuevaPassword || nuevaPassword.length < 6) return
+    if (nuevaPassword !== confirmarPassword) {
+      alert('Las contraseñas no coinciden')
+      return
+    }
     setGuardandoPass(true)
     const supabase = createClient()
     const { error } = await supabase.auth.updateUser({ password: nuevaPassword })
@@ -256,6 +261,7 @@ export default function ConfigPage() {
     }
     setPassGuardada(true)
     setNuevaPassword('')
+    setConfirmarPassword('')
     setTimeout(() => { setPassGuardada(false); setMostrarCambiarPass(false) }, 3000)
   }
 
@@ -730,12 +736,18 @@ export default function ConfigPage() {
                     <input className="input" type="password" placeholder="Nueva contraseña (mínimo 6 caracteres)"
                       value={nuevaPassword} onChange={(e) => setNuevaPassword(e.target.value)}
                       style={{ marginBottom: '8px' }} />
+                    <input className="input" type="password" placeholder="Confirmar contraseña"
+                      value={confirmarPassword} onChange={(e) => setConfirmarPassword(e.target.value)}
+                      style={{ marginBottom: '8px' }} />
+                    {nuevaPassword && confirmarPassword && nuevaPassword !== confirmarPassword && (
+                      <div style={{ fontSize: '11px', color: 'var(--color-danger)', marginBottom: '8px' }}>Las contraseñas no coinciden</div>
+                    )}
                     <div style={{ display: 'flex', gap: '8px' }}>
-                      <button onClick={cambiarPassword} disabled={nuevaPassword.length < 6 || guardandoPass}
+                      <button onClick={cambiarPassword} disabled={nuevaPassword.length < 6 || nuevaPassword !== confirmarPassword || guardandoPass}
                         className="btn-primary" style={{ flex: 1, padding: '10px', fontSize: '12px', opacity: nuevaPassword.length < 6 ? 0.5 : 1 }}>
                         {guardandoPass ? 'Guardando...' : passGuardada ? '✓ Contraseña actualizada' : 'Guardar nueva contraseña'}
                       </button>
-                      <button onClick={() => { setMostrarCambiarPass(false); setNuevaPassword('') }}
+                      <button onClick={() => { setMostrarCambiarPass(false); setNuevaPassword(''); setConfirmarPassword('') }}
                         className="btn-outline" style={{ padding: '10px 14px', fontSize: '12px' }}>Cancelar</button>
                     </div>
                   </div>
