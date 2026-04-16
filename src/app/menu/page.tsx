@@ -608,7 +608,7 @@ export default function MiMenuPage() {
   if (!usuario) return null
   return (
     <div style={{ background: 'var(--bg-primary)', minHeight: '100vh' }}>
-      <div style={{ maxWidth: '500px', margin: '0 auto', paddingBottom: '80px' }}>
+      <div style={{ maxWidth: '500px', minWidth: '320px', margin: '0 auto', paddingBottom: '80px' }}>
 
         {/* Header */}
         <div style={{ padding: '16px 20px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1323,7 +1323,7 @@ export default function MiMenuPage() {
           return (
             <>
               <div onClick={() => { setHorarioCategoria(null); setAvisoHorario([]); setConfirmarHorario(false) }} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 60 }} />
-              <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 70, background: 'var(--bg-secondary)', borderRadius: '16px 16px 0 0', padding: '20px', animation: 'slideUp 0.3s ease', maxHeight: '80vh', overflowY: 'auto' }}>
+              <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 70, maxWidth: '500px', minWidth: '320px', margin: '0 auto', background: 'var(--bg-secondary)', borderRadius: '16px 16px 0 0', padding: '20px', animation: 'slideUp 0.3s ease', maxHeight: '80vh', overflowY: 'auto' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                   <span style={{ fontSize: '16px', fontWeight: 500 }}>Horario de "{cat?.nombre}"</span>
                   <span onClick={() => { setHorarioCategoria(null); setAvisoHorario([]); setConfirmarHorario(false) }} style={{ fontSize: '18px', color: 'var(--text-tertiary)', cursor: 'pointer' }}>✕</span>
@@ -1397,7 +1397,7 @@ export default function MiMenuPage() {
         {cropModal && (
           <>
             <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 80 }} />
-            <div style={{ position: 'fixed', inset: 0, zIndex: 90, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ position: 'fixed', inset: 0, zIndex: 90, display: 'flex', flexDirection: 'column', maxWidth: '500px', minWidth: '320px', margin: '0 auto' }}>
               {/* Header */}
               <div style={{ padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span onClick={() => setCropModal(null)} style={{ fontSize: '14px', color: 'white', cursor: 'pointer' }}>Cancelar</span>
@@ -1436,6 +1436,7 @@ export default function MiMenuPage() {
         <div style={{
           display: 'flex', borderTop: '1px solid var(--border-light)',
           background: 'var(--bg-secondary)', position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50,
+          maxWidth: '500px', minWidth: '320px', margin: '0 auto',
         }}>
           {[
             { icon: '◉', label: 'Inicio', href: '/dashboard', active: false },

@@ -61,7 +61,7 @@ export default function SuscripcionPage() {
 
   return (
     <div style={{ background: 'var(--bg-primary)', minHeight: '100vh' }}>
-      <div style={{ maxWidth: '500px', margin: '0 auto', paddingBottom: '40px' }}>
+      <div style={{ maxWidth: '500px', minWidth: '320px', margin: '0 auto', paddingBottom: '40px' }}>
 
         {/* Header */}
         <div style={{ padding: '16px 20px 12px', display: 'flex', alignItems: 'center', gap: '10px' }}>

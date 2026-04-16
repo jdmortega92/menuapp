@@ -99,7 +99,7 @@ export default function MiQRPage() {
   if (!usuario) return null
   return (
     <div style={{ background: 'var(--bg-primary)', minHeight: '100vh' }}>
-      <div style={{ maxWidth: '500px', margin: '0 auto', paddingBottom: '80px' }}>
+      <div style={{ maxWidth: '500px', minWidth: '320px', margin: '0 auto', paddingBottom: '80px' }}>
 
         {/* Header */}
         <div style={{ padding: '16px 20px 12px' }}>
@@ -325,6 +325,7 @@ export default function MiQRPage() {
         <div style={{
           display: 'flex', borderTop: '1px solid var(--border-light)',
           background: 'var(--bg-secondary)', position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50,
+          maxWidth: '500px', minWidth: '320px', margin: '0 auto',
         }}>
           {[
             { icon: '◉', label: 'Inicio', href: '/dashboard', active: false },

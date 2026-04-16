@@ -243,7 +243,7 @@ export default function DashboardPage() {
 
   return (
     <div style={{ background: 'var(--bg-primary)', minHeight: '100vh' }}>
-      <div style={{ maxWidth: '500px', margin: '0 auto', paddingBottom: '80px' }}>
+      <div style={{ maxWidth: '500px', minWidth: '320px', margin: '0 auto', paddingBottom: '80px', position: 'relative' }}>
 
         {/* Header */}
         <div style={{ padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -667,8 +667,8 @@ export default function DashboardPage() {
         {/* Bottom nav */}
         <div style={{
           display: 'flex', borderTop: '1px solid var(--border-light)',
-          background: 'var(--bg-secondary)', position: 'fixed',
-          bottom: 0, left: 0, right: 0, zIndex: 50,
+          background: 'var(--bg-secondary)', position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50,
+          maxWidth: '500px', minWidth: '320px', margin: '0 auto',
         }}>
           {[
             { icon: '◉', label: 'Inicio', href: '/dashboard', active: true },

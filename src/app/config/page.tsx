@@ -382,7 +382,7 @@ export default function ConfigPage() {
   if (!usuario) return null
   return (
     <div style={{ background: 'var(--bg-primary)', minHeight: '100vh' }}>
-      <div style={{ maxWidth: '500px', margin: '0 auto', paddingBottom: '80px' }}>
+      <div style={{ maxWidth: '500px', minWidth: '320px', margin: '0 auto', paddingBottom: '80px' }}>
 
         {/* Header */}
         <div style={{ padding: '16px 20px 12px' }}>
@@ -802,7 +802,7 @@ export default function ConfigPage() {
         {cropModal && (
           <>
             <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 80 }} />
-            <div style={{ position: 'fixed', inset: 0, zIndex: 90, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ position: 'fixed', inset: 0, zIndex: 90, display: 'flex', flexDirection: 'column', maxWidth: '500px', minWidth: '320px', margin: '0 auto' }}>
               <div style={{ padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span onClick={() => setCropModal(null)} style={{ fontSize: '14px', color: 'white', cursor: 'pointer' }}>Cancelar</span>
                 <span style={{ fontSize: '15px', fontWeight: 500, color: 'white' }}>Ajustar {cropModal.tipo === 'logo' ? 'logo' : 'banner'}</span>
@@ -837,6 +837,7 @@ export default function ConfigPage() {
         <div style={{
           display: 'flex', borderTop: '1px solid var(--border-light)',
           background: 'var(--bg-secondary)', position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50,
+          maxWidth: '500px', minWidth: '320px', margin: '0 auto',
         }}>
           {[
             { icon: '◉', label: 'Inicio', href: '/dashboard', active: false },

@@ -42,7 +42,7 @@ export default function FacturasPage() {
 
   return (
     <div style={{ background: 'var(--bg-primary)', minHeight: '100vh' }}>
-      <div style={{ maxWidth: '500px', margin: '0 auto', paddingBottom: '40px' }}>
+      <div style={{ maxWidth: '500px', minWidth: '320px', margin: '0 auto', paddingBottom: '40px' }}>
 
         {/* Header */}
         <div style={{ padding: '16px 20px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -182,6 +182,7 @@ export default function FacturasPage() {
           }} />
           <div style={{
             position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 70,
+            maxWidth: '500px', minWidth: '320px', margin: '0 auto',
             background: 'var(--bg-secondary)', borderRadius: '16px 16px 0 0',
             animation: 'slideUp 0.3s ease',
           }}>
