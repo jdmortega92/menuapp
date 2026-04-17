@@ -41,6 +41,7 @@ export default function DashboardPage() {
   const [resenas, setResenas] = useState<any[]>([])
   const [mejorDia, setMejorDia] = useState<{ dia: string; cantidad: number } | null>(null)
   const [peorDia, setPeorDia] = useState<{ dia: string; cantidad: number } | null>(null)
+  const [alertas, setAlertas] = useState<any[]>([])
 
   useEffect(() => {
     if (!rest?.id) return
@@ -299,6 +300,119 @@ export default function DashboardPage() {
         visitas: vistasPlatosAnt || 0,
         pedidosWhatsapp: pedidosAnt || 0,
       })
+
+      // ===== Detección de alertas =====
+      const nuevasAlertas: any[] = []
+
+      // Alerta 1: Sin visitas en últimos 3 días
+      const hace3Dias = fechaColombia(new Date(hoy.getTime() - 3 * 24 * 60 * 60 * 1000))
+      const { count: visitasUltimos3 } = await supabase
+        .from('visitas_menu')
+        .select('*', { count: 'exact', head: true })
+        .eq('restaurante_id', rest!.id)
+        .gte('fecha', hace3Dias)
+        .lte('fecha', hoyStr)
+
+      if ((visitasUltimos3 || 0) === 0) {
+        // Verificar si el restaurante tiene al menos 1 visita histórica
+        const { count: totalVisitasHist } = await supabase
+          .from('visitas_menu')
+          .select('*', { count: 'exact', head: true })
+          .eq('restaurante_id', rest!.id)
+
+        if ((totalVisitasHist || 0) > 0) {
+          nuevasAlertas.push({
+            id: 'sin-visitas',
+            tipo: 'advertencia',
+            titulo: 'Sin visitas recientes',
+            mensaje: 'No has recibido visitas en los últimos 3 días. Comparte tu QR o enlace en redes sociales.',
+            accion: { texto: 'Ver mi QR', href: '/qr' },
+          })
+        }
+      }
+
+      // Alerta 2: Menú sin actualizar hace más de 30 días
+      const { data: ultimoPlato } = await supabase
+        .from('platos')
+        .select('updated_at')
+        .eq('restaurante_id', rest!.id)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+
+      console.log('🔍 ALERTA MENU VIEJO', {
+        ultimoPlato,
+        tieneData: ultimoPlato && ultimoPlato.length > 0,
+      })
+
+      if (ultimoPlato && ultimoPlato.length > 0) {
+        const ultimaActualizacion = new Date(ultimoPlato[0].updated_at)
+        const diasSinActualizar = Math.floor((hoy.getTime() - ultimaActualizacion.getTime()) / (24 * 60 * 60 * 1000))
+
+        console.log('🔍 DIAS SIN ACTUALIZAR', {
+          ultimaActualizacion: ultimoPlato[0].updated_at,
+          diasSinActualizar,
+          pasaUmbral: diasSinActualizar > 30,
+        })
+
+        if (diasSinActualizar > 30) {
+          nuevasAlertas.push({
+            id: 'menu-viejo',
+            tipo: 'info',
+            titulo: 'Menú sin actualizar',
+            mensaje: `No actualizas tu menú hace ${diasSinActualizar} días. Los comensales valoran la frescura del contenido.`,
+            accion: { texto: 'Actualizar menú', href: '/menu' },
+          })
+        }
+      }
+
+      // Alerta 3: Platos agotados sin desmarcar
+      const { data: platosAgotados } = await supabase
+        .from('platos')
+        .select('id, nombre, updated_at')
+        .eq('restaurante_id', rest!.id)
+        .eq('disponible', false)
+
+      if (platosAgotados && platosAgotados.length > 0) {
+        // Solo alertar si llevan más de 3 días agotados
+        const agotadosViejos = platosAgotados.filter((p: any) => {
+          const actualizado = new Date(p.updated_at)
+          const diasAgotado = Math.floor((hoy.getTime() - actualizado.getTime()) / (24 * 60 * 60 * 1000))
+          return diasAgotado >= 3
+        })
+
+        if (agotadosViejos.length > 0) {
+          nuevasAlertas.push({
+            id: 'platos-agotados',
+            tipo: 'advertencia',
+            titulo: `${agotadosViejos.length} plato${agotadosViejos.length > 1 ? 's' : ''} agotado${agotadosViejos.length > 1 ? 's' : ''}`,
+            mensaje: `Tienes platos marcados como agotados hace más de 3 días. Si ya los tienes disponibles, desmárcalos.`,
+            accion: { texto: 'Ver menú', href: '/menu' },
+          })
+        }
+      }
+
+      // Alerta 4: Plan gratis con alta actividad
+      if (plan === 'gratis') {
+        const primerDiaMes = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-01`
+        const { count: visitasMes } = await supabase
+          .from('visitas_menu')
+          .select('*', { count: 'exact', head: true })
+          .eq('restaurante_id', rest!.id)
+          .gte('fecha', primerDiaMes)
+          .lte('fecha', hoyStr)
+
+        if ((visitasMes || 0) >= 50) {
+          nuevasAlertas.push({
+            id: 'upgrade-sugerido',
+            tipo: 'oportunidad',
+            titulo: 'Tu menú está funcionando',
+            mensaje: `Llevas ${visitasMes} visitas este mes. Con Plan Básico ves platos más vistos, embudo de conversión y más.`,
+            accion: { texto: 'Ver planes', href: '/suscripcion' },
+          })
+        }
+      }
+
+      setAlertas(nuevasAlertas)
 
       setStats({
         escaneos: visitas || 0,
@@ -788,6 +902,78 @@ export default function DashboardPage() {
           </>
         )}
 
+        {/* Alertas de inactividad */}
+        {alertas.length > 0 && (
+          <div style={{ padding: '0 20px', marginBottom: '14px' }}>
+            {alertas.map((a: any) => {
+              const colores = {
+                advertencia: {
+                  bg: 'var(--color-warning-light)',
+                  border: 'var(--color-warning)',
+                  text: 'var(--color-warning)',
+                },
+                info: {
+                  bg: 'var(--color-info-light)',
+                  border: 'var(--color-info)',
+                  text: 'var(--color-info)',
+                },
+                oportunidad: {
+                  bg: 'var(--color-success-light)',
+                  border: 'var(--color-green)',
+                  text: 'var(--color-green)',
+                },
+              }
+              const c = colores[a.tipo as keyof typeof colores] || colores.info
+
+              return (
+                <div key={a.id} style={{
+                  background: c.bg,
+                  borderRadius: 'var(--radius-md)',
+                  padding: '12px 14px',
+                  marginBottom: '8px',
+                  borderLeft: `3px solid ${c.border}`,
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: '12px',
+                }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      fontSize: '12px',
+                      fontWeight: 500,
+                      color: c.text,
+                      marginBottom: '2px',
+                    }}>
+                      {a.titulo}
+                    </div>
+                    <div style={{
+                      fontSize: '11px',
+                      color: c.text,
+                      opacity: 0.85,
+                      lineHeight: 1.4,
+                    }}>
+                      {a.mensaje}
+                    </div>
+                  </div>
+                  {a.accion && (
+                    <div onClick={() => router.push(a.accion.href)} style={{
+                      fontSize: '11px',
+                      fontWeight: 500,
+                      color: c.text,
+                      background: 'rgba(255,255,255,0.6)',
+                      padding: '6px 10px',
+                      borderRadius: 'var(--radius-sm)',
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                    }}>
+                      {a.accion.texto} →
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
 
         {/* Contexto temporal */}
         <div style={{ padding: '0 20px', marginBottom: '14px' }}>
