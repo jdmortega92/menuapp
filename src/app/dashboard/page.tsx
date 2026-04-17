@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks'
 import { createClient } from '@/lib/supabase-browser'
@@ -42,6 +42,7 @@ export default function DashboardPage() {
   const [mejorDia, setMejorDia] = useState<{ dia: string; cantidad: number } | null>(null)
   const [peorDia, setPeorDia] = useState<{ dia: string; cantidad: number } | null>(null)
   const [alertas, setAlertas] = useState<any[]>([])
+  const [heatmapData, setHeatmapData] = useState<any>(null)
 
   useEffect(() => {
     if (!rest?.id) return
@@ -160,18 +161,33 @@ export default function DashboardPage() {
         setPlatosMasVistos([])
       }
 
-      // Horarios pico
+      // Horarios pico + Heatmap día × hora
       const { data: visitasHora } = await supabase
         .from('visitas_menu')
-        .select('created_at')
+        .select('created_at, fecha')
         .eq('restaurante_id', rest!.id)
         .gte('fecha', desde)
         .lte('fecha', hasta)
 
       if (visitasHora && visitasHora.length > 0) {
+        // Ajuste a hora de Colombia (UTC-5)
+        function horaColombia(timestamp: string): number {
+          const fecha = new Date(timestamp)
+          const utcMs = fecha.getTime() + fecha.getTimezoneOffset() * 60 * 1000
+          const colMs = utcMs - 5 * 60 * 60 * 1000
+          return new Date(colMs).getHours()
+        }
+        function diaColombia(timestamp: string): number {
+          const fecha = new Date(timestamp)
+          const utcMs = fecha.getTime() + fecha.getTimezoneOffset() * 60 * 1000
+          const colMs = utcMs - 5 * 60 * 60 * 1000
+          return new Date(colMs).getDay()
+        }
+
+        // ===== Horarios pico (lista simple) =====
         const porHora: Record<number, number> = {}
         visitasHora.forEach((v: any) => {
-          const hora = new Date(v.created_at).getHours()
+          const hora = horaColombia(v.created_at)
           porHora[hora] = (porHora[hora] || 0) + 1
         })
         const listaHoras = Object.entries(porHora)
@@ -182,8 +198,58 @@ export default function DashboardPage() {
           .sort((a: any, b: any) => b.escaneos - a.escaneos)
           .slice(0, 3)
         setHorariosPico(listaHoras)
+
+        // ===== Matriz heatmap 8 bloques × 7 días =====
+        // Bloques de 3 horas cubriendo las 24h: 0-3, 3-6, 6-9, 9-12, 12-15, 15-18, 18-21, 21-24
+        // Días: lun(0), mar(1), mié(2), jue(3), vie(4), sáb(5), dom(6)
+        // JS usa domingo=0, lunes=1... así que mapeamos: lun=1→0, mar=2→1... dom=0→6
+        const matriz: number[][] = Array(8).fill(0).map(() => Array(7).fill(0))
+
+        visitasHora.forEach((v: any) => {
+          const hora = horaColombia(v.created_at)
+          const diaJS = diaColombia(v.created_at)
+          const diaMatriz = diaJS === 0 ? 6 : diaJS - 1 // lunes = 0, domingo = 6
+
+          // Calcular bloque dividiendo la hora entre 3 (0-2 → 0, 3-5 → 1, etc.)
+          const bloqueHora = Math.floor(hora / 3)
+
+          if (bloqueHora >= 0 && bloqueHora < 8) matriz[bloqueHora][diaMatriz]++
+        })
+
+        // Encontrar el máximo para escalar colores
+        let maxCelda = 0
+        matriz.forEach(fila => fila.forEach(v => { if (v > maxCelda) maxCelda = v }))
+
+        // Encontrar pico y valle
+        let pico = { dia: -1, bloque: -1, valor: 0 }
+        let totalVisitas = 0
+        matriz.forEach((fila, b) => {
+          fila.forEach((v, d) => {
+            totalVisitas += v
+            if (v > pico.valor) pico = { dia: d, bloque: b, valor: v }
+          })
+        })
+
+        // Detectar día completamente muerto (de los 7 días del periodo)
+        const visitasPorDia: number[] = Array(7).fill(0)
+        matriz.forEach(fila => fila.forEach((v, d) => { visitasPorDia[d] += v }))
+        const diasMuertos: number[] = []
+        visitasPorDia.forEach((v, d) => { if (v === 0) diasMuertos.push(d) })
+
+        // Solo mostrar el heatmap si hay suficientes datos (>= 20 visitas)
+        const hayDatosSuficientes = totalVisitas >= 20
+
+        setHeatmapData({
+          matriz,
+          maxCelda,
+          totalVisitas,
+          pico,
+          diasMuertos,
+          hayDatosSuficientes,
+        })
       } else {
         setHorariosPico([])
+        setHeatmapData(null)
       }
 
       // Visitas por día con fechas reales
@@ -339,20 +405,11 @@ export default function DashboardPage() {
         .order('updated_at', { ascending: false })
         .limit(1)
 
-      console.log('🔍 ALERTA MENU VIEJO', {
-        ultimoPlato,
-        tieneData: ultimoPlato && ultimoPlato.length > 0,
-      })
 
       if (ultimoPlato && ultimoPlato.length > 0) {
         const ultimaActualizacion = new Date(ultimoPlato[0].updated_at)
         const diasSinActualizar = Math.floor((hoy.getTime() - ultimaActualizacion.getTime()) / (24 * 60 * 60 * 1000))
 
-        console.log('🔍 DIAS SIN ACTUALIZAR', {
-          ultimaActualizacion: ultimoPlato[0].updated_at,
-          diasSinActualizar,
-          pasaUmbral: diasSinActualizar > 30,
-        })
 
         if (diasSinActualizar > 30) {
           nuevasAlertas.push({
@@ -432,220 +489,574 @@ export default function DashboardPage() {
 
     const doc = new jsPDF('p', 'mm', 'a4')
     const ancho = doc.internal.pageSize.getWidth()
+    const alto = doc.internal.pageSize.getHeight()
     const margen = 20
-    let y = 20
+    let y = 0
 
-    // Header
-    doc.setFillColor(30, 30, 30)
-    doc.rect(0, 0, ancho, 40, 'F')
-    doc.setTextColor(255, 255, 255)
-    doc.setFontSize(20)
+    // ===== PALETA DE MARCA MENUAPP =====
+    const CREMA: [number, number, number] = [253, 251, 247]           // Fondo cálido
+    const CREMA_OSCURO: [number, number, number] = [245, 239, 230]    // Superficies
+    const CREMA_MEDIO: [number, number, number] = [251, 247, 240]     // Filas alternas
+    const NARANJA: [number, number, number] = [232, 93, 36]           // Acento marca
+    const NARANJA_CLARO: [number, number, number] = [255, 247, 232]   // Fondo advertencia
+    const NARANJA_TEXTO: [number, number, number] = [138, 91, 15]     // Texto sobre naranja claro
+    const NARANJA_BORDE: [number, number, number] = [232, 148, 32]    // Borde advertencia
+
+    const TEXTO: [number, number, number] = [42, 37, 35]              // Marrón oscuro cálido
+    const TEXTO_SEC: [number, number, number] = [139, 125, 112]       // Gris cálido
+    const TEXTO_TER: [number, number, number] = [168, 155, 142]       // Gris cálido claro
+    const BORDE: [number, number, number] = [229, 220, 208]           // Borde cálido
+    const BORDE_SUAVE: [number, number, number] = [237, 228, 215]     // Separadores
+
+    const VERDE_EXITO: [number, number, number] = [16, 131, 74]       // Verde cálido
+    const VERDE_FONDO: [number, number, number] = [236, 246, 235]
+    const VERDE_TEXTO: [number, number, number] = [36, 85, 40]
+
+    const ROJO_PELIGRO: [number, number, number] = [194, 59, 59]      // Rojo cálido
+    const ROJO_FONDO: [number, number, number] = [253, 237, 236]
+    const ROJO_TEXTO: [number, number, number] = [107, 53, 53]
+
+    const AZUL_INFO: [number, number, number] = [55, 112, 180]
+    const AZUL_FONDO: [number, number, number] = [234, 242, 250]
+    const AZUL_TEXTO: [number, number, number] = [36, 73, 120]
+
+    // ===== FONDO DE PÁGINA =====
+    function pintarFondo() {
+      doc.setFillColor(...CREMA)
+      doc.rect(0, 0, ancho, alto, 'F')
+    }
+    pintarFondo()
+
+    // ===== HEADER CON MARCA =====
+    y = 22
+
+    // Logo "MenuApp" con "App" en naranja
+    doc.setTextColor(...TEXTO)
+    doc.setFontSize(22)
     doc.setFont('helvetica', 'bold')
-    doc.text('MenuApp', margen, 18)
-    doc.setFontSize(10)
+    doc.text('Menu', margen, y)
+    const anchoMenu = doc.getTextWidth('Menu')
+    doc.setTextColor(...NARANJA)
+    doc.text('App', margen + anchoMenu, y)
+
+    // Etiqueta debajo del logo
+    doc.setTextColor(...TEXTO_SEC)
+    doc.setFontSize(8)
     doc.setFont('helvetica', 'normal')
-    doc.text('Reporte de estadísticas', margen, 26)
+    doc.text('REPORTE DE ESTADÍSTICAS', margen, y + 5)
+
+    // Info del periodo a la derecha
+    doc.setTextColor(...TEXTO_SEC)
+    doc.setFontSize(8)
+    doc.text(contextoTemporal.titulo.toUpperCase(), ancho - margen, y - 6, { align: 'right' })
+
+    doc.setTextColor(...TEXTO)
+    doc.setFontSize(12)
+    doc.setFont('helvetica', 'bold')
+    doc.text(contextoTemporal.rango, ancho - margen, y, { align: 'right' })
+
+    if (contextoTemporal.progreso) {
+      doc.setTextColor(...TEXTO_SEC)
+      doc.setFontSize(8)
+      doc.setFont('helvetica', 'normal')
+      doc.text(contextoTemporal.progreso, ancho - margen, y + 5, { align: 'right' })
+    }
+
+    // Línea naranja separadora
+    y += 10
+    doc.setDrawColor(...NARANJA)
+    doc.setLineWidth(0.8)
+    doc.line(margen, y, ancho - margen, y)
+
+    y += 10
+
+    // ===== NOMBRE DEL RESTAURANTE =====
+    doc.setTextColor(...TEXTO_SEC)
     doc.setFontSize(9)
-    doc.text(`${restaurante.nombre} · ${filtroTiempo === 'hoy' ? 'Hoy' : filtroTiempo === 'semana' ? 'Esta semana' : 'Este mes'}`, margen, 33)
+    doc.setFont('helvetica', 'normal')
+    doc.text('Restaurante', margen, y)
+
+    y += 6
+    doc.setTextColor(...TEXTO)
+    doc.setFontSize(16)
+    doc.setFont('helvetica', 'bold')
+    doc.text(restaurante.nombre, margen, y)
 
     // Fecha de generación
     const fechaGen = new Date().toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    doc.setTextColor(...TEXTO_TER)
     doc.setFontSize(8)
-    doc.text(`Generado: ${fechaGen}`, ancho - margen, 33, { align: 'right' })
+    doc.setFont('helvetica', 'normal')
+    doc.text(`Generado ${fechaGen}`, margen, y + 5)
 
-    y = 50
+    y += 14
 
-    // Métricas principales
-    doc.setTextColor(30, 30, 30)
-    doc.setFontSize(13)
+    // ===== RESUMEN EJECUTIVO =====
+    doc.setFillColor(...CREMA_OSCURO)
+    doc.roundedRect(margen, y, ancho - margen * 2, 32, 2, 2, 'F')
+
+    doc.setTextColor(...TEXTO_SEC)
+    doc.setFontSize(8)
     doc.setFont('helvetica', 'bold')
-    doc.text('Resumen general', margen, y)
-    y += 10
+    doc.text('RESUMEN EJECUTIVO', margen + 6, y + 7)
 
-    const metricas = [
-      ['Visitas al menú', stats.escaneos.toString()],
-      ['Platos vistos', stats.visitas.toString()],
-      ['Pedidos WhatsApp', stats.pedidosWhatsapp.toString()],
-      ['Calificación promedio', `${stats.calificacion}/5 (${stats.totalResenas} reseñas)`],
+    doc.setTextColor(...TEXTO)
+    doc.setFontSize(10)
+    doc.setFont('helvetica', 'normal')
+
+    // Línea 1: visitas con variación coloreada
+    const textoInicio1 = `Recibiste ${stats.escaneos} visitas al menú`
+    doc.text(textoInicio1, margen + 6, y + 14)
+    const anchoInicio1 = doc.getTextWidth(textoInicio1)
+
+    if (varEscaneos.valor !== 0 && statsAnterior.escaneos > 0) {
+      const signo = varEscaneos.valor > 0 ? '+' : '−'
+      const textoVar = ` (${signo}${Math.abs(varEscaneos.valor)}% vs ${labelAnterior})`
+      doc.setTextColor(...(varEscaneos.valor > 0 ? VERDE_EXITO : ROJO_PELIGRO))
+      doc.setFont('helvetica', 'bold')
+      doc.text(textoVar, margen + 6 + anchoInicio1, y + 14)
+    }
+
+    doc.setTextColor(...TEXTO)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(10)
+
+    // Línea 2: conversión
+    const lineaResumen2 = esPro && embudoData.visitasMenu > 0
+      ? `Conversión del ${embudoData.conversionFinal}% — ${embudoData.diagnostico.tipo === 'excelente' ? 'por encima del promedio del sector.'
+        : embudoData.diagnostico.tipo === 'bueno' ? 'en el promedio del sector.'
+        : embudoData.diagnostico.tipo === 'regular' ? 'por debajo del promedio (10%).'
+        : 'muy por debajo del promedio.'}`
+      : `Total de pedidos por WhatsApp: ${stats.pedidosWhatsapp}.`
+    doc.text(lineaResumen2, margen + 6, y + 20)
+
+    // Línea 3: mejor día
+    const mejorDiaResumen = escaneosPorDia.filter((d: any) => !d.esFuturo && d.actual > 0).sort((a: any, b: any) => b.actual - a.actual)[0]
+    const lineaResumen3 = mejorDiaResumen
+      ? `Mejor día: ${mejorDiaResumen.dia} ${mejorDiaResumen.numero} con ${mejorDiaResumen.actual} visitas.${horariosPico[0] ? ` Horario pico: ${horariosPico[0].rango}.` : ''}`
+      : 'Aún no hay suficientes datos para identificar patrones diarios.'
+    doc.text(lineaResumen3, margen + 6, y + 26)
+
+    y += 40
+
+    // ===== MÉTRICAS PRINCIPALES =====
+    doc.setTextColor(...TEXTO)
+    doc.setFontSize(12)
+    doc.setFont('helvetica', 'bold')
+    doc.text('Métricas principales', margen, y)
+    y += 5
+
+    const formatearVariacion = (v: typeof varEscaneos) => {
+      if (v.tipo === 'neutro' && v.texto === '—') return '—'
+      if (v.tipo === 'nuevo') return 'Nuevo'
+      const signo = v.valor > 0 ? '+' : '−'
+      return `${signo}${Math.abs(v.valor)}%`
+    }
+
+    const metricasBody = [
+      ['Visitas al menú', stats.escaneos.toString(), statsAnterior.escaneos.toString(), formatearVariacion(varEscaneos)],
+      ['Platos vistos', stats.visitas.toString(), statsAnterior.visitas.toString(), formatearVariacion(varVisitas)],
     ]
+
+    if (esPro) {
+      metricasBody.push(['Pedidos WhatsApp', stats.pedidosWhatsapp.toString(), statsAnterior.pedidosWhatsapp.toString(), formatearVariacion(varPedidos)])
+      metricasBody.push(['Calificación', `${stats.calificacion}/5`, `${stats.totalResenas} reseñas`, '—'])
+    }
 
     ;autoTable(doc, {
       startY: y,
-      head: [['Métrica', 'Valor']],
-      body: metricas,
+      head: [['Métrica', 'Actual', labelAnterior.charAt(0).toUpperCase() + labelAnterior.slice(1), 'Cambio']],
+      body: metricasBody,
       margin: { left: margen, right: margen },
-      styles: { fontSize: 10, cellPadding: 4 },
-      headStyles: { fillColor: [30, 30, 30], textColor: [255, 255, 255], fontStyle: 'bold' },
-      alternateRowStyles: { fillColor: [248, 248, 248] },
+      styles: { fontSize: 9, cellPadding: 4, textColor: TEXTO, lineColor: BORDE_SUAVE, lineWidth: 0.1 },
+      headStyles: { fillColor: CREMA_OSCURO, textColor: TEXTO_SEC, fontStyle: 'bold', fontSize: 8 },
+      alternateRowStyles: { fillColor: CREMA_MEDIO },
+      columnStyles: {
+        0: { fontStyle: 'bold' },
+        1: { halign: 'right', fontStyle: 'bold' },
+        2: { halign: 'right', textColor: TEXTO_SEC },
+        3: { halign: 'right', fontStyle: 'bold' },
+      },
+      didParseCell: (data: any) => {
+        if (data.column.index === 3 && data.row.section === 'body') {
+          const texto = data.cell.raw as string
+          if (texto.startsWith('+')) data.cell.styles.textColor = VERDE_EXITO
+          else if (texto.startsWith('−')) data.cell.styles.textColor = ROJO_PELIGRO
+          else if (texto === 'Nuevo') data.cell.styles.textColor = AZUL_INFO
+        }
+      },
     })
 
     y = (doc as any).lastAutoTable.finalY + 12
 
-    // Embudo de conversión
-    if (stats.escaneos > 0) {
-      doc.setFontSize(13)
+    // ===== EMBUDO DE CONVERSIÓN (solo Pro) =====
+    if (esPro && embudoData.visitasMenu > 0) {
+      if (y > 210) { doc.addPage(); pintarFondo(); y = 20 }
+
+      doc.setTextColor(...TEXTO)
+      doc.setFontSize(12)
       doc.setFont('helvetica', 'bold')
       doc.text('Embudo de conversión', margen, y)
-      y += 10
-
-      const pctPlatos = stats.escaneos > 0 ? Math.round((stats.visitas / stats.escaneos) * 100) : 0
-      const pctPedidos = stats.escaneos > 0 ? Math.round((stats.pedidosWhatsapp / stats.escaneos) * 100) : 0
+      y += 5
 
       ;autoTable(doc, {
         startY: y,
-        head: [['Etapa', 'Cantidad', 'Conversión']],
+        head: [['Etapa', 'Cantidad', '% del total', 'Tasa de paso']],
         body: [
-          ['Visitaron el menú', stats.escaneos.toString(), '100%'],
-          ['Vieron platos', stats.visitas.toString(), `${pctPlatos}%`],
-          ['Pidieron por WhatsApp', stats.pedidosWhatsapp.toString(), `${pctPedidos}%`],
+          ['Abrieron el menú', embudoData.visitasMenu.toString(), '100%', '—'],
+          ['Vieron detalle de platos', embudoData.vieronPlatos.toString(), `${Math.round((embudoData.vieronPlatos / embudoData.visitasMenu) * 100)}%`, `${embudoData.tasaExploracion}%`],
+          ['Pidieron por WhatsApp', embudoData.pidieron.toString(), `${Math.round((embudoData.pidieron / embudoData.visitasMenu) * 100)}%`, `${embudoData.tasaPedido}%`],
         ],
         margin: { left: margen, right: margen },
-        styles: { fontSize: 10, cellPadding: 4 },
-        headStyles: { fillColor: [30, 30, 30], textColor: [255, 255, 255], fontStyle: 'bold' },
-        alternateRowStyles: { fillColor: [248, 248, 248] },
+        styles: { fontSize: 9, cellPadding: 4, textColor: TEXTO, lineColor: BORDE_SUAVE, lineWidth: 0.1 },
+        headStyles: { fillColor: CREMA_OSCURO, textColor: TEXTO_SEC, fontStyle: 'bold', fontSize: 8 },
+        alternateRowStyles: { fillColor: CREMA_MEDIO },
+        columnStyles: {
+          0: { fontStyle: 'bold' },
+          1: { halign: 'right', fontStyle: 'bold' },
+          2: { halign: 'right', textColor: TEXTO_SEC },
+          3: { halign: 'right', textColor: NARANJA, fontStyle: 'bold' },
+        },
       })
 
-      y = (doc as any).lastAutoTable.finalY + 12
+      y = (doc as any).lastAutoTable.finalY + 8
+
+      // Caja de diagnóstico con barra lateral de color
+      const esExito = embudoData.diagnostico.tipo === 'excelente'
+      const esBueno = embudoData.diagnostico.tipo === 'bueno'
+      const esRegular = embudoData.diagnostico.tipo === 'regular'
+
+      const colorFondoDiag = esExito ? VERDE_FONDO : esBueno ? AZUL_FONDO : esRegular ? NARANJA_CLARO : ROJO_FONDO
+      const colorBarraDiag = esExito ? VERDE_EXITO : esBueno ? AZUL_INFO : esRegular ? NARANJA_BORDE : ROJO_PELIGRO
+      const colorTituloDiag = esExito ? VERDE_TEXTO : esBueno ? AZUL_TEXTO : esRegular ? NARANJA_TEXTO : ROJO_TEXTO
+      const colorCuerpoDiag = esExito ? VERDE_TEXTO : esBueno ? AZUL_TEXTO : esRegular ? NARANJA_TEXTO : ROJO_TEXTO
+
+      const tituloDiag = esExito ? 'Rendimiento excelente' : esBueno ? 'Rendimiento bueno' : esRegular ? 'Rendimiento regular' : 'Rendimiento bajo'
+
+      const lineasDiag = doc.splitTextToSize(embudoData.diagnostico.mensaje, ancho - margen * 2 - 12)
+      const alturaDiag = 12 + lineasDiag.length * 4
+
+      doc.setFillColor(...colorFondoDiag)
+      doc.roundedRect(margen, y, ancho - margen * 2, alturaDiag, 2, 2, 'F')
+
+      doc.setFillColor(...colorBarraDiag)
+      doc.rect(margen, y, 2, alturaDiag, 'F')
+
+      doc.setTextColor(...colorTituloDiag)
+      doc.setFontSize(10)
+      doc.setFont('helvetica', 'bold')
+      doc.text(tituloDiag, margen + 6, y + 7)
+
+      doc.setTextColor(...colorCuerpoDiag)
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'normal')
+      doc.text(lineasDiag, margen + 6, y + 12)
+
+      y += alturaDiag + 6
+
+      // Recomendación si existe
+      if (embudoData.recomendacion) {
+        if (y > 245) { doc.addPage(); pintarFondo(); y = 20 }
+
+        const lineasRec = doc.splitTextToSize(embudoData.recomendacion, ancho - margen * 2 - 12)
+        const alturaRec = 12 + lineasRec.length * 4
+
+        doc.setFillColor(...NARANJA_CLARO)
+        doc.roundedRect(margen, y, ancho - margen * 2, alturaRec, 2, 2, 'F')
+
+        doc.setFillColor(...NARANJA_BORDE)
+        doc.rect(margen, y, 2, alturaRec, 'F')
+
+        doc.setTextColor(...NARANJA_TEXTO)
+        doc.setFontSize(10)
+        doc.setFont('helvetica', 'bold')
+        doc.text('Recomendación', margen + 6, y + 7)
+
+        doc.setTextColor(...NARANJA_TEXTO)
+        doc.setFontSize(9)
+        doc.setFont('helvetica', 'normal')
+        doc.text(lineasRec, margen + 6, y + 12)
+
+        y += alturaRec + 10
+      }
     }
 
-    // Platos más vistos
-    if (platosMasVistos.length > 0) {
-      doc.setFontSize(13)
+    // ===== ACTIVIDAD POR DÍA =====
+    const diasConDatos = escaneosPorDia.filter((d: any) => !d.esFuturo)
+    if (diasConDatos.length > 0 && diasConDatos.some((d: any) => d.actual > 0) && filtroTiempo !== 'hoy') {
+      if (y > 210) { doc.addPage(); pintarFondo(); y = 20 }
+
+      doc.setTextColor(...TEXTO)
+      doc.setFontSize(12)
       doc.setFont('helvetica', 'bold')
-      doc.text('Platos más vistos', margen, y)
-      y += 10
+      doc.text('Actividad por día', margen, y)
+      y += 5
 
       ;autoTable(doc, {
         startY: y,
-        head: [['#', 'Plato', 'Vistas']],
-        body: platosMasVistos.map((p: any, i: number) => [(i + 1).toString(), p.nombre, p.vistas.toString()]),
+        head: [['Día', 'Fecha', 'Visitas', 'Estado']],
+        body: escaneosPorDia.map((d: any) => {
+          const etiqueta = d.esFuturo ? 'Pendiente' : d.esHoy ? 'Hoy' : d.actual === 0 ? 'Sin visitas' : ''
+          return [
+            d.dia.charAt(0).toUpperCase() + d.dia.slice(1),
+            `${d.numero}`,
+            d.esFuturo ? '—' : d.actual.toString(),
+            etiqueta,
+          ]
+        }),
         margin: { left: margen, right: margen },
-        styles: { fontSize: 10, cellPadding: 4 },
-        headStyles: { fillColor: [30, 30, 30], textColor: [255, 255, 255], fontStyle: 'bold' },
-        alternateRowStyles: { fillColor: [248, 248, 248] },
+        styles: { fontSize: 9, cellPadding: 3.5, textColor: TEXTO, lineColor: BORDE_SUAVE, lineWidth: 0.1 },
+        headStyles: { fillColor: CREMA_OSCURO, textColor: TEXTO_SEC, fontStyle: 'bold', fontSize: 8 },
+        alternateRowStyles: { fillColor: CREMA_MEDIO },
+        columnStyles: {
+          0: { fontStyle: 'bold' },
+          1: { halign: 'right', textColor: TEXTO_SEC },
+          2: { halign: 'right', fontStyle: 'bold', textColor: NARANJA },
+          3: { textColor: TEXTO_TER, fontSize: 8 },
+        },
       })
 
       y = (doc as any).lastAutoTable.finalY + 12
     }
 
-    // Platos menos vistos
-    if (platosMenusVistos.length > 0) {
-      doc.setFontSize(13)
+    // ===== HEATMAP DÍA × HORA (solo Pro) =====
+    if (esPro && heatmapData && heatmapData.hayDatosSuficientes) {
+      if (y > 190) { doc.addPage(); pintarFondo(); y = 20 }
+
+      doc.setTextColor(...TEXTO)
+      doc.setFontSize(12)
       doc.setFont('helvetica', 'bold')
-      doc.text('Platos menos vistos', margen, y)
-      y += 10
+      doc.text('Patrón de visitas día × hora', margen, y)
+
+      doc.setTextColor(...TEXTO_SEC)
+      doc.setFontSize(8)
+      doc.setFont('helvetica', 'normal')
+      doc.text('Número de visitas recibidas en cada franja horaria', margen, y + 4)
+      y += 9
+
+      const bloquesLabels = ['0—3h', '3—6h', '6—9h', '9—12h', '12—15h', '15—18h', '18—21h', '21—24h']
+      const diasPDF = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
+
+      // Construir body: cada fila es un bloque horario con sus 7 días
+      const heatmapBody = heatmapData.matriz.map((fila: number[], b: number) => {
+        return [bloquesLabels[b], ...fila.map((v: number) => v === 0 ? '—' : v.toString())]
+      })
 
       ;autoTable(doc, {
         startY: y,
-        head: [['Plato', 'Vistas']],
-        body: platosMenusVistos.map((p: any) => [p.nombre, p.vistas === 0 ? 'Sin vistas' : p.vistas.toString()]),
+        head: [['Horario', ...diasPDF]],
+        body: heatmapBody,
         margin: { left: margen, right: margen },
-        styles: { fontSize: 10, cellPadding: 4 },
-        headStyles: { fillColor: [30, 30, 30], textColor: [255, 255, 255], fontStyle: 'bold' },
-        alternateRowStyles: { fillColor: [248, 248, 248] },
+        styles: { fontSize: 9, cellPadding: 3, textColor: TEXTO, lineColor: BORDE_SUAVE, lineWidth: 0.1, halign: 'center' },
+        headStyles: { fillColor: CREMA_OSCURO, textColor: TEXTO_SEC, fontStyle: 'bold', fontSize: 8, halign: 'center' },
+        columnStyles: {
+          0: { fontStyle: 'bold', halign: 'right', textColor: TEXTO_SEC, cellWidth: 22 },
+        },
+        didParseCell: (data: any) => {
+          if (data.column.index > 0 && data.row.section === 'body') {
+            const valor = parseInt(data.cell.raw as string)
+            if (!isNaN(valor) && valor > 0) {
+              const ratio = heatmapData.maxCelda > 0 ? valor / heatmapData.maxCelda : 0
+              if (ratio >= 0.75) {
+                data.cell.styles.fillColor = [232, 93, 36]
+                data.cell.styles.textColor = [255, 255, 255]
+                data.cell.styles.fontStyle = 'bold'
+              } else if (ratio >= 0.5) {
+                data.cell.styles.fillColor = [245, 146, 90]
+                data.cell.styles.textColor = [255, 255, 255]
+                data.cell.styles.fontStyle = 'bold'
+              } else if (ratio >= 0.25) {
+                data.cell.styles.fillColor = [249, 178, 125]
+                data.cell.styles.textColor = [122, 51, 16]
+              } else {
+                data.cell.styles.fillColor = [253, 232, 217]
+                data.cell.styles.textColor = [122, 51, 16]
+              }
+            } else {
+              data.cell.styles.textColor = TEXTO_TER
+            }
+          }
+        },
       })
 
-      y = (doc as any).lastAutoTable.finalY + 12
+      y = (doc as any).lastAutoTable.finalY + 6
+
+      // Insight del pico y días muertos
+      const bloquesInsight = ['0:00 — 3:00', '3:00 — 6:00', '6:00 — 9:00', '9:00 — 12:00', '12:00 — 15:00', '15:00 — 18:00', '18:00 — 21:00', '21:00 — 24:00']
+      const diasInsight = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo']
+
+      const textosInsight: string[] = []
+      if (heatmapData.pico.valor > 0) {
+        textosInsight.push(`Pico del periodo: ${diasInsight[heatmapData.pico.dia]} de ${bloquesInsight[heatmapData.pico.bloque]} con ${heatmapData.pico.valor} ${heatmapData.pico.valor === 1 ? 'visita' : 'visitas'}.`)
+      }
+      if (heatmapData.diasMuertos.length > 0) {
+        const diasMuertosNombres = heatmapData.diasMuertos.map((d: number) => diasInsight[d]).join(', ')
+        textosInsight.push(`Días sin actividad: ${diasMuertosNombres}. Considera promos para activarlos.`)
+      }
+
+      if (textosInsight.length > 0) {
+        const textoInsightCompleto = textosInsight.join(' ')
+        const lineasInsight = doc.splitTextToSize(textoInsightCompleto, ancho - margen * 2 - 12)
+        const alturaInsight = 8 + lineasInsight.length * 4
+
+        doc.setFillColor(...CREMA_OSCURO)
+        doc.roundedRect(margen, y, ancho - margen * 2, alturaInsight, 2, 2, 'F')
+
+        doc.setFillColor(...NARANJA)
+        doc.rect(margen, y, 2, alturaInsight, 'F')
+
+        doc.setTextColor(...TEXTO)
+        doc.setFontSize(9)
+        doc.setFont('helvetica', 'normal')
+        doc.text(lineasInsight, margen + 6, y + 6)
+
+        y += alturaInsight + 10
+      }
     }
 
-    // Horarios pico
-    if (horariosPico.length > 0) {
-      if (y > 240) { doc.addPage(); y = 20 }
-      doc.setFontSize(13)
+    // ===== HORARIOS PICO (solo Básico, el heatmap lo reemplaza en Pro) =====
+    if (!esPro && horariosPico.length > 0) {
+      if (y > 225) { doc.addPage(); pintarFondo(); y = 20 }
+
+      doc.setTextColor(...TEXTO)
+      doc.setFontSize(12)
       doc.setFont('helvetica', 'bold')
       doc.text('Horarios con más visitas', margen, y)
-      y += 10
+      y += 5
 
       ;autoTable(doc, {
         startY: y,
         head: [['Horario', 'Visitas']],
         body: horariosPico.map((h: any) => [h.rango, h.escaneos.toString()]),
         margin: { left: margen, right: margen },
-        styles: { fontSize: 10, cellPadding: 4 },
-        headStyles: { fillColor: [30, 30, 30], textColor: [255, 255, 255], fontStyle: 'bold' },
-        alternateRowStyles: { fillColor: [248, 248, 248] },
+        styles: { fontSize: 9, cellPadding: 4, textColor: TEXTO, lineColor: BORDE_SUAVE, lineWidth: 0.1 },
+        headStyles: { fillColor: CREMA_OSCURO, textColor: TEXTO_SEC, fontStyle: 'bold', fontSize: 8 },
+        alternateRowStyles: { fillColor: CREMA_MEDIO },
+        columnStyles: {
+          0: { fontStyle: 'bold' },
+          1: { halign: 'right', fontStyle: 'bold', textColor: NARANJA },
+        },
       })
 
       y = (doc as any).lastAutoTable.finalY + 12
     }
 
-    // Visitas por día
-    if (escaneosPorDia.length > 0 && escaneosPorDia.some((d: any) => d.actual > 0)) {
-      if (y > 240) { doc.addPage(); y = 20 }
-      doc.setFontSize(13)
+    // ===== PLATOS MÁS VISTOS =====
+    if (platosMasVistos.length > 0) {
+      if (y > 210) { doc.addPage(); pintarFondo(); y = 20 }
+
+      doc.setTextColor(...TEXTO)
+      doc.setFontSize(12)
       doc.setFont('helvetica', 'bold')
-      doc.text('Visitas por día de la semana', margen, y)
-      y += 10
+      doc.text('Platos más vistos', margen, y)
+      y += 5
 
       ;autoTable(doc, {
         startY: y,
-        head: [['Día', 'Visitas']],
-        body: escaneosPorDia.map((d: any) => [d.dia, d.actual.toString()]),
+        head: [['#', 'Plato', 'Vistas']],
+        body: platosMasVistos.map((p: any, i: number) => [(i + 1).toString(), p.nombre, p.vistas.toString()]),
         margin: { left: margen, right: margen },
-        styles: { fontSize: 10, cellPadding: 4 },
-        headStyles: { fillColor: [30, 30, 30], textColor: [255, 255, 255], fontStyle: 'bold' },
-        alternateRowStyles: { fillColor: [248, 248, 248] },
+        styles: { fontSize: 9, cellPadding: 4, textColor: TEXTO, lineColor: BORDE_SUAVE, lineWidth: 0.1 },
+        headStyles: { fillColor: CREMA_OSCURO, textColor: TEXTO_SEC, fontStyle: 'bold', fontSize: 8 },
+        alternateRowStyles: { fillColor: CREMA_MEDIO },
+        columnStyles: {
+          0: { halign: 'center', cellWidth: 12, textColor: TEXTO_SEC },
+          1: { fontStyle: 'bold' },
+          2: { halign: 'right', fontStyle: 'bold', textColor: NARANJA },
+        },
+      })
+
+      y = (doc as any).lastAutoTable.finalY + 10
+    }
+
+    // ===== PLATOS MENOS VISTOS =====
+    if (platosMenusVistos.length > 0) {
+      if (y > 210) { doc.addPage(); pintarFondo(); y = 20 }
+
+      doc.setTextColor(...TEXTO)
+      doc.setFontSize(12)
+      doc.setFont('helvetica', 'bold')
+      doc.text('Platos que necesitan atención', margen, y)
+
+      doc.setTextColor(...TEXTO_SEC)
+      doc.setFontSize(8)
+      doc.setFont('helvetica', 'normal')
+      doc.text('Considera mejorar fotos, descripción o desactivar temporalmente', margen, y + 4)
+      y += 9
+
+      ;autoTable(doc, {
+        startY: y,
+        head: [['Plato', 'Vistas']],
+        body: platosMenusVistos.map((p: any) => [p.nombre, p.vistas === 0 ? 'Sin vistas' : p.vistas.toString()]),
+        margin: { left: margen, right: margen },
+        styles: { fontSize: 9, cellPadding: 4, textColor: TEXTO, lineColor: BORDE_SUAVE, lineWidth: 0.1 },
+        headStyles: { fillColor: CREMA_OSCURO, textColor: TEXTO_SEC, fontStyle: 'bold', fontSize: 8 },
+        alternateRowStyles: { fillColor: CREMA_MEDIO },
+        columnStyles: {
+          0: { fontStyle: 'bold' },
+          1: { halign: 'right', textColor: ROJO_PELIGRO, fontStyle: 'bold' },
+        },
       })
 
       y = (doc as any).lastAutoTable.finalY + 12
     }
 
-    // Mejor y peor día
-    if (mejorDia && peorDia) {
-      if (y > 250) { doc.addPage(); y = 20 }
-      doc.setFontSize(13)
+    // ===== ÚLTIMAS RESEÑAS =====
+    if (esPro && resenas.length > 0) {
+      if (y > 195) { doc.addPage(); pintarFondo(); y = 20 }
+
+      doc.setTextColor(...TEXTO)
+      doc.setFontSize(12)
       doc.setFont('helvetica', 'bold')
-      doc.text('Mejor y peor día', margen, y)
-      y += 10
+      doc.text('Últimas reseñas de comensales', margen, y)
+      y += 5
 
       ;autoTable(doc, {
         startY: y,
-        head: [['', 'Día', 'Visitas']],
-        body: [
-          ['Mejor día', mejorDia.dia, mejorDia.cantidad.toString()],
-          ['Peor día', peorDia.dia, peorDia.cantidad.toString()],
-        ],
+        head: [['Plato', 'Calificación', 'Comentario', 'Fecha']],
+        body: resenas.map((r: any) => [
+          r.plato,
+          `${r.estrellas}/5`,
+          r.comentario || '—',
+          r.tiempo,
+        ]),
         margin: { left: margen, right: margen },
-        styles: { fontSize: 10, cellPadding: 4 },
-        headStyles: { fillColor: [30, 30, 30], textColor: [255, 255, 255], fontStyle: 'bold' },
-        alternateRowStyles: { fillColor: [248, 248, 248] },
-      })
-
-      y = (doc as any).lastAutoTable.finalY + 12
-    }
-
-    // Últimas reseñas
-    if (resenas.length > 0) {
-      if (y > 230) { doc.addPage(); y = 20 }
-      doc.setFontSize(13)
-      doc.setFont('helvetica', 'bold')
-      doc.text('Últimas reseñas', margen, y)
-      y += 10
-
-      ;autoTable(doc, {
-        startY: y,
-        head: [['Plato', 'Estrellas', 'Comentario', 'Fecha']],
-        body: resenas.map((r: any) => [r.plato, '★'.repeat(r.estrellas), r.comentario || '—', r.tiempo]),
-        margin: { left: margen, right: margen },
-        styles: { fontSize: 9, cellPadding: 4 },
-        headStyles: { fillColor: [30, 30, 30], textColor: [255, 255, 255], fontStyle: 'bold' },
-        alternateRowStyles: { fillColor: [248, 248, 248] },
-        columnStyles: { 2: { cellWidth: 60 } },
+        styles: { fontSize: 8, cellPadding: 4, textColor: TEXTO, lineColor: BORDE_SUAVE, lineWidth: 0.1 },
+        headStyles: { fillColor: CREMA_OSCURO, textColor: TEXTO_SEC, fontStyle: 'bold', fontSize: 8 },
+        alternateRowStyles: { fillColor: CREMA_MEDIO },
+        columnStyles: {
+          0: { fontStyle: 'bold', cellWidth: 35 },
+          1: { halign: 'center', textColor: NARANJA_BORDE, fontStyle: 'bold', cellWidth: 22 },
+          2: { cellWidth: 80 },
+          3: { halign: 'right', textColor: TEXTO_SEC, cellWidth: 25 },
+        },
       })
     }
 
-    // Footer en todas las páginas
+    // ===== FOOTER EN TODAS LAS PÁGINAS =====
     const totalPaginas = doc.getNumberOfPages()
     for (let i = 1; i <= totalPaginas; i++) {
       doc.setPage(i)
-      doc.setFontSize(8)
-      doc.setTextColor(150, 150, 150)
-      doc.text(`MenuApp · ${restaurante.nombre} · Página ${i} de ${totalPaginas}`, ancho / 2, doc.internal.pageSize.getHeight() - 10, { align: 'center' })
+
+      // Línea separadora suave
+      doc.setDrawColor(...BORDE)
+      doc.setLineWidth(0.3)
+      doc.line(margen, alto - 15, ancho - margen, alto - 15)
+
+      // Marca
+      doc.setFontSize(7)
+      doc.setTextColor(...TEXTO_TER)
+      doc.setFont('helvetica', 'normal')
+      doc.text('MenuApp · Menú digital para restaurantes', margen, alto - 9)
+      doc.text(`${restaurante.nombre}`, ancho / 2, alto - 9, { align: 'center' })
+      doc.text(`Página ${i} de ${totalPaginas}`, ancho - margen, alto - 9, { align: 'right' })
     }
 
-    // Descargar
-    const periodo = filtroTiempo === 'hoy' ? 'hoy' : filtroTiempo === 'semana' ? 'semana' : 'mes'
-    doc.save(`reporte-${restaurante.nombre.toLowerCase().replace(/\s+/g, '-')}-${periodo}.pdf`)
+    // ===== DESCARGAR =====
+    const periodoNombre = filtroTiempo === 'hoy' ? 'hoy' : filtroTiempo === 'semana' ? 'semana' : 'mes'
+    const fechaArchivo = new Date().toISOString().split('T')[0]
+    const nombreArchivo = `menuapp-${restaurante.nombre.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${periodoNombre}-${fechaArchivo}.pdf`
+    doc.save(nombreArchivo)
   }
   const esPro = plan === 'pro'
   const maxEscaneo = escaneosPorDia.length > 0 ? Math.max(...escaneosPorDia.map((d: any) => d.actual), 1) : 1
@@ -1408,6 +1819,322 @@ export default function DashboardPage() {
             </div>
           )
         })()}
+
+        {/* Heatmap: Patrón de visitas día × hora (solo Pro, con datos suficientes) */}
+        {esPro && filtroTiempo !== 'hoy' && heatmapData && heatmapData.hayDatosSuficientes && (() => {
+          const bloquesHoras = [
+            { label: '0—3h', descripcion: '0:00 — 3:00' },
+            { label: '3—6h', descripcion: '3:00 — 6:00' },
+            { label: '6—9h', descripcion: '6:00 — 9:00' },
+            { label: '9—12h', descripcion: '9:00 — 12:00' },
+            { label: '12—15h', descripcion: '12:00 — 15:00' },
+            { label: '15—18h', descripcion: '15:00 — 18:00' },
+            { label: '18—21h', descripcion: '18:00 — 21:00' },
+            { label: '21—24h', descripcion: '21:00 — 24:00' },
+          ]
+          const diasLabels = ['lun', 'mar', 'mié', 'jue', 'vie', 'sáb', 'dom']
+
+          // Función de color naranja escalado según intensidad
+          function colorHeatmap(valor: number, max: number): { bg: string; opacity: number } {
+            if (valor === 0) return { bg: '#F5EFE6', opacity: 0.3 }
+            const ratio = valor / max
+            if (ratio >= 0.75) return { bg: '#E85D24', opacity: 1 }      // Intenso
+            if (ratio >= 0.5) return { bg: '#F5925A', opacity: 1 }       // Alto
+            if (ratio >= 0.25) return { bg: '#F9B27D', opacity: 1 }      // Medio
+            return { bg: '#FDE8D9', opacity: 1 }                          // Bajo
+          }
+
+          // Resumen en lenguaje natural
+          const picoTextoDia = diasLabels[heatmapData.pico.dia]
+          const picoTextoHora = bloquesHoras[heatmapData.pico.bloque]?.descripcion
+          const tieneDiasMuertos = heatmapData.diasMuertos.length > 0
+          const diasMuertosTexto = heatmapData.diasMuertos.map((d: number) => diasLabels[d]).join(', ')
+
+          // Hoy en el formato del heatmap
+          const hoyDia = new Date()
+          const diaJSHoy = hoyDia.getDay()
+          const diaMatrizHoy = diaJSHoy === 0 ? 6 : diaJSHoy - 1
+
+          return (
+            <div style={{ padding: '0 20px', marginBottom: '14px' }}>
+              <div className="card" style={{ padding: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '4px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 500 }}>Patrón de visitas</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>día × hora</div>
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '3px' }}>
+                  Número de visitas recibidas en cada franja horaria
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginBottom: '14px' }}>
+                  {contextoTemporal.rango}
+                </div>
+
+                {/* Grid del heatmap */}
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: '44px repeat(7, 1fr)',
+                  gap: '3px',
+                  fontSize: '9px',
+                }}>
+                  {/* Fila de labels de días */}
+                  <div></div>
+                  {diasLabels.map((d: string, i: number) => (
+                    <div key={i} style={{
+                      textAlign: 'center',
+                      color: i === diaMatrizHoy ? 'var(--color-info)' : 'var(--text-secondary)',
+                      fontWeight: i === diaMatrizHoy ? 500 : 400,
+                      paddingBottom: '4px',
+                    }}>
+                      {d}
+                    </div>
+                  ))}
+
+                  {/* Filas del heatmap */}
+                  {bloquesHoras.map((bloque: any, b: number) => (
+                    <React.Fragment key={`row-${b}`}>
+                      <div style={{
+                        color: 'var(--text-secondary)',
+                        paddingRight: '6px',
+                        textAlign: 'right',
+                        alignSelf: 'center',
+                        fontSize: '9px',
+                        lineHeight: 1.1,
+                      }}>
+                        {bloque.label}
+                      </div>
+                      {heatmapData.matriz[b].map((valor: number, d: number) => {
+                        const color = colorHeatmap(valor, heatmapData.maxCelda)
+                        const esPicoCelda = heatmapData.pico.bloque === b && heatmapData.pico.dia === d
+                        const ratio = heatmapData.maxCelda > 0 ? valor / heatmapData.maxCelda : 0
+                        const colorTexto = ratio >= 0.5 ? 'white' : valor === 0 ? 'var(--text-tertiary)' : '#7a3310'
+                        return (
+                          <div
+                            key={`c-${b}-${d}`}
+                            title={`${diasLabels[d]} ${bloque.descripcion}: ${valor} ${valor === 1 ? 'visita' : 'visitas'}`}
+                            style={{
+                              aspectRatio: '1',
+                              background: color.bg,
+                              opacity: color.opacity,
+                              borderRadius: '3px',
+                              position: 'relative',
+                              border: esPicoCelda ? '1.5px solid var(--color-accent, #E85D24)' : 'none',
+                              boxShadow: esPicoCelda ? '0 0 0 1px white' : 'none',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '10px',
+                              fontWeight: valor > 0 ? 500 : 400,
+                              color: colorTexto,
+                            }}
+                          >
+                            {valor > 0 ? valor : ''}
+                          </div>
+                        )
+                      })}
+                    </React.Fragment>
+                  ))}
+                </div>
+
+                {/* Leyenda de colores */}
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                  alignItems: 'center',
+                  gap: '6px',
+                  marginTop: '12px',
+                  fontSize: '9px',
+                  color: 'var(--text-tertiary)',
+                }}>
+                  <span>menos</span>
+                  <div style={{ width: '14px', height: '10px', background: '#FBF7F0', border: '0.5px solid var(--border-light)', borderRadius: '1px' }} />
+                  <div style={{ width: '14px', height: '10px', background: '#FDE8D9', borderRadius: '1px' }} />
+                  <div style={{ width: '14px', height: '10px', background: '#F9B27D', borderRadius: '1px' }} />
+                  <div style={{ width: '14px', height: '10px', background: '#F5925A', borderRadius: '1px' }} />
+                  <div style={{ width: '14px', height: '10px', background: '#E85D24', borderRadius: '1px' }} />
+                  <span>más</span>
+                </div>
+
+                {/* Cómo leer el heatmap */}
+                <div style={{
+                  background: 'var(--bg-tertiary)',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '8px 12px',
+                  marginTop: '10px',
+                  fontSize: '11px',
+                  color: 'var(--text-secondary)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                }}>
+                  <div style={{
+                    width: '22px',
+                    height: '22px',
+                    background: '#E85D24',
+                    borderRadius: '3px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'white',
+                    fontSize: '10px',
+                    fontWeight: 500,
+                    flexShrink: 0,
+                  }}>
+                    {heatmapData.pico.valor}
+                  </div>
+                  <span>
+                    = <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>
+                      {heatmapData.pico.valor} {heatmapData.pico.valor === 1 ? 'visita' : 'visitas'}
+                    </span> en esa franja horaria
+                  </span>
+                </div>
+
+                {/* Resumen inteligente */}
+                <div style={{
+                  background: 'var(--bg-tertiary)',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '10px 12px',
+                  marginTop: '14px',
+                  fontSize: '11px',
+                  color: 'var(--text-secondary)',
+                  lineHeight: 1.5,
+                }}>
+                  {heatmapData.pico.valor > 0 && (
+                    <>
+                      Pico del periodo: <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>
+                        {picoTextoDia} {picoTextoHora}
+                      </span> con <span style={{ color: '#E85D24', fontWeight: 500 }}>
+                        {heatmapData.pico.valor} {heatmapData.pico.valor === 1 ? 'visita' : 'visitas'}
+                      </span>.
+                    </>
+                  )}
+                  {tieneDiasMuertos && (
+                    <>
+                      {' '}Días sin actividad: <span style={{ color: 'var(--color-danger)', fontWeight: 500 }}>
+                        {diasMuertosTexto}
+                      </span>. Considera promos para activarlos.
+                    </>
+                  )}
+                </div>
+
+                
+              </div>
+            </div>
+          )
+        })()}
+
+        {/* Heatmap insuficiente: mensaje motivador para Pro con poca data */}
+        {esPro && filtroTiempo !== 'hoy' && heatmapData && !heatmapData.hayDatosSuficientes && (
+          <div style={{ padding: '0 20px', marginBottom: '14px' }}>
+            <div className="card" style={{ padding: '16px' }}>
+              <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '6px' }}>Patrón de visitas</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                Necesitas al menos 20 visitas en el periodo para ver el mapa de calor día × hora.
+                Llevas {heatmapData.totalVisitas}. Comparte más tu QR para desbloquearlo.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Teaser del heatmap para Básico (upsell a Pro) */}
+        {esBasico && !esPro && filtroTiempo !== 'hoy' && (
+          <div style={{ padding: '0 20px', marginBottom: '14px' }}>
+            <div className="card" style={{ padding: '16px', position: 'relative', overflow: 'hidden' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '4px' }}>
+                <div style={{ fontSize: '13px', fontWeight: 500 }}>Patrón de visitas</div>
+                <div style={{
+                  fontSize: '10px',
+                  fontWeight: 500,
+                  padding: '2px 8px',
+                  borderRadius: '4px',
+                  background: 'var(--color-warning-light)',
+                  color: 'var(--color-warning)',
+                }}>
+                  Plan Pro
+                </div>
+              </div>
+              <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginBottom: '14px' }}>
+                Descubre tus días y horas de mayor tráfico
+              </div>
+
+              {/* Mini-preview del heatmap con datos de ejemplo (blureado) */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '24px repeat(7, 1fr)',
+                gap: '3px',
+                fontSize: '9px',
+                filter: 'blur(2px)',
+                pointerEvents: 'none',
+                userSelect: 'none',
+                opacity: 0.7,
+              }}>
+                <div></div>
+                {['lun', 'mar', 'mié', 'jue', 'vie', 'sáb', 'dom'].map((d: string, i: number) => (
+                  <div key={i} style={{ textAlign: 'center', color: 'var(--text-secondary)', paddingBottom: '4px' }}>{d}</div>
+                ))}
+                {[
+                  [0, 0, 0, 0, 0, 0, 0],
+                  [0, 0, 0, 0, 0, 0, 0],
+                  [1, 2, 1, 2, 3, 0, 0],
+                  [2, 3, 2, 2, 3, 1, 0],
+                  [4, 6, 5, 9, 4, 2, 1],
+                  [0, 1, 2, 1, 0, 0, 0],
+                  [3, 5, 6, 8, 4, 2, 0],
+                  [0, 1, 0, 2, 0, 1, 0],
+                ].map((fila, b) => (
+                  <React.Fragment key={`preview-${b}`}>
+                    <div style={{ color: 'var(--text-tertiary)', paddingRight: '4px', textAlign: 'right', alignSelf: 'center' }}>
+                      {['0—3h', '3—6h', '6—9h', '9—12h', '12—15h', '15—18h', '18—21h', '21—24h'][b]}
+                    </div>
+                    {fila.map((v: number, d: number) => {
+                      const max = 9
+                      const ratio = v / max
+                      const bg = v === 0 ? '#F5EFE6'
+                        : ratio >= 0.75 ? '#E85D24'
+                        : ratio >= 0.5 ? '#F5925A'
+                        : ratio >= 0.25 ? '#F9B27D'
+                        : '#FDE8D9'
+                      return (
+                        <div key={`pv-${b}-${d}`} style={{
+                          aspectRatio: '1',
+                          background: bg,
+                          opacity: v === 0 ? 0.3 : 1,
+                          borderRadius: '3px',
+                        }} />
+                      )
+                    })}
+                  </React.Fragment>
+                ))}
+              </div>
+
+              {/* Overlay CTA sobre el preview */}
+              <div onClick={() => router.push('/suscripcion')} style={{
+                background: 'var(--color-warning-light)',
+                borderRadius: 'var(--radius-md)',
+                padding: '12px 14px',
+                marginTop: '14px',
+                cursor: 'pointer',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: '10px',
+              }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--color-warning)', marginBottom: '2px' }}>
+                    Desbloquea el mapa de calor
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--color-warning)', opacity: 0.85, lineHeight: 1.4 }}>
+                    Ve en qué días y horas recibes más visitas. Detecta momentos muertos y optimiza tu operación.
+                  </div>
+                </div>
+                <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--color-warning)', whiteSpace: 'nowrap' }}>
+                  Ver Pro →
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        
 
         {/* Platos más vistos */}
         {esBasico ? (
