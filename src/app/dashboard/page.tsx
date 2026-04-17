@@ -218,6 +218,227 @@ export default function DashboardPage() {
   }, [rest?.id, filtroTiempo])
 
   const esBasico = plan === 'basico' || plan === 'pro'
+  async function generarReportePDF() {
+    const jsPDF = (await import('jspdf')).default
+    const autoTable = (await import('jspdf-autotable')).default
+
+    const doc = new jsPDF('p', 'mm', 'a4')
+    const ancho = doc.internal.pageSize.getWidth()
+    const margen = 20
+    let y = 20
+
+    // Header
+    doc.setFillColor(30, 30, 30)
+    doc.rect(0, 0, ancho, 40, 'F')
+    doc.setTextColor(255, 255, 255)
+    doc.setFontSize(20)
+    doc.setFont('helvetica', 'bold')
+    doc.text('MenuApp', margen, 18)
+    doc.setFontSize(10)
+    doc.setFont('helvetica', 'normal')
+    doc.text('Reporte de estadísticas', margen, 26)
+    doc.setFontSize(9)
+    doc.text(`${restaurante.nombre} · ${filtroTiempo === 'hoy' ? 'Hoy' : filtroTiempo === 'semana' ? 'Esta semana' : 'Este mes'}`, margen, 33)
+
+    // Fecha de generación
+    const fechaGen = new Date().toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    doc.setFontSize(8)
+    doc.text(`Generado: ${fechaGen}`, ancho - margen, 33, { align: 'right' })
+
+    y = 50
+
+    // Métricas principales
+    doc.setTextColor(30, 30, 30)
+    doc.setFontSize(13)
+    doc.setFont('helvetica', 'bold')
+    doc.text('Resumen general', margen, y)
+    y += 10
+
+    const metricas = [
+      ['Visitas al menú', stats.escaneos.toString()],
+      ['Platos vistos', stats.visitas.toString()],
+      ['Pedidos WhatsApp', stats.pedidosWhatsapp.toString()],
+      ['Calificación promedio', `${stats.calificacion}/5 (${stats.totalResenas} reseñas)`],
+    ]
+
+    ;autoTable(doc, {
+      startY: y,
+      head: [['Métrica', 'Valor']],
+      body: metricas,
+      margin: { left: margen, right: margen },
+      styles: { fontSize: 10, cellPadding: 4 },
+      headStyles: { fillColor: [30, 30, 30], textColor: [255, 255, 255], fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [248, 248, 248] },
+    })
+
+    y = (doc as any).lastAutoTable.finalY + 12
+
+    // Embudo de conversión
+    if (stats.escaneos > 0) {
+      doc.setFontSize(13)
+      doc.setFont('helvetica', 'bold')
+      doc.text('Embudo de conversión', margen, y)
+      y += 10
+
+      const pctPlatos = stats.escaneos > 0 ? Math.round((stats.visitas / stats.escaneos) * 100) : 0
+      const pctPedidos = stats.escaneos > 0 ? Math.round((stats.pedidosWhatsapp / stats.escaneos) * 100) : 0
+
+      ;autoTable(doc, {
+        startY: y,
+        head: [['Etapa', 'Cantidad', 'Conversión']],
+        body: [
+          ['Visitaron el menú', stats.escaneos.toString(), '100%'],
+          ['Vieron platos', stats.visitas.toString(), `${pctPlatos}%`],
+          ['Pidieron por WhatsApp', stats.pedidosWhatsapp.toString(), `${pctPedidos}%`],
+        ],
+        margin: { left: margen, right: margen },
+        styles: { fontSize: 10, cellPadding: 4 },
+        headStyles: { fillColor: [30, 30, 30], textColor: [255, 255, 255], fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [248, 248, 248] },
+      })
+
+      y = (doc as any).lastAutoTable.finalY + 12
+    }
+
+    // Platos más vistos
+    if (platosMasVistos.length > 0) {
+      doc.setFontSize(13)
+      doc.setFont('helvetica', 'bold')
+      doc.text('Platos más vistos', margen, y)
+      y += 10
+
+      ;autoTable(doc, {
+        startY: y,
+        head: [['#', 'Plato', 'Vistas']],
+        body: platosMasVistos.map((p: any, i: number) => [(i + 1).toString(), p.nombre, p.vistas.toString()]),
+        margin: { left: margen, right: margen },
+        styles: { fontSize: 10, cellPadding: 4 },
+        headStyles: { fillColor: [30, 30, 30], textColor: [255, 255, 255], fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [248, 248, 248] },
+      })
+
+      y = (doc as any).lastAutoTable.finalY + 12
+    }
+
+    // Platos menos vistos
+    if (platosMenusVistos.length > 0) {
+      doc.setFontSize(13)
+      doc.setFont('helvetica', 'bold')
+      doc.text('Platos menos vistos', margen, y)
+      y += 10
+
+      ;autoTable(doc, {
+        startY: y,
+        head: [['Plato', 'Vistas']],
+        body: platosMenusVistos.map((p: any) => [p.nombre, p.vistas === 0 ? 'Sin vistas' : p.vistas.toString()]),
+        margin: { left: margen, right: margen },
+        styles: { fontSize: 10, cellPadding: 4 },
+        headStyles: { fillColor: [30, 30, 30], textColor: [255, 255, 255], fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [248, 248, 248] },
+      })
+
+      y = (doc as any).lastAutoTable.finalY + 12
+    }
+
+    // Horarios pico
+    if (horariosPico.length > 0) {
+      if (y > 240) { doc.addPage(); y = 20 }
+      doc.setFontSize(13)
+      doc.setFont('helvetica', 'bold')
+      doc.text('Horarios con más visitas', margen, y)
+      y += 10
+
+      ;autoTable(doc, {
+        startY: y,
+        head: [['Horario', 'Visitas']],
+        body: horariosPico.map((h: any) => [h.rango, h.escaneos.toString()]),
+        margin: { left: margen, right: margen },
+        styles: { fontSize: 10, cellPadding: 4 },
+        headStyles: { fillColor: [30, 30, 30], textColor: [255, 255, 255], fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [248, 248, 248] },
+      })
+
+      y = (doc as any).lastAutoTable.finalY + 12
+    }
+
+    // Visitas por día
+    if (escaneosPorDia.length > 0 && escaneosPorDia.some((d: any) => d.actual > 0)) {
+      if (y > 240) { doc.addPage(); y = 20 }
+      doc.setFontSize(13)
+      doc.setFont('helvetica', 'bold')
+      doc.text('Visitas por día de la semana', margen, y)
+      y += 10
+
+      ;autoTable(doc, {
+        startY: y,
+        head: [['Día', 'Visitas']],
+        body: escaneosPorDia.map((d: any) => [d.dia, d.actual.toString()]),
+        margin: { left: margen, right: margen },
+        styles: { fontSize: 10, cellPadding: 4 },
+        headStyles: { fillColor: [30, 30, 30], textColor: [255, 255, 255], fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [248, 248, 248] },
+      })
+
+      y = (doc as any).lastAutoTable.finalY + 12
+    }
+
+    // Mejor y peor día
+    if (mejorDia && peorDia) {
+      if (y > 250) { doc.addPage(); y = 20 }
+      doc.setFontSize(13)
+      doc.setFont('helvetica', 'bold')
+      doc.text('Mejor y peor día', margen, y)
+      y += 10
+
+      ;autoTable(doc, {
+        startY: y,
+        head: [['', 'Día', 'Visitas']],
+        body: [
+          ['Mejor día', mejorDia.dia, mejorDia.cantidad.toString()],
+          ['Peor día', peorDia.dia, peorDia.cantidad.toString()],
+        ],
+        margin: { left: margen, right: margen },
+        styles: { fontSize: 10, cellPadding: 4 },
+        headStyles: { fillColor: [30, 30, 30], textColor: [255, 255, 255], fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [248, 248, 248] },
+      })
+
+      y = (doc as any).lastAutoTable.finalY + 12
+    }
+
+    // Últimas reseñas
+    if (resenas.length > 0) {
+      if (y > 230) { doc.addPage(); y = 20 }
+      doc.setFontSize(13)
+      doc.setFont('helvetica', 'bold')
+      doc.text('Últimas reseñas', margen, y)
+      y += 10
+
+      ;autoTable(doc, {
+        startY: y,
+        head: [['Plato', 'Estrellas', 'Comentario', 'Fecha']],
+        body: resenas.map((r: any) => [r.plato, '★'.repeat(r.estrellas), r.comentario || '—', r.tiempo]),
+        margin: { left: margen, right: margen },
+        styles: { fontSize: 9, cellPadding: 4 },
+        headStyles: { fillColor: [30, 30, 30], textColor: [255, 255, 255], fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [248, 248, 248] },
+        columnStyles: { 2: { cellWidth: 60 } },
+      })
+    }
+
+    // Footer en todas las páginas
+    const totalPaginas = doc.getNumberOfPages()
+    for (let i = 1; i <= totalPaginas; i++) {
+      doc.setPage(i)
+      doc.setFontSize(8)
+      doc.setTextColor(150, 150, 150)
+      doc.text(`MenuApp · ${restaurante.nombre} · Página ${i} de ${totalPaginas}`, ancho / 2, doc.internal.pageSize.getHeight() - 10, { align: 'center' })
+    }
+
+    // Descargar
+    const periodo = filtroTiempo === 'hoy' ? 'hoy' : filtroTiempo === 'semana' ? 'semana' : 'mes'
+    doc.save(`reporte-${restaurante.nombre.toLowerCase().replace(/\s+/g, '-')}-${periodo}.pdf`)
+  }
   const esPro = plan === 'pro'
   const maxEscaneo = escaneosPorDia.length > 0 ? Math.max(...escaneosPorDia.map((d: any) => d.actual), 1) : 1
   const textoFiltro = filtroTiempo === 'hoy' ? 'hoy' : filtroTiempo === 'semana' ? 'esta semana' : 'este mes'
@@ -624,7 +845,7 @@ export default function DashboardPage() {
         {/* Descargar reporte */}
         {esPro && (
           <div style={{ padding: '0 20px', marginBottom: '14px' }}>
-            <div style={{
+            <div onClick={generarReportePDF} style={{
               background: 'var(--text-primary)', borderRadius: 'var(--radius-md)',
               padding: '14px', display: 'flex', justifyContent: 'space-between',
               alignItems: 'center', cursor: 'pointer',
