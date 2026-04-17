@@ -40,7 +40,7 @@ export default function MiMenuPage() {
   const onCropComplete = useCallback((croppedArea: any, croppedAreaPixels: any) => {
     setCroppedAreaPixels(croppedAreaPixels)
   }, [])
-  const [subTab, setSubTab] = useState<'combos' | 'promos' | 'plato-dia'>('combos')
+  const [subTab, setSubTab] = useState<'combos' | 'promos' | 'plato-dia' | 'plato-ganador'>('combos')
   const [mostrarFormCombo, setMostrarFormCombo] = useState(false)
   const [mostrarFormPromo, setMostrarFormPromo] = useState(false)
   const [nuevoCombo, setNuevoCombo] = useState({ nombre: '', descripcion: '', platoIds: [] as string[], precio: '' })
@@ -49,6 +49,9 @@ export default function MiMenuPage() {
   const [guardandoPlatoDia, setGuardandoPlatoDia] = useState(false)
   const [platoDiaActivo, setPlatoDiaActivo] = useState(false)
   const [sorprendemeCatsMenu, setSorprendemeCatsMenu] = useState<string[]>([])
+  const [platoGanadorConfig, setPlatoGanadorConfig] = useState({ platoId: '', titulo: 'Recomendado del chef', descripcion: '' })
+  const [platoGanadorActivo, setPlatoGanadorActivo] = useState(false)
+  const [guardandoGanador, setGuardandoGanador] = useState(false)
   const [horarioCategoria, setHorarioCategoria] = useState<string | null>(null)
   const [avisoHorario, setAvisoHorario] = useState<string[]>([])
   const [confirmarHorario, setConfirmarHorario] = useState(false)
@@ -161,6 +164,33 @@ export default function MiMenuPage() {
     setGuardandoPlatoDia(false)
   }
 
+  async function guardarPlatoGanador() {
+    if (!platoGanadorConfig.platoId || !platoGanadorConfig.titulo || !rest?.id) return
+    setGuardandoGanador(true)
+    const supabase = createClient()
+
+    await supabase.from('plato_ganador').update({ activo: false }).eq('restaurante_id', rest.id)
+
+    await supabase.from('plato_ganador').insert({
+      restaurante_id: rest.id,
+      plato_id: platoGanadorConfig.platoId,
+      titulo: platoGanadorConfig.titulo,
+      descripcion: platoGanadorConfig.descripcion || null,
+      activo: true,
+    })
+
+    setPlatoGanadorActivo(true)
+    setGuardandoGanador(false)
+  }
+
+  async function desactivarPlatoGanador() {
+    if (!rest?.id) return
+    const supabase = createClient()
+    await supabase.from('plato_ganador').update({ activo: false }).eq('restaurante_id', rest.id)
+    setPlatoGanadorActivo(false)
+    setPlatoGanadorConfig({ platoId: '', titulo: 'Recomendado del chef', descripcion: '' })
+  }
+  
   async function desactivarPlatoDia() {
     if (!rest?.id) return
     const supabase = createClient()
@@ -384,6 +414,22 @@ export default function MiMenuPage() {
 
       if (confData?.sorprendeme_categorias) {
         setSorprendemeCatsMenu(confData.sorprendeme_categorias)
+      }
+    // Cargar plato ganador
+      const { data: pgData } = await supabase
+        .from('plato_ganador')
+        .select('*')
+        .eq('restaurante_id', rest!.id)
+        .eq('activo', true)
+        .maybeSingle()
+
+      if (pgData) {
+        setPlatoGanadorConfig({
+          platoId: pgData.plato_id || '',
+          titulo: pgData.titulo || 'Recomendado del chef',
+          descripcion: pgData.descripcion || '',
+        })
+        setPlatoGanadorActivo(true)
       }
       setCargandoMenu(false)
     }
@@ -888,7 +934,7 @@ export default function MiMenuPage() {
             {!esPro ? (
               <div style={{ padding: '40px 20px', textAlign: 'center' }}>
                 <div style={{ fontSize: '40px', marginBottom: '12px' }}>🔒</div>
-                <div style={{ fontSize: '16px', fontWeight: 500, marginBottom: '6px' }}>Combos, Promos y Plato del día</div>
+                <div style={{ fontSize: '16px', fontWeight: 500, marginBottom: '6px' }}>Combos, Promos, Plato del día y Plato ganador</div>
                 <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '20px', lineHeight: 1.6 }}>
                   Crea paquetes con descuento, promociones por día y destaca tu plato estrella. Disponible en el Plan Pro.
                 </div>
@@ -904,7 +950,7 @@ export default function MiMenuPage() {
             <>
             {/* Sub-tabs */}
             <div style={{ padding: '12px 20px 0', display: 'flex', gap: '8px', justifyContent: 'center' }}>
-              {['combos', 'promos', 'plato-dia'].map((sub) => (
+              {['combos', 'promos', 'plato-dia', 'plato-ganador'].map((sub) => (
                 <div key={sub} onClick={() => setSubTab(sub as typeof subTab)}
                   style={{
                     padding: '7px 14px', borderRadius: '20px', fontSize: '12px', cursor: 'pointer',
@@ -912,7 +958,7 @@ export default function MiMenuPage() {
                     color: subTab === sub ? 'var(--bg-secondary)' : 'var(--text-secondary)',
                     border: subTab === sub ? 'none' : '1px solid var(--border-light)',
                   }}>
-                  {sub === 'combos' ? 'Combos' : sub === 'promos' ? 'Promos' : 'Plato del día'}
+                  {sub === 'combos' ? 'Combos' : sub === 'promos' ? 'Promos' : sub === 'plato-dia' ? 'Plato del día' : 'Ganador'}
                 </div>
               ))}
             </div>
@@ -1229,12 +1275,95 @@ export default function MiMenuPage() {
                 </div>
               </div>
             )}
-          
+
+            {/* === PLATO GANADOR === */}
+            {subTab === 'plato-ganador' && (
+              <div style={{ padding: '14px 20px' }}>
+                <div className="card" style={{ padding: '14px', marginBottom: '14px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '4px' }}>Plato ganador</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '14px' }}>
+                    Destaca un plato especial de tu restaurante. Aparecerá con un badge dorado en el menú.
+                  </div>
+
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Título del reconocimiento:</div>
+                  <select className="input" value={platoGanadorConfig.titulo}
+                    onChange={(e) => setPlatoGanadorConfig({ ...platoGanadorConfig, titulo: e.target.value })}
+                    style={{ appearance: 'none', marginBottom: '10px' }}>
+                    <option value="Recomendado del chef">Recomendado del chef</option>
+                    <option value="Favorito de los clientes">Favorito de los clientes</option>
+                    <option value="Plato estrella">Plato estrella</option>
+                    <option value="Especialidad de la casa">Especialidad de la casa</option>
+                    <option value="El más pedido">El más pedido</option>
+                  </select>
+
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Selecciona el plato:</div>
+                  <select className="input" value={platoGanadorConfig.platoId}
+                    onChange={(e) => setPlatoGanadorConfig({ ...platoGanadorConfig, platoId: e.target.value })}
+                    style={{ appearance: 'none', marginBottom: '10px' }}>
+                    <option value="">Seleccionar plato</option>
+                    {categorias.flatMap(c => c.platos).map(p => (
+                      <option key={p.id} value={p.id}>{p.nombre} — ${p.precio.toLocaleString('es-CO')}</option>
+                    ))}
+                  </select>
+                  {platoGanadorConfig.platoId && (() => {
+                    const h = getHorarioPlato(platoGanadorConfig.platoId)
+                    if (!h) return null
+                    return (
+                      <div style={{ fontSize: '11px', color: 'var(--color-warning)', background: 'var(--color-warning-light)', padding: '8px 10px', borderRadius: '6px', marginBottom: '10px' }}>
+                        ⚠ Este plato pertenece a una categoría visible solo de {h.hora_inicio} a {h.hora_fin}. El plato ganador solo se mostrará en ese horario.
+                      </div>
+                    )
+                  })()}
+
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Descripción especial (opcional):</div>
+                  <div style={{ position: 'relative', marginBottom: '10px' }}>
+                    <input className="input" placeholder="Ej: Nuestro plato insignia desde 2020"
+                      value={platoGanadorConfig.descripcion}
+                      onChange={(e) => { if (e.target.value.length <= 100) setPlatoGanadorConfig({ ...platoGanadorConfig, descripcion: e.target.value }) }}
+                      style={{ paddingRight: '50px' }} />
+                    <span style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', fontSize: '10px', color: platoGanadorConfig.descripcion.length > 80 ? 'var(--color-warning)' : 'var(--text-tertiary)' }}>
+                      {platoGanadorConfig.descripcion.length}/100
+                    </span>
+                  </div>
+
+                  {platoGanadorConfig.platoId && (
+                    <div style={{ background: 'var(--color-warning-light)', borderRadius: '8px', padding: '12px', marginBottom: '12px' }}>
+                      <div style={{ fontSize: '11px', fontWeight: 500, color: 'var(--color-warning)', marginBottom: '6px' }}>Vista previa</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                        <span style={{ fontSize: '14px' }}>⭐</span>
+                        <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--color-warning)' }}>{platoGanadorConfig.titulo.toUpperCase()}</span>
+                      </div>
+                      <div style={{ fontSize: '14px', fontWeight: 500 }}>
+                        {categorias.flatMap(c => c.platos).find(p => p.id === platoGanadorConfig.platoId)?.nombre}
+                      </div>
+                      {platoGanadorConfig.descripcion && (
+                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px', fontStyle: 'italic' }}>
+                          "{platoGanadorConfig.descripcion}"
+                        </div>
+                      )}
+                      <div style={{ fontSize: '13px', fontWeight: 500, marginTop: '4px' }}>
+                        ${categorias.flatMap(c => c.platos).find(p => p.id === platoGanadorConfig.platoId)?.precio.toLocaleString('es-CO')}
+                      </div>
+                    </div>
+                  )}
+
+                  <button onClick={guardarPlatoGanador} className="btn-primary" style={{ width: '100%', padding: '12px', fontSize: '13px' }}>
+                    {guardandoGanador ? 'Guardando...' : platoGanadorActivo ? 'Actualizar plato ganador' : 'Guardar plato ganador'}
+                  </button>
+                  {platoGanadorActivo && (
+                    <button onClick={desactivarPlatoGanador} className="btn-outline" style={{ width: '100%', padding: '12px', fontSize: '13px', marginTop: '8px', color: 'var(--color-danger)' }}>
+                      Desactivar plato ganador
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
             </>
             )}
           </>
         )}
-
+        
         {/* === SORPRÉNDEME === */}
         {tabActiva === 'sorprendeme' && !(plan === 'basico' || plan === 'pro') && (
           <div style={{ padding: '40px 20px', textAlign: 'center' }}>

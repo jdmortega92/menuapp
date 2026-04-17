@@ -38,6 +38,7 @@ export default function MenuPublicoPage() {
   const [promoDetalle, setPromoDetalle] = useState<any>(null)
   const [promoSeleccion, setPromoSeleccion] = useState<string[]>([])
   const [mostrarCombos, setMostrarCombos] = useState(false)
+  const [platoGanador, setPlatoGanador] = useState<any>(null)
 
   useEffect(() => {
     async function cargar() {
@@ -162,6 +163,26 @@ export default function MenuPublicoPage() {
         })))
       }
 
+      // Plato ganador
+      const { data: pgData } = await supabase
+        .from('plato_ganador')
+        .select('*, platos(*)')
+        .eq('restaurante_id', rest.id)
+        .eq('activo', true)
+        .maybeSingle()
+
+      if (pgData?.platos) {
+        setPlatoGanador({
+          id: pgData.platos.id,
+          nombre: pgData.platos.nombre,
+          precio: pgData.platos.precio,
+          descripcion: pgData.platos.descripcion,
+          foto_url: pgData.platos.foto_url,
+          titulo: pgData.titulo,
+          descripcionEspecial: pgData.descripcion,
+        })
+      }
+
       setCargando(false)
     }
     cargar()
@@ -229,6 +250,7 @@ export default function MenuPublicoPage() {
 
   // Plato del día: verificar si es visible
   const platoDiaVisible = platoDia && (!config?.menu_por_horario_activo || platosVisiblesIds.has(platoDia.id))
+  const platoGanadorVisible = platoGanador && (!config?.menu_por_horario_activo || platosVisiblesIds.has(platoGanador.id))
 
   // Sorpréndeme: verificar si ambas categorías están activas
   const sorprendemeVisible = (() => {
@@ -518,10 +540,45 @@ export default function MenuPublicoPage() {
           </div>
         )}
 
+        {/* Plato ganador */}
+        {esProPublico && config?.plato_ganador_activo && platoGanadorVisible && !busqueda.trim() && (
+          <div style={{ padding: '0 16px 10px' }}>
+            <div onClick={() => setPlatoDetalle(platoGanador.id)} style={{
+              background: `linear-gradient(135deg, #FFF8E1 0%, #FFF3CD 100%)`,
+              border: '1px solid #F2A62330',
+              borderRadius: '10px', padding: '12px', cursor: 'pointer',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                <span style={{ fontSize: '16px' }}>⭐</span>
+                <span style={{ fontSize: '11px', fontWeight: 600, color: '#B8860B', letterSpacing: '0.5px' }}>{platoGanador.titulo?.toUpperCase() || 'RECOMENDADO DEL CHEF'}</span>
+              </div>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <div style={{ width: '56px', height: '56px', borderRadius: '10px', flexShrink: 0, background: '#F2A62315', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                  {esBasicoPublico && platoGanador.foto_url ? (
+                    <img src={platoGanador.foto_url} alt={platoGanador.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : (
+                    <span style={{ fontSize: '20px', fontWeight: 500, color: '#B8860B' }}>{platoGanador.nombre?.charAt(0)}</span>
+                  )}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: '14px', fontWeight: 500 }}>{platoGanador.nombre}</div>
+                  {platoGanador.descripcionEspecial && (
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px', fontStyle: 'italic' }}>"{platoGanador.descripcionEspecial}"</div>
+                  )}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
+                    <span style={{ fontSize: '14px', fontWeight: 500, color: '#B8860B' }}>${platoGanador.precio?.toLocaleString('es-CO')}</span>
+                    <Qty id={platoGanador.id} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Plato del día */}
         {esProPublico && config?.plato_dia_activo && platoDiaVisible && !busqueda.trim() && (
           <div style={{ padding: '0 16px 10px' }}>
-            <div style={{ background: `${color}10`, border: `1px solid ${color}30`, borderRadius: '10px', padding: '12px' }}>
+            <div onClick={() => setPlatoDetalle(platoDia.id)} style={{ background: `${color}10`, border: `1px solid ${color}30`, borderRadius: '10px', padding: '12px', cursor: 'pointer' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                 <span style={{ fontSize: '11px', fontWeight: 500, color: color }}>⏰ PLATO DEL DÍA</span>
                 <span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>Hasta las {platoDia.horaFin}</span>
