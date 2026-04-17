@@ -28,6 +28,12 @@ export default function DashboardPage() {
     totalResenas: 0,
   })
 
+  const [statsAnterior, setStatsAnterior] = useState({
+    escaneos: 0,
+    visitas: 0,
+    pedidosWhatsapp: 0,
+  })
+
   const [platosMasVistos, setPlatosMasVistos] = useState<any[]>([])
   const [platosMenusVistos, setPlatosMenusVistos] = useState<any[]>([])
   const [horariosPico, setHorariosPico] = useState<any[]>([])
@@ -41,13 +47,43 @@ export default function DashboardPage() {
     async function cargarStats() {
       const supabase = createClient()
       const hoy = new Date()
+      // Fecha en zona horaria Colombia (UTC-5) para evitar desfase con toISOString
+      function fechaColombia(d: Date): string {
+        const offsetCol = -5 * 60 // Colombia está en UTC-5 (en minutos)
+        const offsetLocal = d.getTimezoneOffset()
+        const ajuste = (offsetLocal - offsetCol) * 60 * 1000
+        const fechaAjustada = new Date(d.getTime() - ajuste)
+        return fechaAjustada.toISOString().split('T')[0]
+      }
+      const hoyStr = fechaColombia(hoy)
       let desde = ''
+      let hasta = hoyStr
+      let desdeAnterior = ''
+      let hastaAnterior = ''
+
       if (filtroTiempo === 'hoy') {
-        desde = hoy.toISOString().split('T')[0]
+        desde = hoyStr
+        hasta = hoyStr
+        const ayer = fechaColombia(new Date(hoy.getTime() - 24 * 60 * 60 * 1000))
+        desdeAnterior = ayer
+        hastaAnterior = ayer
       } else if (filtroTiempo === 'semana') {
-        desde = new Date(hoy.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+        desde = fechaColombia(new Date(hoy.getTime() - 7 * 24 * 60 * 60 * 1000))
+        hasta = hoyStr
+        desdeAnterior = fechaColombia(new Date(hoy.getTime() - 14 * 24 * 60 * 60 * 1000))
+        hastaAnterior = fechaColombia(new Date(hoy.getTime() - 8 * 24 * 60 * 60 * 1000))
       } else {
-        desde = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().split('T')[0]
+        const yyyy = hoy.getFullYear()
+        const mm = String(hoy.getMonth() + 1).padStart(2, '0')
+        desde = `${yyyy}-${mm}-01`
+        hasta = hoyStr
+
+        const mesAnterior = hoy.getMonth() === 0 ? 12 : hoy.getMonth()
+        const yearAnterior = hoy.getMonth() === 0 ? yyyy - 1 : yyyy
+        const mmAnterior = String(mesAnterior).padStart(2, '0')
+        const ultimoDiaMesAnterior = new Date(yearAnterior, mesAnterior, 0).getDate()
+        desdeAnterior = `${yearAnterior}-${mmAnterior}-01`
+        hastaAnterior = `${yearAnterior}-${mmAnterior}-${String(ultimoDiaMesAnterior).padStart(2, '0')}`
       }
 
       // Visitas al menú
@@ -56,6 +92,8 @@ export default function DashboardPage() {
         .select('*', { count: 'exact', head: true })
         .eq('restaurante_id', rest!.id)
         .gte('fecha', desde)
+        .lte('fecha', hasta)
+
 
       // Pedidos WhatsApp
       const { count: pedidos } = await supabase
@@ -63,6 +101,7 @@ export default function DashboardPage() {
         .select('*', { count: 'exact', head: true })
         .eq('restaurante_id', rest!.id)
         .gte('fecha', desde)
+        .lte('fecha', hasta)
 
       // Calificación promedio
       const { data: calData } = await supabase
@@ -81,6 +120,7 @@ export default function DashboardPage() {
         .select('*', { count: 'exact', head: true })
         .eq('restaurante_id', rest!.id)
         .gte('fecha', desde)
+        .lte('fecha', hasta)
 
       // Platos más vistos
       const { data: vistasData } = await supabase
@@ -88,6 +128,7 @@ export default function DashboardPage() {
         .select('plato_id')
         .eq('restaurante_id', rest!.id)
         .gte('fecha', desde)
+        .lte('fecha', hasta)
 
       if (vistasData && vistasData.length > 0) {
         const conteo: Record<string, number> = {}
@@ -124,6 +165,7 @@ export default function DashboardPage() {
         .select('created_at')
         .eq('restaurante_id', rest!.id)
         .gte('fecha', desde)
+        .lte('fecha', hasta)
 
       if (visitasHora && visitasHora.length > 0) {
         const porHora: Record<number, number> = {}
@@ -143,35 +185,59 @@ export default function DashboardPage() {
         setHorariosPico([])
       }
 
-      // Visitas por día de la semana
+      // Visitas por día con fechas reales
       const { data: visitasDia } = await supabase
         .from('visitas_menu')
         .select('fecha')
         .eq('restaurante_id', rest!.id)
         .gte('fecha', desde)
+        .lte('fecha', hasta)
 
+      const diasCortos = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb']
+
+      // Calcular lunes de esta semana
+      const diaHoy = hoy.getDay()
+      const diasDesdeLunesSem = diaHoy === 0 ? 6 : diaHoy - 1
+      const lunesSemana = new Date(hoy)
+      lunesSemana.setDate(hoy.getDate() - diasDesdeLunesSem)
+      lunesSemana.setHours(0, 0, 0, 0)
+
+      // Construir array de 7 días (lun a dom) con fechas reales
+      const diasConFecha: any[] = []
+      for (let i = 0; i < 7; i++) {
+        const fecha = new Date(lunesSemana)
+        fecha.setDate(lunesSemana.getDate() + i)
+        const yyyy = fecha.getFullYear()
+        const mm = String(fecha.getMonth() + 1).padStart(2, '0')
+        const dd = String(fecha.getDate()).padStart(2, '0')
+        const fechaStr = `${yyyy}-${mm}-${dd}`
+
+        const hoyComparar = fechaColombia(hoy)
+        const esFuturo = fechaStr > hoyComparar
+        const esHoy = fechaStr === hoyComparar
+
+        diasConFecha.push({
+          dia: diasCortos[fecha.getDay()],
+          numero: fecha.getDate(),
+          fecha: fechaStr,
+          actual: 0,
+          esFuturo,
+          esHoy,
+        })
+      }
+
+      // Llenar con datos reales
       if (visitasDia && visitasDia.length > 0) {
         const porFechaConteo: Record<string, number> = {}
         visitasDia.forEach((v: any) => {
           porFechaConteo[v.fecha] = (porFechaConteo[v.fecha] || 0) + 1
         })
-        const diasSemana = ['D', 'L', 'M', 'Mi', 'J', 'V', 'S']
-        const porDia: Record<number, number> = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 }
-        Object.entries(porFechaConteo).forEach(([fecha, cantidad]) => {
-          const partes = fecha.split('-')
-          const d = new Date(parseInt(partes[0]), parseInt(partes[1]) - 1, parseInt(partes[2]))
-          porDia[d.getDay()] = (porDia[d.getDay()] || 0) + cantidad
+        diasConFecha.forEach((d: any) => {
+          d.actual = porFechaConteo[d.fecha] || 0
         })
-        setEscaneosPorDia([1, 2, 3, 4, 5, 6, 0].map((d: number) => ({
-          dia: diasSemana[d],
-          actual: porDia[d] || 0,
-        })))
-      } else {
-        setEscaneosPorDia([1, 2, 3, 4, 5, 6, 0].map((d: number) => ({
-          dia: ['D', 'L', 'M', 'Mi', 'J', 'V', 'S'][d],
-          actual: 0,
-        })))
       }
+
+      setEscaneosPorDia(diasConFecha)
 
       // Últimas reseñas
       const { data: resenasData } = await supabase
@@ -205,6 +271,34 @@ export default function DashboardPage() {
         setPlatosMasVistos([])
         setPlatosMenusVistos([])
       }
+
+      // ===== Datos del periodo anterior =====
+      const { count: visitasAnt } = await supabase
+        .from('visitas_menu')
+        .select('*', { count: 'exact', head: true })
+        .eq('restaurante_id', rest!.id)
+        .gte('fecha', desdeAnterior)
+        .lte('fecha', hastaAnterior)
+
+      const { count: vistasPlatosAnt } = await supabase
+        .from('vistas_platos')
+        .select('*', { count: 'exact', head: true })
+        .eq('restaurante_id', rest!.id)
+        .gte('fecha', desdeAnterior)
+        .lte('fecha', hastaAnterior)
+
+      const { count: pedidosAnt } = await supabase
+        .from('pedidos_whatsapp')
+        .select('*', { count: 'exact', head: true })
+        .eq('restaurante_id', rest!.id)
+        .gte('fecha', desdeAnterior)
+        .lte('fecha', hastaAnterior)
+
+      setStatsAnterior({
+        escaneos: visitasAnt || 0,
+        visitas: vistasPlatosAnt || 0,
+        pedidosWhatsapp: pedidosAnt || 0,
+      })
 
       setStats({
         escaneos: visitas || 0,
@@ -443,6 +537,158 @@ export default function DashboardPage() {
   const maxEscaneo = escaneosPorDia.length > 0 ? Math.max(...escaneosPorDia.map((d: any) => d.actual), 1) : 1
   const textoFiltro = filtroTiempo === 'hoy' ? 'hoy' : filtroTiempo === 'semana' ? 'esta semana' : 'este mes'
 
+  // ===== Contexto temporal =====
+  const hoyDate = new Date()
+  const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+  const mesesCorto = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+  const diasSemanaLargo = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
+
+  function obtenerContextoTemporal() {
+    if (filtroTiempo === 'hoy') {
+      return {
+        titulo: 'Hoy',
+        rango: `${diasSemanaLargo[hoyDate.getDay()]} ${hoyDate.getDate()} de ${meses[hoyDate.getMonth()]}`,
+        progreso: '',
+      }
+    }
+    if (filtroTiempo === 'semana') {
+      // Semana desde lunes (estándar ISO colombiano)
+      const diaActual = hoyDate.getDay()
+      const diasDesdeLunes = diaActual === 0 ? 6 : diaActual - 1
+      const lunes = new Date(hoyDate)
+      lunes.setDate(hoyDate.getDate() - diasDesdeLunes)
+      const domingo = new Date(lunes)
+      domingo.setDate(lunes.getDate() + 6)
+
+      const mismoMes = lunes.getMonth() === domingo.getMonth()
+      const rango = mismoMes
+        ? `${lunes.getDate()} — ${domingo.getDate()} ${mesesCorto[lunes.getMonth()]}`
+        : `${lunes.getDate()} ${mesesCorto[lunes.getMonth()]} — ${domingo.getDate()} ${mesesCorto[domingo.getMonth()]}`
+
+      return {
+        titulo: 'Esta semana',
+        rango,
+        progreso: `día ${diasDesdeLunes + 1} de 7`,
+      }
+    }
+    // Mes
+    const diasEnMes = new Date(hoyDate.getFullYear(), hoyDate.getMonth() + 1, 0).getDate()
+    return {
+      titulo: 'Este mes',
+      rango: `${meses[hoyDate.getMonth()].charAt(0).toUpperCase() + meses[hoyDate.getMonth()].slice(1)} ${hoyDate.getFullYear()}`,
+      progreso: `día ${hoyDate.getDate()} de ${diasEnMes}`,
+    }
+  }
+
+  const contextoTemporal = obtenerContextoTemporal()
+
+  // ===== Comparación con periodo anterior =====
+  const labelAnterior = filtroTiempo === 'hoy' ? 'ayer' : filtroTiempo === 'semana' ? 'la semana pasada' : 'el mes pasado'
+
+  function calcularVariacion(actual: number, anterior: number) {
+    if (anterior === 0 && actual === 0) return { tipo: 'neutro', texto: '—', valor: 0 }
+    if (anterior === 0) return { tipo: 'nuevo', texto: 'nuevo', valor: 0 }
+    const pct = Math.round(((actual - anterior) / anterior) * 100)
+    if (pct === 0) return { tipo: 'neutro', texto: 'igual', valor: 0 }
+    return {
+      tipo: pct > 0 ? 'positivo' : 'negativo',
+      texto: `${pct > 0 ? '↑' : '↓'} ${Math.abs(pct)}%`,
+      valor: pct,
+    }
+  }
+
+  function BadgeVariacion({ variacion }: { variacion: ReturnType<typeof calcularVariacion> }) {
+    if (variacion.tipo === 'neutro' && variacion.texto === '—') return null
+    const colores = {
+      positivo: { bg: 'var(--color-success-light)', text: 'var(--color-success)' },
+      negativo: { bg: 'var(--color-danger-light)', text: 'var(--color-danger)' },
+      neutro: { bg: 'var(--bg-tertiary)', text: 'var(--text-tertiary)' },
+      nuevo: { bg: 'var(--color-info-light)', text: 'var(--color-info)' },
+    }
+    const c = colores[variacion.tipo as keyof typeof colores]
+    return (
+      <span style={{
+        fontSize: '10px',
+        fontWeight: 500,
+        padding: '2px 6px',
+        borderRadius: '4px',
+        background: c.bg,
+        color: c.text,
+        whiteSpace: 'nowrap',
+      }}>
+        {variacion.texto}
+      </span>
+    )
+  }
+
+  const varEscaneos = calcularVariacion(stats.escaneos, statsAnterior.escaneos)
+  const varVisitas = calcularVariacion(stats.visitas, statsAnterior.visitas)
+  const varPedidos = calcularVariacion(stats.pedidosWhatsapp, statsAnterior.pedidosWhatsapp)
+  // ===== Embudo de conversión inteligente =====
+  const embudoData = (() => {
+    const visitasMenu = stats.escaneos
+    const vieronPlatos = stats.visitas
+    const pidieron = stats.pedidosWhatsapp
+
+    // Tasas de paso entre etapas
+    const tasaExploracion = visitasMenu > 0 ? (vieronPlatos / visitasMenu) * 100 : 0
+    const tasaPedido = vieronPlatos > 0 ? (pidieron / vieronPlatos) * 100 : 0
+    const conversionFinal = visitasMenu > 0 ? (pidieron / visitasMenu) * 100 : 0
+
+    // Fuga en cada etapa (cuántos se fueron)
+    const fugaExploracion = visitasMenu > 0 ? ((visitasMenu - vieronPlatos) / visitasMenu) * 100 : 0
+    const fugaPedido = vieronPlatos > 0 ? ((vieronPlatos - pidieron) / vieronPlatos) * 100 : 0
+
+    // Benchmark del sector (restaurantes con menú digital)
+    // Fuentes: promedio observado 8-15% conversión final
+    const benchmarkConversion = 10
+    const diferenciaBenchmark = conversionFinal - benchmarkConversion
+
+    // Identificar la mayor fuga
+    const mayorFuga = fugaExploracion >= fugaPedido
+      ? { etapa: 'menu_a_plato', pct: Math.round(fugaExploracion), perdidos: visitasMenu - vieronPlatos }
+      : { etapa: 'plato_a_pedido', pct: Math.round(fugaPedido), perdidos: vieronPlatos - pidieron }
+
+    // Diagnóstico del rendimiento general
+    let diagnostico: { tipo: 'excelente' | 'bueno' | 'regular' | 'mejorable' | 'sin_datos'; mensaje: string } = {
+      tipo: 'sin_datos',
+      mensaje: 'Comparte tu menú para empezar a ver datos de conversión.',
+    }
+    if (visitasMenu > 0) {
+      if (conversionFinal >= 15) {
+        diagnostico = { tipo: 'excelente', mensaje: `Conversión del ${Math.round(conversionFinal)}% — por encima del promedio del sector (10%). Tu menú está funcionando muy bien.` }
+      } else if (conversionFinal >= 10) {
+        diagnostico = { tipo: 'bueno', mensaje: `Conversión del ${Math.round(conversionFinal)}% — en el promedio del sector. Hay espacio para optimizar.` }
+      } else if (conversionFinal >= 5) {
+        diagnostico = { tipo: 'regular', mensaje: `Conversión del ${Math.round(conversionFinal)}% — por debajo del promedio (10%). Hay oportunidades claras de mejora.` }
+      } else {
+        diagnostico = { tipo: 'mejorable', mensaje: `Conversión del ${Math.round(conversionFinal)}% — muy por debajo del promedio (10%). Revisa los puntos de fuga.` }
+      }
+    }
+
+    // Recomendación según dónde está la mayor fuga
+    let recomendacion = ''
+    if (visitasMenu >= 10) {
+      if (mayorFuga.etapa === 'menu_a_plato' && mayorFuga.pct >= 50) {
+        recomendacion = 'Muchos abren el menú pero no entran a ningún plato. Mejora las fotos de portada y los nombres de las categorías.'
+      } else if (mayorFuga.etapa === 'plato_a_pedido' && mayorFuga.pct >= 70) {
+        recomendacion = 'Ven los platos pero no piden. Revisa precios, descripciones y tiempos de entrega que muestras.'
+      }
+    }
+
+    return {
+      visitasMenu, vieronPlatos, pidieron,
+      tasaExploracion: Math.round(tasaExploracion),
+      tasaPedido: Math.round(tasaPedido),
+      conversionFinal: Math.round(conversionFinal * 10) / 10,
+      mayorFuga,
+      diagnostico,
+      recomendacion,
+      benchmarkConversion,
+      diferenciaBenchmark: Math.round(diferenciaBenchmark * 10) / 10,
+    }
+  })()
+
   useEffect(() => {
     if (!cargando && !usuario) {
       router.push('/login')
@@ -542,55 +788,66 @@ export default function DashboardPage() {
           </>
         )}
 
-        {/* Acciones rápidas */}
-        <div style={{ padding: '0 20px', marginBottom: '14px' }}>
-          <div style={{ display: 'flex', gap: '10px' }}>
-            {[
-              { icon: '+', label: 'Agregar plato', href: '/menu' },
-              { icon: '⊘', label: 'Marcar agotado', href: '/menu' },
-              { icon: '◻', label: 'Ver QR', href: '/qr' },
-            ].map((a: any, i: number) => (
-              <div key={i} onClick={() => router.push(a.href)} className="card" style={{
-                flex: 1, padding: '12px', textAlign: 'center', cursor: 'pointer',
-              }}>
-                <div style={{ fontSize: '18px', marginBottom: '4px' }}>{a.icon}</div>
-                <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{a.label}</div>
-              </div>
-            ))}
-          </div>
-        </div>
 
-        {/* Estadísticas header */}
-        <div style={{ padding: '0 20px', marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ fontSize: '14px', fontWeight: 500 }}>Estadísticas</div>
+        {/* Contexto temporal */}
+        <div style={{ padding: '0 20px', marginBottom: '14px' }}>
           <div style={{ position: 'relative' }}>
-            <div onClick={() => setMostrarFiltro(!mostrarFiltro)} style={{
-              border: '1px solid var(--border-light)', borderRadius: 'var(--radius-md)',
-              padding: '6px 12px', fontSize: '12px', color: 'var(--text-secondary)',
-              background: 'var(--bg-secondary)', cursor: 'pointer',
+            <div className="card" style={{
+              padding: '14px 16px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
             }}>
-              {filtroTiempo === 'hoy' ? 'Hoy' : filtroTiempo === 'semana' ? 'Esta semana' : 'Este mes'} ↓
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>
+                  Estás viendo
+                </div>
+                <div style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)' }}>
+                  {contextoTemporal.titulo}
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                  {contextoTemporal.rango}
+                  {contextoTemporal.progreso && (
+                    <span style={{ color: 'var(--text-tertiary)' }}> · {contextoTemporal.progreso}</span>
+                  )}
+                </div>
+              </div>
+              <div onClick={() => setMostrarFiltro(!mostrarFiltro)} style={{
+                border: '1px solid var(--border-light)',
+                borderRadius: 'var(--radius-md)',
+                padding: '8px 14px',
+                fontSize: '12px',
+                color: 'var(--text-secondary)',
+                background: 'var(--bg-secondary)',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                marginLeft: '12px',
+              }}>
+                Cambiar ↓
+              </div>
             </div>
+
             {mostrarFiltro && (
               <>
                 <div onClick={() => setMostrarFiltro(false)} style={{ position: 'fixed', inset: 0, zIndex: 60 }} />
                 <div style={{
-                  position: 'absolute', right: 0, top: '36px', zIndex: 70,
+                  position: 'absolute', right: '16px', top: 'calc(100% - 4px)', zIndex: 70,
                   background: 'var(--bg-secondary)', border: '1px solid var(--border-light)',
-                  borderRadius: 'var(--radius-sm)', overflow: 'hidden', width: '140px',
+                  borderRadius: 'var(--radius-md)', overflow: 'hidden', width: '160px',
                   boxShadow: 'var(--shadow-lg)',
                 }}>
                   {[
                     { id: 'hoy', label: 'Hoy' },
                     { id: 'semana', label: 'Esta semana' },
                     { id: 'mes', label: 'Este mes' },
-                  ].map((f: any) => (
+                  ].map((f: any, i: number) => (
                     <div key={f.id} onClick={() => { setFiltroTiempo(f.id as any); setMostrarFiltro(false) }}
                       style={{
-                        padding: '10px 14px', fontSize: '12px', cursor: 'pointer',
+                        padding: '11px 14px', fontSize: '13px', cursor: 'pointer',
                         background: filtroTiempo === f.id ? 'var(--color-info-light)' : 'transparent',
                         color: filtroTiempo === f.id ? 'var(--color-info)' : 'var(--text-primary)',
-                        borderBottom: '1px solid var(--border-light)',
+                        borderBottom: i < 2 ? '1px solid var(--border-light)' : 'none',
+                        fontWeight: filtroTiempo === f.id ? 500 : 400,
                       }}>
                       {f.label}
                     </div>
@@ -605,14 +862,24 @@ export default function DashboardPage() {
         <div style={{ padding: '0 20px', marginBottom: '14px' }}>
           <div style={{ display: 'flex', gap: '10px' }}>
             <div className="card" style={{ flex: 1, padding: '14px' }}>
-              <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Visitas al menú</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '6px' }}>
+                <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Visitas al menú</div>
+                <BadgeVariacion variacion={varEscaneos} />
+              </div>
               <div style={{ fontSize: '26px', fontWeight: 500, marginTop: '4px' }}>{stats.escaneos}</div>
-              <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>{textoFiltro}</div>
+              <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '2px' }}>
+                vs {statsAnterior.escaneos} {labelAnterior}
+              </div>
             </div>
             <div className="card" style={{ flex: 1, padding: '14px' }}>
-              <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Platos vistos</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '6px' }}>
+                <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Platos vistos</div>
+                <BadgeVariacion variacion={varVisitas} />
+              </div>
               <div style={{ fontSize: '26px', fontWeight: 500, marginTop: '4px' }}>{stats.visitas}</div>
-              <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>{textoFiltro}</div>
+              <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '2px' }}>
+                vs {statsAnterior.visitas} {labelAnterior}
+              </div>
             </div>
           </div>
         </div>
@@ -631,9 +898,14 @@ export default function DashboardPage() {
           <div style={{ padding: '0 20px', marginBottom: '14px' }}>
             <div style={{ display: 'flex', gap: '10px' }}>
               <div className="card" style={{ flex: 1, padding: '14px' }}>
-                <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Pedidos WhatsApp</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '6px' }}>
+                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Pedidos WhatsApp</div>
+                  <BadgeVariacion variacion={varPedidos} />
+                </div>
                 <div style={{ fontSize: '26px', fontWeight: 500, marginTop: '4px' }}>{stats.pedidosWhatsapp}</div>
-                <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>{textoFiltro}</div>
+                <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '2px' }}>
+                  vs {statsAnterior.pedidosWhatsapp} {labelAnterior}
+                </div>
               </div>
               <div className="card" style={{ flex: 1, padding: '14px' }}>
                 <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Calificación promedio</div>
@@ -641,7 +913,7 @@ export default function DashboardPage() {
                   <div style={{ fontSize: '26px', fontWeight: 500 }}>{stats.calificacion}</div>
                   <div style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>/5</div>
                 </div>
-                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>de {stats.totalResenas} reseñas</div>
+                <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '2px' }}>de {stats.totalResenas} reseñas</div>
               </div>
             </div>
           </div>
@@ -665,23 +937,142 @@ export default function DashboardPage() {
         {/* Embudo de conversión */}
         {esPro ? (
           <div style={{ padding: '0 20px', marginBottom: '14px' }}>
-            <div className="card" style={{ padding: '14px' }}>
-              <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '12px' }}>Embudo de conversión</div>
-              {[
-                { label: 'Visitaron el menú', valor: stats.escaneos, pct: 100 },
-                { label: 'Vieron platos', valor: stats.visitas, pct: stats.escaneos > 0 ? Math.round((stats.visitas / stats.escaneos) * 100) : 0 },
-                { label: 'Pidieron por WhatsApp', valor: stats.pedidosWhatsapp, pct: stats.escaneos > 0 ? Math.round((stats.pedidosWhatsapp / stats.escaneos) * 100) : 0 },
-              ].map((item: any, i: number) => (
-                <div key={i} style={{ marginBottom: i < 2 ? '10px' : 0 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '4px' }}>
-                    <span>{item.label}</span>
-                    <span style={{ fontWeight: 500 }}>{item.valor} <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>({item.pct}%)</span></span>
+            <div className="card" style={{ padding: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '16px' }}>
+                <div style={{ fontSize: '13px', fontWeight: 500 }}>Embudo de conversión</div>
+                {embudoData.visitasMenu > 0 && (
+                  <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
+                    {embudoData.conversionFinal}% final
                   </div>
-                  <div style={{ height: '8px', background: 'var(--bg-tertiary)', borderRadius: '4px', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${item.pct}%`, background: i === 2 ? 'var(--color-green)' : 'var(--color-info)', borderRadius: '4px', opacity: 1 - i * 0.2 }} />
+                )}
+              </div>
+
+              {/* Etapa 1: Visitaron el menú */}
+              <div style={{ marginBottom: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '6px' }}>
+                  <span style={{ fontSize: '13px' }}>Abrieron el menú</span>
+                  <span style={{ fontSize: '13px', fontWeight: 500 }}>{embudoData.visitasMenu}</span>
+                </div>
+                <div style={{ height: '6px', background: 'var(--color-info)', borderRadius: '3px' }} />
+              </div>
+
+              {/* Paso 1 → 2 */}
+              {embudoData.visitasMenu > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '0 0 8px 4px', padding: '4px 0' }}>
+                  <span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>↓</span>
+                  <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>
+                    {embudoData.tasaExploracion}% continuó explorando
+                    {embudoData.mayorFuga.etapa === 'menu_a_plato' && embudoData.mayorFuga.pct >= 50 && (
+                      <span style={{ color: 'var(--color-warning)', marginLeft: '6px' }}>· mayor fuga</span>
+                    )}
+                  </span>
+                </div>
+              )}
+
+              {/* Etapa 2: Vieron platos */}
+              <div style={{ marginBottom: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '6px' }}>
+                  <span style={{ fontSize: '13px' }}>Vieron detalle de platos</span>
+                  <span style={{ fontSize: '13px', fontWeight: 500 }}>{embudoData.vieronPlatos}</span>
+                </div>
+                <div style={{ height: '6px', background: 'var(--bg-tertiary)', borderRadius: '3px', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${embudoData.tasaExploracion}%`, background: 'var(--color-info)', borderRadius: '3px', transition: 'width 0.4s' }} />
+                </div>
+              </div>
+
+              {/* Paso 2 → 3 */}
+              {embudoData.vieronPlatos > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '0 0 8px 4px', padding: '4px 0' }}>
+                  <span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>↓</span>
+                  <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>
+                    {embudoData.tasaPedido}% llegó al pedido
+                    {embudoData.mayorFuga.etapa === 'plato_a_pedido' && embudoData.mayorFuga.pct >= 50 && (
+                      <span style={{ color: 'var(--color-warning)', marginLeft: '6px' }}>· mayor fuga</span>
+                    )}
+                  </span>
+                </div>
+              )}
+
+              {/* Etapa 3: Pidieron */}
+              <div style={{ marginBottom: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '6px' }}>
+                  <span style={{ fontSize: '13px' }}>Pidieron por WhatsApp</span>
+                  <span style={{ fontSize: '13px', fontWeight: 500 }}>{embudoData.pidieron}</span>
+                </div>
+                <div style={{ height: '6px', background: 'var(--bg-tertiary)', borderRadius: '3px', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${embudoData.visitasMenu > 0 ? (embudoData.pidieron / embudoData.visitasMenu) * 100 : 0}%`, background: 'var(--color-green)', borderRadius: '3px', transition: 'width 0.4s' }} />
+                </div>
+              </div>
+
+              {/* Diagnóstico principal */}
+              {embudoData.diagnostico.tipo !== 'sin_datos' && (
+                <div style={{
+                  background: embudoData.diagnostico.tipo === 'excelente' ? 'var(--color-success-light)'
+                    : embudoData.diagnostico.tipo === 'bueno' ? 'var(--color-info-light)'
+                    : embudoData.diagnostico.tipo === 'regular' ? 'var(--color-warning-light)'
+                    : 'var(--color-danger-light)',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '10px 12px',
+                  marginBottom: embudoData.recomendacion ? '8px' : 0,
+                }}>
+                  <div style={{
+                    fontSize: '11px',
+                    fontWeight: 500,
+                    marginBottom: '3px',
+                    color: embudoData.diagnostico.tipo === 'excelente' ? 'var(--color-success)'
+                      : embudoData.diagnostico.tipo === 'bueno' ? 'var(--color-info)'
+                      : embudoData.diagnostico.tipo === 'regular' ? 'var(--color-warning)'
+                      : 'var(--color-danger)',
+                  }}>
+                    {embudoData.diagnostico.tipo === 'excelente' ? 'Rendimiento excelente'
+                      : embudoData.diagnostico.tipo === 'bueno' ? 'Rendimiento bueno'
+                      : embudoData.diagnostico.tipo === 'regular' ? 'Rendimiento regular'
+                      : 'Rendimiento bajo'}
+                  </div>
+                  <div style={{
+                    fontSize: '11px',
+                    lineHeight: 1.4,
+                    color: embudoData.diagnostico.tipo === 'excelente' ? 'var(--color-success)'
+                      : embudoData.diagnostico.tipo === 'bueno' ? 'var(--color-info)'
+                      : embudoData.diagnostico.tipo === 'regular' ? 'var(--color-warning)'
+                      : 'var(--color-danger)',
+                    opacity: 0.85,
+                  }}>
+                    {embudoData.diagnostico.mensaje}
                   </div>
                 </div>
-              ))}
+              )}
+
+              {/* Recomendación accionable */}
+              {embudoData.recomendacion && (
+                <div style={{
+                  background: 'var(--bg-tertiary)',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '10px 12px',
+                  borderLeft: '2px solid var(--color-warning)',
+                }}>
+                  <div style={{ fontSize: '11px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '3px' }}>
+                    Recomendación
+                  </div>
+                  <div style={{ fontSize: '11px', lineHeight: 1.4, color: 'var(--text-secondary)' }}>
+                    {embudoData.recomendacion}
+                  </div>
+                </div>
+              )}
+
+              {/* Estado vacío */}
+              {embudoData.visitasMenu === 0 && (
+                <div style={{
+                  background: 'var(--color-info-light)',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '10px 12px',
+                  fontSize: '11px',
+                  color: 'var(--color-info)',
+                  lineHeight: 1.4,
+                }}>
+                  Aún no hay datos de conversión. Comparte tu QR o enlace para empezar a medir cómo los comensales recorren tu menú.
+                </div>
+              )}
             </div>
           </div>
         ) : !esBasico ? (
@@ -689,33 +1080,148 @@ export default function DashboardPage() {
             <div className="card" style={{ padding: '20px', textAlign: 'center', opacity: 0.5 }}>
               <div style={{ fontSize: '30px', marginBottom: '6px' }}>🔒</div>
               <div style={{ fontSize: '13px', fontWeight: 500 }}>Embudo de conversión</div>
-              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>Disponible en Plan Básico</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>Disponible en Plan Pro</div>
             </div>
           </div>
         ) : null}
 
-        {/* Visitas por día */}
-        {esBasico && filtroTiempo !== 'hoy' && escaneosPorDia.length > 0 && escaneosPorDia.some((d: any) => d.actual > 0) && (
-          <div style={{ padding: '0 20px', marginBottom: '14px' }}>
-            <div className="card" style={{ padding: '14px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-                <div style={{ fontSize: '13px', fontWeight: 500 }}>Visitas por día</div>
-                <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>Total: {escaneosPorDia.reduce((s: number, d: any) => s + d.actual, 0)}</div>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'end', gap: '6px', height: '100px' }}>
-                {escaneosPorDia.map((d: any, i: number) => (
-                  <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                    <span style={{ fontSize: '10px', color: d.actual > 0 ? 'var(--color-info)' : 'var(--text-tertiary)', fontWeight: 500 }}>{d.actual > 0 ? d.actual : ''}</span>
-                    <div style={{ width: '100%', background: d.actual > 0 ? 'var(--color-info)' : 'var(--bg-tertiary)', borderRadius: '3px', height: `${d.actual > 0 ? Math.max((d.actual / maxEscaneo) * 70, 6) : 3}px`, transition: 'height 0.3s' }} />
+        {/* Actividad por día */}
+        {esBasico && filtroTiempo !== 'hoy' && (() => {
+          const diasConDatos = escaneosPorDia.filter((d: any) => !d.esFuturo && d.actual > 0)
+          const totalVisitasSemana = escaneosPorDia.reduce((s: number, d: any) => s + d.actual, 0)
+          const promedioDiario = diasConDatos.length > 0 ? Math.round(totalVisitasSemana / diasConDatos.length) : 0
+          const maxDia = Math.max(...escaneosPorDia.map((d: any) => d.actual), 1)
+
+          // Mejor día real (solo de días con datos)
+          const mejorDiaSemana = [...diasConDatos].sort((a: any, b: any) => b.actual - a.actual)[0]
+
+          // Mejor horario (ya lo tenemos en horariosPico)
+          const topHorario = horariosPico[0]
+
+          return (
+            <div style={{ padding: '0 20px', marginBottom: '14px' }}>
+              <div className="card" style={{ padding: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '4px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 500 }}>Actividad por día</div>
+                  {promedioDiario > 0 && (
+                    <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
+                      prom. {promedioDiario}/día
+                    </div>
+                  )}
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginBottom: '14px' }}>
+                  {contextoTemporal.rango}
+                </div>
+
+                {/* Gráfica */}
+                <div style={{ display: 'flex', alignItems: 'end', gap: '6px', height: '90px', marginBottom: '6px', position: 'relative' }}>
+                  {/* Línea de promedio */}
+                  {promedioDiario > 0 && (
+                    <div style={{
+                      position: 'absolute',
+                      left: 0,
+                      right: 0,
+                      bottom: `${(promedioDiario / maxDia) * 80}px`,
+                      borderTop: '1px dashed var(--border-light)',
+                      pointerEvents: 'none',
+                      zIndex: 1,
+                    }} />
+                  )}
+
+                  {escaneosPorDia.map((d: any, i: number) => {
+                    const esMejor = mejorDiaSemana && d.fecha === mejorDiaSemana.fecha && d.actual > 0
+                    const altura = d.actual > 0 ? Math.max((d.actual / maxDia) * 80, 6) : 3
+                    const color = d.esFuturo
+                      ? 'var(--border-light)'
+                      : esMejor
+                      ? 'var(--color-green)'
+                      : d.esHoy
+                      ? 'var(--color-info)'
+                      : d.actual > 0
+                      ? 'var(--color-info)'
+                      : 'var(--bg-tertiary)'
+
+                    return (
+                      <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', position: 'relative', zIndex: 2 }}>
+                        <span style={{
+                          fontSize: '10px',
+                          color: esMejor ? 'var(--color-green)' : d.esFuturo ? 'var(--text-tertiary)' : d.actual > 0 ? 'var(--color-info)' : 'var(--text-tertiary)',
+                          fontWeight: esMejor ? 500 : 400,
+                          opacity: d.esFuturo ? 0.4 : 1,
+                        }}>
+                          {d.esFuturo ? '—' : d.actual > 0 ? d.actual : ''}
+                        </span>
+                        <div style={{
+                          width: '100%',
+                          background: color,
+                          borderRadius: '3px',
+                          height: `${altura}px`,
+                          opacity: d.esFuturo ? 0.3 : 1,
+                          transition: 'height 0.3s',
+                        }} />
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {/* Labels de días con fecha */}
+                <div style={{ display: 'flex', gap: '6px', fontSize: '10px' }}>
+                  {escaneosPorDia.map((d: any, i: number) => (
+                    <div key={i} style={{
+                      flex: 1,
+                      textAlign: 'center',
+                      color: d.esHoy ? 'var(--color-info)' : d.esFuturo ? 'var(--text-tertiary)' : 'var(--text-secondary)',
+                      fontWeight: d.esHoy ? 500 : 400,
+                      opacity: d.esFuturo ? 0.5 : 1,
+                      lineHeight: 1.3,
+                    }}>
+                      <div>{d.dia}</div>
+                      <div style={{ fontSize: '9px', color: 'var(--text-tertiary)' }}>{d.numero}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Resumen inteligente */}
+                {totalVisitasSemana > 0 && (
+                  <div style={{
+                    background: 'var(--bg-tertiary)',
+                    borderRadius: 'var(--radius-md)',
+                    padding: '10px 12px',
+                    marginTop: '14px',
+                    fontSize: '11px',
+                    color: 'var(--text-secondary)',
+                    lineHeight: 1.5,
+                  }}>
+                    {mejorDiaSemana && (
+                      <>
+                        Mejor día: <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{mejorDiaSemana.dia} {mejorDiaSemana.numero}</span> con <span style={{ color: 'var(--color-green)', fontWeight: 500 }}>{mejorDiaSemana.actual} visitas</span>
+                        {topHorario && <>. Horario pico: <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{topHorario.rango}</span></>}
+                        .
+                      </>
+                    )}
+                    {!mejorDiaSemana && topHorario && (
+                      <>Horario con más movimiento: <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{topHorario.rango}</span>.</>
+                    )}
                   </div>
-                ))}
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', fontSize: '10px', color: 'var(--text-tertiary)' }}>
-                {escaneosPorDia.map((d: any, i: number) => <span key={i}>{d.dia}</span>)}
+                )}
+
+                {/* Estado vacío */}
+                {totalVisitasSemana === 0 && (
+                  <div style={{
+                    background: 'var(--color-info-light)',
+                    borderRadius: 'var(--radius-md)',
+                    padding: '10px 12px',
+                    marginTop: '14px',
+                    fontSize: '11px',
+                    color: 'var(--color-info)',
+                  }}>
+                    Sin visitas esta semana. Comparte tu QR para empezar a recibir tráfico.
+                  </div>
+                )}
               </div>
             </div>
-          </div>
-        )}
+          )
+        })()}
 
         {/* Platos más vistos */}
         {esBasico ? (
@@ -771,57 +1277,7 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Horarios pico */}
-        {esBasico ? (
-          horariosPico.length > 0 ? (
-            <div style={{ padding: '0 20px', marginBottom: '14px' }}>
-              <div className="card" style={{ padding: '14px' }}>
-                <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '12px' }}>Horarios con más visitas</div>
-                {horariosPico.map((h: any, i: number) => (
-                  <div key={i} style={{
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    padding: '8px 0', borderBottom: i < horariosPico.length - 1 ? '1px solid var(--border-light)' : 'none',
-                  }}>
-                    <span style={{ fontSize: '13px' }}>{h.rango}</span>
-                    <span style={{ fontSize: '12px', fontWeight: 500 }}>{h.escaneos}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div style={{ padding: '0 20px', marginBottom: '14px' }}>
-              <div className="card" style={{ padding: '20px', textAlign: 'center' }}>
-                <div style={{ fontSize: '13px', color: 'var(--text-tertiary)' }}>Sin datos de horarios para este periodo</div>
-              </div>
-            </div>
-          )
-        ) : (
-          <div style={{ padding: '0 20px', marginBottom: '10px' }}>
-            <div className="card" style={{ padding: '20px', textAlign: 'center', opacity: 0.5 }}>
-              <div style={{ fontSize: '30px', marginBottom: '6px' }}>🔒</div>
-              <div style={{ fontSize: '13px', fontWeight: 500 }}>Horarios pico</div>
-              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>Disponible en Plan Básico</div>
-            </div>
-          </div>
-        )}
-
-        {/* Mejor y peor día */}
-        {esPro && mejorDia && peorDia && (
-          <div style={{ padding: '0 20px', marginBottom: '14px' }}>
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <div className="card" style={{ flex: 1, padding: '14px' }}>
-                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Mejor día</div>
-                <div style={{ fontSize: '14px', fontWeight: 500 }}>{mejorDia.dia}</div>
-                <div style={{ fontSize: '12px', color: 'var(--color-green)', marginTop: '2px' }}>{mejorDia.cantidad} visitas</div>
-              </div>
-              <div className="card" style={{ flex: 1, padding: '14px' }}>
-                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Peor día</div>
-                <div style={{ fontSize: '14px', fontWeight: 500 }}>{peorDia.dia}</div>
-                <div style={{ fontSize: '12px', color: 'var(--color-danger)', marginTop: '2px' }}>{peorDia.cantidad} visitas</div>
-              </div>
-            </div>
-          </div>
-        )}
+       
 
         {/* Últimas reseñas */}
         {esPro && resenas.length > 0 && (
