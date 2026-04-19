@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks'
 import { createClient } from '@/lib/supabase-browser'
 import Cropper from 'react-easy-crop'
+import TimePicker from '@/components/ui/TimePicker'
 
 interface Plato {
   id: string; nombre: string; precio: number; descripcion: string; disponible: boolean; foto_url: string | null
@@ -1229,16 +1230,18 @@ export default function MiMenuPage() {
                   })()}
                   <input className="input" type="number" placeholder="Precio especial" value={platoDiaConfig.precioEspecial}
                     onChange={(e) => setPlatoDiaConfig({ ...platoDiaConfig, precioEspecial: e.target.value })} style={{ marginBottom: '8px' }} />
-                  <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-                    <div style={{ flex: 1 }}>
-                      <label className="label">Desde</label>
-                      <input className="input" type="time" value={platoDiaConfig.horaInicio}
-                        onChange={(e) => setPlatoDiaConfig({ ...platoDiaConfig, horaInicio: e.target.value })} />
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <label className="label">Hasta</label>
-                      <input className="input" type="time" value={platoDiaConfig.horaFin}
-                        onChange={(e) => setPlatoDiaConfig({ ...platoDiaConfig, horaFin: e.target.value })} />
+                  <div style={{ marginBottom: '12px' }}>
+                    <label className="label">Horario del plato del día</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
+                      <TimePicker
+                        value={platoDiaConfig.horaInicio}
+                        onChange={(v) => setPlatoDiaConfig({ ...platoDiaConfig, horaInicio: v })}
+                      />
+                      <span style={{ color: 'var(--text-tertiary)', fontSize: '13px' }}>—</span>
+                      <TimePicker
+                        value={platoDiaConfig.horaFin}
+                        onChange={(v) => setPlatoDiaConfig({ ...platoDiaConfig, horaFin: v })}
+                      />
                     </div>
                   </div>
 
@@ -1460,16 +1463,18 @@ export default function MiMenuPage() {
                 <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '14px' }}>
                   Define en qué horario esta categoría es visible en el menú. Déjalo vacío para que se muestre siempre.
                 </div>
-                <div style={{ display: 'flex', gap: '10px', marginBottom: '14px' }}>
-                  <div style={{ flex: 1 }}>
-                    <label className="label">Desde</label>
-                    <input className="input" type="time" value={horarioCatInicio}
-                      onChange={(e) => { setHorarioCatInicio(e.target.value); setAvisoHorario([]); setConfirmarHorario(false) }} />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <label className="label">Hasta</label>
-                    <input className="input" type="time" value={horarioCatFin}
-                      onChange={(e) => { setHorarioCatFin(e.target.value); setAvisoHorario([]); setConfirmarHorario(false) }} />
+                <div style={{ marginBottom: '14px' }}>
+                  <label className="label">Horario de visibilidad</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
+                    <TimePicker
+                      value={horarioCatInicio}
+                      onChange={(v) => { setHorarioCatInicio(v); setAvisoHorario([]); setConfirmarHorario(false) }}
+                    />
+                    <span style={{ color: 'var(--text-tertiary)', fontSize: '13px' }}>—</span>
+                    <TimePicker
+                      value={horarioCatFin}
+                      onChange={(v) => { setHorarioCatFin(v); setAvisoHorario([]); setConfirmarHorario(false) }}
+                    />
                   </div>
                 </div>
                 {horarioCatInicio && horarioCatFin && avisoHorario.length === 0 && (
