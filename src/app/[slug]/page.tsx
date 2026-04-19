@@ -4,6 +4,18 @@ import { useState, useEffect } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase-browser'
 
+// Helper: formatea "HH:MM" o "HH:MM:SS" a "H:MM a.m./p.m."
+function formato12h(hora: string | null | undefined): string {
+  if (!hora) return ''
+  const partes = hora.split(':')
+  const h24 = parseInt(partes[0])
+  const mm = (partes[1] || '00').padStart(2, '0')
+  if (isNaN(h24)) return hora
+  const esPM = h24 >= 12
+  const h12 = h24 === 0 ? 12 : h24 > 12 ? h24 - 12 : h24
+  return `${h12}:${mm} ${esPM ? 'p.m.' : 'a.m.'}`
+}
+
 export default function MenuPublicoPage() {
   const params = useParams()
   const searchParams = useSearchParams()
@@ -123,7 +135,9 @@ export default function MenuPublicoPage() {
         setPlatoDia({
           id: pd.platos.id, nombre: pd.platos.nombre,
           precio: pd.platos.precio, precioEspecial: pd.precio_especial,
-          descripcion: pd.platos.descripcion, horaFin: pd.horario_fin || '15:00',
+          descripcion: pd.platos.descripcion,
+          horaInicio: pd.horario_inicio || '11:00',
+          horaFin: pd.horario_fin || '15:00',
         })
       }
       // Combos
@@ -429,7 +443,7 @@ export default function MenuPublicoPage() {
                         }}>
                           <span>{dia}</span>
                           <span style={{ color: h.cerrado ? 'var(--color-danger)' : 'var(--text-secondary)' }}>
-                            {h.cerrado ? 'Cerrado' : `${h.hora_apertura} — ${h.hora_cierre}`}
+                            {h.cerrado ? 'Cerrado' : `${formato12h(h.hora_apertura)} — ${formato12h(h.hora_cierre)}`}
                           </span>
                         </div>
                       )
@@ -581,7 +595,9 @@ export default function MenuPublicoPage() {
             <div onClick={() => setPlatoDetalle(platoDia.id)} style={{ background: `${color}10`, border: `1px solid ${color}30`, borderRadius: '10px', padding: '12px', cursor: 'pointer' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                 <span style={{ fontSize: '11px', fontWeight: 500, color: color }}>⏰ PLATO DEL DÍA</span>
-                <span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>Hasta las {platoDia.horaFin}</span>
+                  <span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>
+                   {formato12h(platoDia.horaInicio)} — {formato12h(platoDia.horaFin)}
+                  </span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>

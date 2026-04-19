@@ -14,6 +14,18 @@ interface Categoria {
   id: string; nombre: string; orden: number; platos: Plato[]; hora_inicio?: string | null; hora_fin?: string | null
 }
 
+// Helper: formatea "HH:MM" o "HH:MM:SS" a "H:MM a.m./p.m."
+function formato12h(hora: string | null | undefined): string {
+  if (!hora) return ''
+  const partes = hora.split(':')
+  const h24 = parseInt(partes[0])
+  const mm = (partes[1] || '00').padStart(2, '0')
+  if (isNaN(h24)) return hora
+  const esPM = h24 >= 12
+  const h12 = h24 === 0 ? 12 : h24 > 12 ? h24 - 12 : h24
+  return `${h12}:${mm} ${esPM ? 'p.m.' : 'a.m.'}`
+}
+
 export default function MiMenuPage() {
   const router = useRouter()
   const { usuario, restaurante: rest, cargando: cargandoAuth } = useAuth()
@@ -754,7 +766,7 @@ export default function MiMenuPage() {
                       <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', background: 'var(--bg-tertiary)', padding: '2px 6px', borderRadius: '4px' }}>{cat.platos.length}</span>
                       {(cat as any).hora_inicio && (cat as any).hora_fin && (
                         <span style={{ fontSize: '10px', color: 'var(--color-info)', background: 'var(--color-info-light)', padding: '2px 6px', borderRadius: '4px' }}>
-                          {(cat as any).hora_inicio}–{(cat as any).hora_fin}
+                          {formato12h((cat as any).hora_inicio)}–{formato12h((cat as any).hora_fin)}
                         </span>
                       )}
                     </div>
@@ -1004,7 +1016,7 @@ export default function MiMenuPage() {
                         }}>
                           <div>
                           <span style={{ fontSize: '12px' }}>{p.nombre}</span>
-                          {(() => { const h = getHorarioPlato(p.id); return h ? <span style={{ fontSize: '9px', color: 'var(--color-warning)', marginLeft: '4px' }}>⏰ {h.hora_inicio}–{h.hora_fin}</span> : null })()}
+                          {(() => { const h = getHorarioPlato(p.id); return h ? <span style={{ fontSize: '9px', color: 'var(--color-warning)', marginLeft: '4px' }}>⏰ {formato12h(h.hora_inicio)}–{formato12h(h.hora_fin)}</span> : null })()}
                         </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>${p.precio.toLocaleString('es-CO')}</span>
@@ -1130,7 +1142,7 @@ export default function MiMenuPage() {
                         }}>
                           <div>
                           <span style={{ fontSize: '12px' }}>{p.nombre}</span>
-                          {(() => { const h = getHorarioPlato(p.id); return h ? <span style={{ fontSize: '9px', color: 'var(--color-warning)', marginLeft: '4px' }}>⏰ {h.hora_inicio}–{h.hora_fin}</span> : null })()}
+                          {(() => { const h = getHorarioPlato(p.id); return h ? <span style={{ fontSize: '9px', color: 'var(--color-warning)', marginLeft: '4px' }}>⏰ {formato12h(h.hora_inicio)}–{formato12h(h.hora_fin)}</span> : null })()}
                         </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>${p.precio.toLocaleString('es-CO')}</span>
@@ -1224,7 +1236,7 @@ export default function MiMenuPage() {
                     if (!h) return null
                     return (
                       <div style={{ fontSize: '11px', color: 'var(--color-warning)', background: 'var(--color-warning-light)', padding: '8px 10px', borderRadius: '6px', marginBottom: '8px' }}>
-                        ⚠ Este plato pertenece a una categoría visible solo de {h.hora_inicio} a {h.hora_fin}. El plato del día solo se mostrará en ese horario.
+                        ⚠ Este plato pertenece a una categoría visible solo de {formato12h(h.hora_inicio)} a {formato12h(h.hora_fin)}. El plato del día solo se mostrará en ese horario.
                       </div>
                     )
                   })()}
@@ -1262,7 +1274,7 @@ export default function MiMenuPage() {
                         </span>
                       </div>
                       <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                        {platoDiaConfig.horaInicio} — {platoDiaConfig.horaFin}
+                        {formato12h(platoDiaConfig.horaInicio)} — {formato12h(platoDiaConfig.horaFin)}
                       </div>
                     </div>
                   )}
@@ -1313,7 +1325,7 @@ export default function MiMenuPage() {
                     if (!h) return null
                     return (
                       <div style={{ fontSize: '11px', color: 'var(--color-warning)', background: 'var(--color-warning-light)', padding: '8px 10px', borderRadius: '6px', marginBottom: '10px' }}>
-                        ⚠ Este plato pertenece a una categoría visible solo de {h.hora_inicio} a {h.hora_fin}. El plato ganador solo se mostrará en ese horario.
+                        ⚠ Este plato pertenece a una categoría visible solo de {formato12h(h.hora_inicio)} a {formato12h(h.hora_fin)}. El plato ganador solo se mostrará en ese horario.
                       </div>
                     )
                   })()}
@@ -1479,7 +1491,7 @@ export default function MiMenuPage() {
                 </div>
                 {horarioCatInicio && horarioCatFin && avisoHorario.length === 0 && (
                   <div style={{ fontSize: '12px', color: 'var(--color-info)', marginBottom: '14px', background: 'var(--color-info-light)', padding: '10px', borderRadius: '8px' }}>
-                    "{cat?.nombre}" será visible de {horarioCatInicio} a {horarioCatFin}
+                    "{cat?.nombre}" será visible de {formato12h(horarioCatInicio)} a {formato12h(horarioCatFin)}
                   </div>
                 )}
                 {avisoHorario.length > 0 && (
@@ -1488,7 +1500,7 @@ export default function MiMenuPage() {
                       Esto afectará otras funciones
                     </div>
                     <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '10px' }}>
-                      Al asignar horario a "{cat?.nombre}", lo siguiente solo será visible de {horarioCatInicio} a {horarioCatFin}:
+                      Al asignar horario a "{cat?.nombre}", lo siguiente solo será visible de {formato12h(horarioCatInicio)} a {formato12h(horarioCatFin)}:
                     </div>
                     {avisoHorario.map((a, i) => (
                       <div key={i} style={{ fontSize: '12px', color: 'var(--text-primary)', padding: '6px 0', borderBottom: i < avisoHorario.length - 1 ? '1px solid var(--border-light)' : 'none', display: 'flex', gap: '6px', alignItems: 'start' }}>
