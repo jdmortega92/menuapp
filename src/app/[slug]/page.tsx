@@ -397,27 +397,208 @@ export default function MenuPublicoPage() {
         {/* Presentación del restaurante (solo enlace web) */}
         {!mostrarMenu && (
           <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-            {/* Portada */}
+            {/* Portada: banner sin texto encima (banner solo desde plan Básico) */}
             <div style={{
-              height: '240px',
-              background: restaurante.banner_url ? `url(${restaurante.banner_url}) center/cover` : `linear-gradient(135deg, ${color} 0%, ${color}AA 50%, ${color}66 100%)`,
-              position: 'relative', display: 'flex', alignItems: 'flex-end',
+              height: '200px',
+              background: (esBasicoPublico && restaurante.banner_url)
+                ? `url(${restaurante.banner_url}) center/cover`
+                : `linear-gradient(135deg, ${color} 0%, ${color}CC 50%, ${color}99 100%)`,
+              position: 'relative',
             }}>
-              <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.5) 0%, transparent 50%)' }} />
-              <div style={{ position: 'relative', padding: '20px', width: '100%' }}>
+              {esBasicoPublico && restaurante.banner_url && (
                 <div style={{
-                  width: '64px', height: '64px', borderRadius: '16px', background: 'white',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '22px', fontWeight: 600, color: color, marginBottom: '12px',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.2)', overflow: 'hidden',
-                }}>
-                  {restaurante.logo_url ? (
-                    <img src={restaurante.logo_url} alt={restaurante.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  ) : restaurante.nombre.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()}
-                </div>
-                <div style={{ fontSize: '24px', fontWeight: 600, color: 'white', marginBottom: '4px' }}>{restaurante.nombre}</div>
-                <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.8)' }}>{restaurante.tipo} · {restaurante.ciudad}</div>
+                  position: 'absolute',
+                  inset: 0,
+                  background: 'linear-gradient(to bottom, transparent 50%, rgba(0,0,0,0.15) 100%)',
+                }} />
+              )}
+            </div>
+
+            {/* Identidad del restaurante: logo + nombre + estado */}
+            <div style={{
+              padding: '0 20px',
+              marginTop: '-36px',
+              position: 'relative',
+            }}>
+              {/* Logo circular sobre fondo claro */}
+              <div style={{
+                width: '80px',
+                height: '80px',
+                borderRadius: '50%',
+                background: 'white',
+                border: '4px solid #FDFBF7',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '24px',
+                fontWeight: 600,
+                color: color,
+                marginBottom: '14px',
+                overflow: 'hidden',
+              }}>
+                {esBasicoPublico && restaurante.logo_url ? (
+                  <img
+                    src={restaurante.logo_url}
+                    alt={restaurante.nombre}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                ) : (
+                  restaurante.nombre.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
+                )}
               </div>
+
+              {/* Nombre */}
+              <div style={{
+                fontSize: '22px',
+                fontWeight: 600,
+                lineHeight: 1.2,
+                color: 'var(--text-primary)',
+                marginBottom: '6px',
+              }}>
+                {restaurante.nombre}
+              </div>
+
+              {/* Meta: estado + tipo + ciudad */}
+              {(() => {
+                if (horariosRest.length === 0) {
+                  return (
+                    <div style={{
+                      fontSize: '12px',
+                      color: 'var(--text-secondary)',
+                      display: 'flex',
+                      gap: '6px',
+                      alignItems: 'center',
+                    }}>
+                      <span style={{ textTransform: 'capitalize' }}>{restaurante.tipo}</span>
+                      <span>·</span>
+                      <span>{restaurante.ciudad}</span>
+                    </div>
+                  )
+                }
+
+                const diasSemana = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
+                const diaHoy = diasSemana[ahora.getDay()]
+                const horarioHoy = horariosRest.find((h: any) => h.dia === diaHoy)
+
+                let estadoBadge = null
+                let estadoTexto = null
+
+                if (horarioHoy?.cerrado) {
+                  estadoBadge = (
+                    <span style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      fontSize: '12px',
+                      fontWeight: 500,
+                      color: 'var(--color-danger)',
+                    }}>
+                      <span style={{
+                        width: '7px',
+                        height: '7px',
+                        borderRadius: '50%',
+                        background: 'var(--color-danger)',
+                      }} />
+                      Cerrado hoy
+                    </span>
+                  )
+                } else if (horarioHoy) {
+                  const apertura = horarioHoy.hora_apertura.slice(0, 5)
+                  const cierre = horarioHoy.hora_cierre.slice(0, 5)
+                  const abiertoAhora = horaActual >= apertura && horaActual <= cierre
+
+                  if (abiertoAhora) {
+                    estadoBadge = (
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        fontSize: '12px',
+                        fontWeight: 500,
+                        color: '#2E7D32',
+                      }}>
+                        <span style={{
+                          width: '7px',
+                          height: '7px',
+                          borderRadius: '50%',
+                          background: '#2E7D32',
+                        }} />
+                        Abierto
+                      </span>
+                    )
+                    estadoTexto = `Cierra a las ${formato12h(horarioHoy.hora_cierre)}`
+                  } else if (horaActual < apertura) {
+                    estadoBadge = (
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        fontSize: '12px',
+                        fontWeight: 500,
+                        color: 'var(--text-tertiary)',
+                      }}>
+                        <span style={{
+                          width: '7px',
+                          height: '7px',
+                          borderRadius: '50%',
+                          background: 'var(--text-tertiary)',
+                        }} />
+                        Cerrado
+                      </span>
+                    )
+                    estadoTexto = `Abre a las ${formato12h(horarioHoy.hora_apertura)}`
+                  } else {
+                    estadoBadge = (
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        fontSize: '12px',
+                        fontWeight: 500,
+                        color: 'var(--text-tertiary)',
+                      }}>
+                        <span style={{
+                          width: '7px',
+                          height: '7px',
+                          borderRadius: '50%',
+                          background: 'var(--text-tertiary)',
+                        }} />
+                        Cerrado
+                      </span>
+                    )
+                    estadoTexto = 'Abre mañana'
+                  }
+                }
+
+                return (
+                  <>
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      flexWrap: 'wrap',
+                      fontSize: '12px',
+                      color: 'var(--text-secondary)',
+                      marginBottom: estadoTexto ? '4px' : '0',
+                    }}>
+                      {estadoBadge}
+                      {estadoBadge && <span>·</span>}
+                      <span style={{ textTransform: 'capitalize' }}>{restaurante.tipo}</span>
+                      <span>·</span>
+                      <span>{restaurante.ciudad}</span>
+                    </div>
+                    {estadoTexto && (
+                      <div style={{
+                        fontSize: '11px',
+                        color: 'var(--text-tertiary)',
+                      }}>
+                        {estadoTexto}
+                      </div>
+                    )}
+                  </>
+                )
+              })()}
             </div>
 
             {/* Info */}
@@ -504,19 +685,107 @@ export default function MenuPublicoPage() {
           </div>
         )}
         {mostrarMenu && (<>
-        {/* Banner */}
-        <div style={{ height: '100px', background: restaurante.banner_url ? `url(${restaurante.banner_url}) center/cover` : `linear-gradient(135deg, ${color} 0%, ${color}CC 100%)`, position: 'relative', display: 'flex', alignItems: 'flex-end' }}>
-          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(253,251,247,1) 0%, transparent 80%)' }} />
-          <div style={{ position: 'relative', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '12px', width: '100%' }}>
-            <div style={{ width: '52px', height: '52px', borderRadius: '12px', flexShrink: 0, background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', fontWeight: 600, color: color, boxShadow: '0 2px 8px rgba(0,0,0,0.15)', overflow: 'hidden' }}>
-              {restaurante.logo_url ? (
-                <img src={restaurante.logo_url} alt={restaurante.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              ) : restaurante.nombre.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()}
-            </div>
-            <div>
-              <div style={{ fontSize: '17px', fontWeight: 600 }}>{restaurante.nombre}</div>
-              <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{restaurante.tipo} · {restaurante.ciudad}</div>
-            </div>
+        {/* Header: Banner + Logo superpuesto estilo Facebook (banner solo desde plan Básico) */}
+        <div style={{ position: 'relative', marginBottom: '56px' }}>
+          {/* Banner */}
+          <div style={{
+            height: '140px',
+            background: (esBasicoPublico && restaurante.banner_url)
+              ? `url(${restaurante.banner_url}) center/cover`
+              : `linear-gradient(135deg, ${color} 0%, ${color}CC 50%, ${color}99 100%)`,
+            position: 'relative',
+          }}>
+            {/* Overlay sutil para legibilidad si hay banner */}
+            {esBasicoPublico && restaurante.banner_url && (
+              <div style={{
+                position: 'absolute',
+                inset: 0,
+                background: 'linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, transparent 50%, rgba(0,0,0,0.1) 100%)',
+              }} />
+            )}
+          </div>
+
+          {/* Logo redondo sobresaliendo */}
+          <div style={{
+            position: 'absolute',
+            bottom: '-40px',
+            left: '16px',
+            width: '80px',
+            height: '80px',
+            borderRadius: '50%',
+            background: 'white',
+            border: '4px solid #FDFBF7',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '26px',
+            fontWeight: 600,
+            color: color,
+            overflow: 'hidden',
+          }}>
+            {esBasicoPublico && restaurante.logo_url ? (
+              <img
+                src={restaurante.logo_url}
+                alt={restaurante.nombre}
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              />
+            ) : (
+              restaurante.nombre.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
+            )}
+          </div>
+        </div>
+
+        {/* Nombre e información del restaurante */}
+        <div style={{ padding: '0 16px 12px' }}>
+          <div style={{
+            fontSize: '20px',
+            fontWeight: 600,
+            lineHeight: 1.2,
+            marginBottom: '4px',
+          }}>
+            {restaurante.nombre}
+          </div>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            flexWrap: 'wrap',
+            fontSize: '12px',
+            color: 'var(--text-secondary)',
+          }}>
+            <span style={{ textTransform: 'capitalize' }}>{restaurante.tipo}</span>
+            <span>·</span>
+            <span>{restaurante.ciudad}</span>
+            {(() => {
+              // Indicador de abierto/cerrado ahora mismo
+              if (horariosRest.length === 0) return null
+              const diasSemana = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
+              const diaHoy = diasSemana[ahora.getDay()]
+              const horarioHoy = horariosRest.find((h: any) => h.dia === diaHoy)
+              if (!horarioHoy) return null
+              if (horarioHoy.cerrado) {
+                return (
+                  <>
+                    <span>·</span>
+                    <span style={{ color: 'var(--color-danger)', fontWeight: 500 }}>● Cerrado hoy</span>
+                  </>
+                )
+              }
+              const abiertoAhora = horaActual >= horarioHoy.hora_apertura.slice(0, 5)
+                && horaActual <= horarioHoy.hora_cierre.slice(0, 5)
+              return (
+                <>
+                  <span>·</span>
+                  <span style={{
+                    color: abiertoAhora ? '#2E7D32' : 'var(--text-tertiary)',
+                    fontWeight: 500,
+                  }}>
+                    ● {abiertoAhora ? 'Abierto ahora' : `Cierra a las ${formato12h(horarioHoy.hora_cierre)}`}
+                  </span>
+                </>
+              )
+            })()}
           </div>
         </div>
 

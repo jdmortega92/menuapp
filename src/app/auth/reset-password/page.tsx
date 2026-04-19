@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-browser'
+import PasswordInput from '@/components/ui/PasswordInput'
+import { isPasswordValid, getPasswordError } from '@/lib/passwordValidation'
 
 export default function ResetPasswordPage() {
   const router = useRouter()
@@ -27,7 +29,10 @@ export default function ResetPasswordPage() {
   }, [])
 
   async function handleReset() {
-    if (!nuevaPassword || nuevaPassword.length < 6) return
+    if (!isPasswordValid(nuevaPassword)) {
+      setError(getPasswordError(nuevaPassword) || 'La contraseña no cumple los requisitos de seguridad')
+      return
+    }
     if (nuevaPassword !== confirmarPassword) {
       setError('Las contraseñas no coinciden')
       return
@@ -101,23 +106,28 @@ export default function ResetPasswordPage() {
         <div className="card" style={{ padding: '20px' }}>
           <div style={{ fontSize: '14px', fontWeight: 500, marginBottom: '6px' }}>Nueva contraseña</div>
           <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '16px' }}>
-            Ingresa tu nueva contraseña. Debe tener al menos 6 caracteres.
+            Crea una contraseña segura para proteger tu cuenta.
           </div>
 
-          <input className="input" type="password" placeholder="Nueva contraseña"
-            value={nuevaPassword} onChange={(e) => setNuevaPassword(e.target.value)}
-            style={{ marginBottom: '10px' }} />
+          <div style={{ marginBottom: '12px' }}>
+            <PasswordInput
+              value={nuevaPassword}
+              onChange={setNuevaPassword}
+              placeholder="Nueva contraseña"
+              showValidation={true}
+            />
+          </div>
 
-          <input className="input" type="password" placeholder="Confirmar contraseña"
-            value={confirmarPassword} onChange={(e) => setConfirmarPassword(e.target.value)}
-            style={{ marginBottom: '10px' }} />
+          <div style={{ marginBottom: '10px' }}>
+            <PasswordInput
+              value={confirmarPassword}
+              onChange={setConfirmarPassword}
+              placeholder="Confirmar contraseña"
+            />
+          </div>
 
           {nuevaPassword && confirmarPassword && nuevaPassword !== confirmarPassword && (
             <div style={{ fontSize: '11px', color: 'var(--color-danger)', marginBottom: '10px' }}>Las contraseñas no coinciden</div>
-          )}
-
-          {nuevaPassword && nuevaPassword.length < 6 && (
-            <div style={{ fontSize: '11px', color: 'var(--color-warning)', marginBottom: '10px' }}>Mínimo 6 caracteres</div>
           )}
 
           {error && (
@@ -127,9 +137,9 @@ export default function ResetPasswordPage() {
           )}
 
           <button onClick={handleReset}
-            disabled={nuevaPassword.length < 6 || nuevaPassword !== confirmarPassword || guardando}
+            disabled={!isPasswordValid(nuevaPassword) || nuevaPassword !== confirmarPassword || guardando}
             className="btn-primary"
-            style={{ width: '100%', padding: '14px', fontSize: '14px', opacity: (nuevaPassword.length < 6 || nuevaPassword !== confirmarPassword) ? 0.5 : 1 }}>
+            style={{ width: '100%', padding: '14px', fontSize: '14px', opacity: (!isPasswordValid(nuevaPassword) || nuevaPassword !== confirmarPassword) ? 0.5 : 1, cursor: (!isPasswordValid(nuevaPassword) || nuevaPassword !== confirmarPassword) ? 'not-allowed' : 'pointer' }}>
             {guardando ? 'Guardando...' : 'Cambiar contraseña'}
           </button>
         </div>

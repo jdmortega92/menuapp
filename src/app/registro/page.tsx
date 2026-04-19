@@ -4,6 +4,9 @@ import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { registrarConEmail, loginConGoogle } from '@/lib/auth'
 import { createClient } from '@/lib/supabase-browser'
+import PasswordInput from '@/components/ui/PasswordInput'
+import { isPasswordValid, getPasswordError } from '@/lib/passwordValidation'
+import PhoneInput from '@/components/ui/PhoneInput'
 
 function RegistroContent() {
   const router = useRouter()
@@ -91,6 +94,19 @@ function RegistroContent() {
     setError('')
     setCargando(true)
 
+    // Validar contraseña solo si es registro con email (no Google)
+    if (!esGoogle && !isPasswordValid(password)) {
+      setError(getPasswordError(password) || 'La contraseña no cumple los requisitos de seguridad')
+      setCargando(false)
+      return
+    }
+    // Validar WhatsApp: 10 dígitos empezando con 3
+    if (whatsapp.length !== 10 || !whatsapp.startsWith('3')) {
+      setError('El número de WhatsApp debe tener 10 dígitos y empezar con 3')
+      setCargando(false)
+      return
+    }
+
     if (esGoogle) {
       // Usuario ya autenticado con Google, solo crear restaurante
       const supabase = createClient()
@@ -111,7 +127,19 @@ function RegistroContent() {
       const { data, error: authError } = await registrarConEmail(email, password)
 
       if (authError) {
-        setError('Error al crear la cuenta. Intenta con otro correo.')
+        // Mensaje específico según el tipo de error
+        const mensajeError = authError.message?.toLowerCase() || ''
+        if (mensajeError.includes('already registered') ||
+            mensajeError.includes('already exists') ||
+            mensajeError.includes('user already')) {
+          setError('Este correo ya está registrado. ¿Quieres iniciar sesión?')
+        } else if (mensajeError.includes('invalid email')) {
+          setError('El correo ingresado no es válido.')
+        } else if (mensajeError.includes('weak password')) {
+          setError('La contraseña es muy débil.')
+        } else {
+          setError('Error al crear la cuenta. Intenta de nuevo.')
+        }
         setCargando(false)
         return
       }
@@ -259,12 +287,9 @@ function RegistroContent() {
               {/* WhatsApp */}
               <div style={{ marginBottom: '24px' }}>
                 <label className="label">WhatsApp del negocio *</label>
-                <input
-                  className="input"
-                  type="tel"
-                  placeholder="Ej: 300 123 4567"
+                <PhoneInput
                   value={whatsapp}
-                  onChange={(e) => setWhatsapp(e.target.value)}
+                  onChange={setWhatsapp}
                   required
                 />
               </div>
@@ -332,8 +357,11 @@ function RegistroContent() {
                   {/* WhatsApp */}
                   <div style={{ marginBottom: '24px' }}>
                     <label className="label">WhatsApp del negocio *</label>
-                    <input className="input" type="tel" placeholder="Ej: 300 123 4567"
-                      value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} required />
+                    <PhoneInput
+                      value={whatsapp}
+                      onChange={setWhatsapp}
+                      required
+                    />
                   </div>
                 </>
               ) : (
@@ -367,8 +395,12 @@ function RegistroContent() {
                   {/* Password */}
                   <div style={{ marginBottom: '24px' }}>
                     <label className="label">Contraseña *</label>
-                    <input className="input" type="password" placeholder="Mínimo 6 caracteres"
-                      value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} />
+                    <PasswordInput
+                      value={password}
+                      onChange={setPassword}
+                      placeholder="Crea una contraseña segura"
+                      showValidation={true}
+                    />
                   </div>
                 </>
               )}
@@ -381,12 +413,35 @@ function RegistroContent() {
                   marginBottom: '16px', textAlign: 'center',
                 }}>
                   {error}
+                  {error.includes('ya está registrado') && (
+                    <div style={{ marginTop: '8px' }}>
+                      <span
+                        onClick={() => router.push(`/login?email=${encodeURIComponent(email)}`)}
+                        style={{
+                          color: 'var(--color-info)',
+                          cursor: 'pointer',
+                          fontWeight: 500,
+                          textDecoration: 'underline',
+                        }}
+                      >
+                        Ir a iniciar sesión →
+                      </span>
+                    </div>
+                  )}
                 </div>
               )}
 
               {/* Botón crear */}
-              <button type="submit" disabled={cargando} className="btn-accent"
-                style={{ width: '100%', opacity: cargando ? 0.7 : 1, cursor: cargando ? 'not-allowed' : 'pointer' }}>
+              <button
+                type="submit"
+                disabled={cargando || (!esGoogle && !isPasswordValid(password))}
+                className="btn-accent"
+                style={{
+                  width: '100%',
+                  opacity: (cargando || (!esGoogle && !isPasswordValid(password))) ? 0.5 : 1,
+                  cursor: (cargando || (!esGoogle && !isPasswordValid(password))) ? 'not-allowed' : 'pointer'
+                }}
+              >
                 {cargando ? 'Creando cuenta...' : 'Crear mi menú gratis'}
               </button>
               <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', textAlign: 'center', marginTop: '12px' }}>

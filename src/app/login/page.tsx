@@ -1,11 +1,13 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { loginConEmail, loginConGoogle } from '@/lib/auth'
+import PasswordInput from '@/components/ui/PasswordInput'
 
-export default function LoginPage() {
+function LoginContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -14,6 +16,13 @@ export default function LoginPage() {
   const [emailRecuperar, setEmailRecuperar] = useState('')
   const [recuperando, setRecuperando] = useState(false)
   const [recuperado, setRecuperado] = useState(false)
+
+  // Pre-llenar email si viene de registro con "email ya registrado"
+  useEffect(() => {
+    const emailParam = searchParams.get('email')
+    if (emailParam) setEmail(emailParam)
+  }, [searchParams])
+  
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
@@ -160,14 +169,10 @@ export default function LoginPage() {
           {/* Password */}
           <div style={{ marginBottom: '8px' }}>
             <label className="label">Contraseña</label>
-            <input
-              className="input"
-              type="password"
-              placeholder="••••••••"
+            <PasswordInput
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={6}
+              onChange={setPassword}
+              placeholder="Tu contraseña"
             />
           </div>
 
@@ -279,5 +284,17 @@ export default function LoginPage() {
           </>
         )}
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-primary)' }}>
+        <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Cargando...</div>
+      </div>
+    }>
+      <LoginContent />
+    </Suspense>
   )
 }

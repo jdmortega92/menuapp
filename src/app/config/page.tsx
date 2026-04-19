@@ -6,6 +6,9 @@ import { useAuth } from '@/hooks'
 import { createClient } from '@/lib/supabase-browser'
 import Cropper from 'react-easy-crop'
 import TimePicker from '@/components/ui/TimePicker'
+import PasswordInput from '@/components/ui/PasswordInput'
+import { isPasswordValid, getPasswordError } from '@/lib/passwordValidation'
+import PhoneInput from '@/components/ui/PhoneInput'
 
 export default function ConfigPage() {
   const router = useRouter()
@@ -247,7 +250,10 @@ export default function ConfigPage() {
   }
 
   async function cambiarPassword() {
-    if (!nuevaPassword || nuevaPassword.length < 6) return
+    if (!isPasswordValid(nuevaPassword)) {
+      alert(getPasswordError(nuevaPassword) || 'La contraseña no cumple los requisitos')
+      return
+    }
     if (nuevaPassword !== confirmarPassword) {
       alert('Las contraseñas no coinciden')
       return
@@ -419,7 +425,10 @@ export default function ConfigPage() {
               </div>
               <div style={{ marginBottom: '12px' }}>
                 <label className="label">WhatsApp</label>
-                <input className="input" value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} />
+                <PhoneInput
+                  value={whatsapp}
+                  onChange={setWhatsapp}
+                />
               </div>
               <div style={{ marginBottom: '12px' }}>
                 <label className="label">Dirección (opcional)</label>
@@ -784,18 +793,27 @@ export default function ConfigPage() {
                   </div>
                 ) : (
                   <div style={{ background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-sm)', padding: '12px' }}>
-                    <input className="input" type="password" placeholder="Nueva contraseña (mínimo 6 caracteres)"
-                      value={nuevaPassword} onChange={(e) => setNuevaPassword(e.target.value)}
-                      style={{ marginBottom: '8px' }} />
-                    <input className="input" type="password" placeholder="Confirmar contraseña"
-                      value={confirmarPassword} onChange={(e) => setConfirmarPassword(e.target.value)}
-                      style={{ marginBottom: '8px' }} />
+                    <div style={{ marginBottom: '12px' }}>
+                      <PasswordInput
+                        value={nuevaPassword}
+                        onChange={setNuevaPassword}
+                        placeholder="Nueva contraseña"
+                        showValidation={true}
+                      />
+                    </div>
+                    <div style={{ marginBottom: '8px' }}>
+                      <PasswordInput
+                        value={confirmarPassword}
+                        onChange={setConfirmarPassword}
+                        placeholder="Confirmar nueva contraseña"
+                      />
+                    </div>
                     {nuevaPassword && confirmarPassword && nuevaPassword !== confirmarPassword && (
                       <div style={{ fontSize: '11px', color: 'var(--color-danger)', marginBottom: '8px' }}>Las contraseñas no coinciden</div>
                     )}
                     <div style={{ display: 'flex', gap: '8px' }}>
-                      <button onClick={cambiarPassword} disabled={nuevaPassword.length < 6 || nuevaPassword !== confirmarPassword || guardandoPass}
-                        className="btn-primary" style={{ flex: 1, padding: '10px', fontSize: '12px', opacity: nuevaPassword.length < 6 ? 0.5 : 1 }}>
+                      <button onClick={cambiarPassword} disabled={!isPasswordValid(nuevaPassword) || nuevaPassword !== confirmarPassword || guardandoPass}
+                        className="btn-primary" style={{ flex: 1, padding: '10px', fontSize: '12px', opacity: !isPasswordValid(nuevaPassword) ? 0.5 : 1 }}>
                         {guardandoPass ? 'Guardando...' : passGuardada ? '✓ Contraseña actualizada' : 'Guardar nueva contraseña'}
                       </button>
                       <button onClick={() => { setMostrarCambiarPass(false); setNuevaPassword(''); setConfirmarPassword('') }}
