@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks'
 import { createClient } from '@/lib/supabase-browser'
 import Cropper from 'react-easy-crop'
+import TimePicker from '@/components/ui/TimePicker'
 
 export default function ConfigPage() {
   const router = useRouter()
@@ -657,47 +658,97 @@ export default function ConfigPage() {
           {seccionActiva === 'horarios' && (
             <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-light)', borderTop: 'none', borderRadius: '0 0 12px 12px', padding: '14px', animation: 'fadeInUp 0.2s ease' }}>
               {horarios.map((h, i) => (
-                <div key={h.dia} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: i < 6 ? '1px solid var(--border-light)' : 'none', opacity: h.cerrado ? 0.4 : 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100px' }}>
-                    <span style={{ fontSize: '13px' }}>{h.dia}</span>
+                <div
+                  key={h.dia}
+                  style={{
+                    padding: '14px 0',
+                    borderBottom: i < 6 ? '1px solid var(--border-light)' : 'none',
+                  }}
+                >
+                  {/* Fila superior: día + estado + toggle */}
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: h.cerrado ? 0 : '10px',
+                  }}>
+                    <span style={{
+                      fontSize: '14px',
+                      fontWeight: 500,
+                      color: h.cerrado ? 'var(--text-tertiary)' : 'var(--text-primary)',
+                    }}>
+                      {h.dia}
+                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <span style={{
+                        fontSize: '11px',
+                        fontWeight: 500,
+                        color: h.cerrado ? 'var(--text-tertiary)' : 'var(--color-info)',
+                        letterSpacing: '0.3px',
+                      }}>
+                        {h.cerrado ? 'Cerrado' : 'Abierto'}
+                      </span>
+                      <div
+                        onClick={() => {
+                          const nuevo = [...horarios]
+                          nuevo[i] = { ...nuevo[i], cerrado: !nuevo[i].cerrado }
+                          setHorarios(nuevo)
+                        }}
+                        style={{
+                          width: '36px',
+                          height: '20px',
+                          borderRadius: '10px',
+                          background: h.cerrado ? 'var(--border-medium)' : 'var(--color-info)',
+                          position: 'relative',
+                          cursor: 'pointer',
+                          transition: 'background 0.2s',
+                          flexShrink: 0,
+                        }}
+                      >
+                        <div style={{
+                          width: '16px',
+                          height: '16px',
+                          borderRadius: '50%',
+                          background: 'white',
+                          position: 'absolute',
+                          top: '2px',
+                          left: h.cerrado ? '2px' : '18px',
+                          transition: 'left 0.2s',
+                          boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
+                        }} />
+                      </div>
+                    </div>
                   </div>
-                  {h.cerrado ? (
-                    <span style={{ fontSize: '12px', color: 'var(--color-danger)', fontWeight: 500 }}>Cerrado</span>
-                  ) : (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--text-secondary)' }}>
-                      <input type="time" value={h.hora_apertura}
-                        onChange={(e) => {
+
+                  {/* Fila inferior: selectores de hora (solo si está abierto) */}
+                  {!h.cerrado && (
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                    }}>
+                      <TimePicker
+                        value={h.hora_apertura}
+                        onChange={(v) => {
                           const nuevo = [...horarios]
-                          nuevo[i] = { ...nuevo[i], hora_apertura: e.target.value }
+                          nuevo[i] = { ...nuevo[i], hora_apertura: v }
                           setHorarios(nuevo)
                         }}
-                        style={{ border: '1px solid var(--border-light)', borderRadius: '6px', padding: '4px 6px', fontSize: '12px', fontFamily: 'var(--font-body)' }} />
-                      <span>—</span>
-                      <input type="time" value={h.hora_cierre}
-                        onChange={(e) => {
+                      />
+                      <span style={{
+                        color: 'var(--text-tertiary)',
+                        fontSize: '13px',
+                      }}>—</span>
+                      <TimePicker
+                        value={h.hora_cierre}
+                        onChange={(v) => {
                           const nuevo = [...horarios]
-                          nuevo[i] = { ...nuevo[i], hora_cierre: e.target.value }
+                          nuevo[i] = { ...nuevo[i], hora_cierre: v }
                           setHorarios(nuevo)
                         }}
-                        style={{ border: '1px solid var(--border-light)', borderRadius: '6px', padding: '4px 6px', fontSize: '12px', fontFamily: 'var(--font-body)' }} />
+                      />
                     </div>
                   )}
-                  <div onClick={() => {
-                    const nuevo = [...horarios]
-                    nuevo[i] = { ...nuevo[i], cerrado: !nuevo[i].cerrado }
-                    setHorarios(nuevo)
-                  }} style={{
-                    width: '36px', height: '20px', borderRadius: '10px',
-                    background: h.cerrado ? 'var(--color-danger)' : 'var(--color-info)',
-                    position: 'relative', cursor: 'pointer', transition: 'background 0.2s', flexShrink: 0,
-                  }}>
-                    <div style={{
-                      width: '16px', height: '16px', borderRadius: '50%', background: 'white',
-                      position: 'absolute', top: '2px',
-                      left: h.cerrado ? '2px' : '18px',
-                      transition: 'left 0.2s',
-                    }} />
-                  </div>
                 </div>
               ))}
               <button onClick={guardarHorarios} className="btn-primary" style={{ width: '100%', padding: '12px', fontSize: '13px', marginTop: '14px' }}>
