@@ -9,6 +9,7 @@ interface ModalProps {
   children: React.ReactNode
   maxWidth?: number
   showClose?: boolean
+  noPadding?: boolean
 }
 
 export default function Modal({
@@ -18,6 +19,7 @@ export default function Modal({
   children,
   maxWidth = 440,
   showClose = true,
+  noPadding = false,
 }: ModalProps) {
   const [esDesktop, setEsDesktop] = useState(false)
 
@@ -76,6 +78,7 @@ export default function Modal({
             left: '50%',
             transform: 'translate(-50%, -50%)',
             width: '90%',
+            minWidth: '320px',
             maxWidth: `${maxWidth}px`,
             maxHeight: '85vh',
             background: 'var(--bg-secondary)',
@@ -88,6 +91,7 @@ export default function Modal({
             bottom: 0,
             left: 0,
             right: 0,
+            minWidth: '320px',
             maxWidth: '500px',
             margin: '0 auto',
             background: 'var(--bg-secondary)',
@@ -112,10 +116,16 @@ export default function Modal({
                 fontSize: esDesktop ? '16px' : '15px',
                 fontWeight: 500,
                 color: 'var(--text-primary)',
+                flex: 1,
+                minWidth: 0,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                paddingRight: '12px',
               }}>
                 {title}
               </span>
-            ) : <span />}
+            ) : <span style={{ flex: 1 }} />}
             {showClose && (
               <button
                 onClick={onClose}
@@ -139,7 +149,7 @@ export default function Modal({
         )}
 
         {/* Contenido */}
-        <div style={{ padding: esDesktop ? '16px 24px 24px' : '0 20px 20px' }}>
+        <div style={{ padding: noPadding ? 0 : (esDesktop ? '16px 24px 24px' : '0 20px 20px') }}>
           {children}
         </div>
       </div>

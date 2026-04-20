@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase-browser'
+import Modal from '@/components/ui/Modal'
 
 // Helper: formatea "HH:MM" o "HH:MM:SS" a "H:MM a.m./p.m."
 function formato12h(hora: string | null | undefined): string {
@@ -1195,61 +1196,62 @@ export default function MenuPublicoPage() {
         )}
 
         {/* Modal ver pedido */}
-        {mostrarPedido && (
-          <>
-            <div onClick={() => setMostrarPedido(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 60 }} />
-            <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 70, maxWidth: '500px', minWidth: '320px', margin: '0 auto', background: 'var(--bg-secondary)', borderRadius: '16px 16px 0 0', maxHeight: '80vh', overflowY: 'auto', animation: 'slideUp 0.3s ease' }}>
-              <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-light)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '16px', fontWeight: 500 }}>Tu pedido</span>
-                <span onClick={() => setMostrarPedido(false)} style={{ fontSize: '18px', color: 'var(--text-tertiary)', cursor: 'pointer' }}>✕</span>
-              </div>
-              {esQR && <div style={{ padding: '12px 20px', background: 'var(--color-info-light)', fontSize: '12px', color: 'var(--color-info)' }}>Mesa {qrMesa?.replace('mesa', '')} · Muéstrale este resumen al mesero</div>}
-              <div style={{ padding: '16px 20px' }}>
-                {itemsPedido.map((item: any) => (
-                  <div key={item.plato.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--border-light)' }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: '13px', fontWeight: 500 }}>{item.plato.nombre}</div>
-                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                        {item.promo ? (
-                          <><span style={{ textDecoration: 'line-through', marginRight: '4px' }}>${item.plato.precio.toLocaleString('es-CO')}</span><span style={{ color: color, fontWeight: 500 }}>${item.promo.precioUnitario.toLocaleString('es-CO')} c/u</span> <span style={{ fontSize: '10px', color: 'var(--color-green)' }}>({item.promo.etiqueta})</span></>
-                        ) : `$${item.plato.precio.toLocaleString('es-CO')} c/u`}
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <div onClick={() => quitarDelPedido(item.plato.id)} style={{ width: '24px', height: '24px', borderRadius: '50%', border: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', cursor: 'pointer' }}>-</div>
-                      <span style={{ fontSize: '14px', fontWeight: 500, minWidth: '16px', textAlign: 'center' }}>{item.cantidad}</span>
-                      <div onClick={() => agregarAlPedido(item.plato.id)} style={{ width: '24px', height: '24px', borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '14px', cursor: 'pointer' }}>+</div>
-                    </div>
-                    <div style={{ fontSize: '13px', fontWeight: 500, minWidth: '70px', textAlign: 'right' }}>${((item.promo ? item.promo.precioUnitario : item.plato.precio) * item.cantidad).toLocaleString('es-CO')}</div>
-                  </div>
-                ))}
-                <div style={{ marginTop: '14px' }}>
-                  <input value={nota} onChange={(e) => setNota(e.target.value)} placeholder={esQR ? 'Nota para el mesero (opcional)' : 'Nota para el restaurante (opcional)'}
-                    style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border-light)', borderRadius: '8px', fontSize: '13px', fontFamily: 'var(--font-body)', outline: 'none' }} />
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', paddingTop: '14px', borderTop: '1px solid var(--border-light)' }}>
-                  <span style={{ fontSize: '15px', fontWeight: 500 }}>Total</span>
-                  <span style={{ fontSize: '20px', fontWeight: 500 }}>${totalPedido.toLocaleString('es-CO')}</span>
-                </div>
-                {esQR ? (
-                  <div style={{ marginTop: '16px', textAlign: 'center' }}>
-                    <div style={{ background: 'var(--text-primary)', color: 'white', borderRadius: '12px', padding: '16px', fontSize: '15px', fontWeight: 500, cursor: 'pointer' }}>Mostrar al mesero</div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '8px' }}>El mesero tomará tu pedido desde esta pantalla</div>
-                  </div>
-                ) : config?.whatsapp_activo ? (
-                  <div style={{ marginTop: '16px', textAlign: 'center' }}>
-                    <div onClick={pedirPorWhatsApp} style={{ background: '#25D366', color: 'white', borderRadius: '12px', padding: '16px', fontSize: '15px', fontWeight: 500, cursor: 'pointer' }}>Pedir por WhatsApp</div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '8px' }}>Se abrirá WhatsApp con tu pedido listo</div>
-                  </div>
-                ) : (
-                  <div style={{ marginTop: '16px', textAlign: 'center' }}>
-                    <div style={{ background: 'var(--text-primary)', color: 'white', borderRadius: '12px', padding: '16px', fontSize: '15px', fontWeight: 500 }}>Muestra este resumen en caja</div>
-                  </div>
-                )}
-              </div>
+        <Modal
+          isOpen={mostrarPedido}
+          onClose={() => setMostrarPedido(false)}
+          title="Tu pedido"
+          maxWidth={500}
+          noPadding
+        >
+          {esQR && (
+            <div style={{ padding: '12px 20px', background: 'var(--color-info-light)', fontSize: '12px', color: 'var(--color-info)' }}>
+              Mesa {qrMesa?.replace('mesa', '')} · Muéstrale este resumen al mesero
             </div>
-          </>
-        )}
+          )}
+          <div style={{ padding: '16px 20px' }}>
+            {itemsPedido.map((item: any) => (
+              <div key={item.plato.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--border-light)' }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: '13px', fontWeight: 500 }}>{item.plato.nombre}</div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                    {item.promo ? (
+                      <><span style={{ textDecoration: 'line-through', marginRight: '4px' }}>${item.plato.precio.toLocaleString('es-CO')}</span><span style={{ color: color, fontWeight: 500 }}>${item.promo.precioUnitario.toLocaleString('es-CO')} c/u</span> <span style={{ fontSize: '10px', color: 'var(--color-green)' }}>({item.promo.etiqueta})</span></>
+                    ) : `$${item.plato.precio.toLocaleString('es-CO')} c/u`}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div onClick={() => quitarDelPedido(item.plato.id)} style={{ width: '24px', height: '24px', borderRadius: '50%', border: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', cursor: 'pointer' }}>-</div>
+                  <span style={{ fontSize: '14px', fontWeight: 500, minWidth: '16px', textAlign: 'center' }}>{item.cantidad}</span>
+                  <div onClick={() => agregarAlPedido(item.plato.id)} style={{ width: '24px', height: '24px', borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '14px', cursor: 'pointer' }}>+</div>
+                </div>
+                <div style={{ fontSize: '13px', fontWeight: 500, minWidth: '70px', textAlign: 'right' }}>${((item.promo ? item.promo.precioUnitario : item.plato.precio) * item.cantidad).toLocaleString('es-CO')}</div>
+              </div>
+            ))}
+            <div style={{ marginTop: '14px' }}>
+              <input value={nota} onChange={(e) => setNota(e.target.value)} placeholder={esQR ? 'Nota para el mesero (opcional)' : 'Nota para el restaurante (opcional)'}
+                style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border-light)', borderRadius: '8px', fontSize: '13px', fontFamily: 'var(--font-body)', outline: 'none' }} />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', paddingTop: '14px', borderTop: '1px solid var(--border-light)' }}>
+              <span style={{ fontSize: '15px', fontWeight: 500 }}>Total</span>
+              <span style={{ fontSize: '20px', fontWeight: 500 }}>${totalPedido.toLocaleString('es-CO')}</span>
+            </div>
+            {esQR ? (
+              <div style={{ marginTop: '16px', textAlign: 'center' }}>
+                <div style={{ background: 'var(--text-primary)', color: 'white', borderRadius: '12px', padding: '16px', fontSize: '15px', fontWeight: 500, cursor: 'pointer' }}>Mostrar al mesero</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '8px' }}>El mesero tomará tu pedido desde esta pantalla</div>
+              </div>
+            ) : config?.whatsapp_activo ? (
+              <div style={{ marginTop: '16px', textAlign: 'center' }}>
+                <div onClick={pedirPorWhatsApp} style={{ background: '#25D366', color: 'white', borderRadius: '12px', padding: '16px', fontSize: '15px', fontWeight: 500, cursor: 'pointer' }}>Pedir por WhatsApp</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '8px' }}>Se abrirá WhatsApp con tu pedido listo</div>
+              </div>
+            ) : (
+              <div style={{ marginTop: '16px', textAlign: 'center' }}>
+                <div style={{ background: 'var(--text-primary)', color: 'white', borderRadius: '12px', padding: '16px', fontSize: '15px', fontWeight: 500 }}>Muestra este resumen en caja</div>
+              </div>
+            )}
+          </div>
+        </Modal>
         {/* Modal calificar plato */}
         {platoCalificar && (() => {
           const plato = todosLosPlatos.find((p: any) => p.id === platoCalificar)
@@ -1282,110 +1284,108 @@ export default function MenuPublicoPage() {
             setTimeout(() => { setPlatoCalificar(null); setCalEnviada(false) }, 2000)
           }
 
+          // ===== Estado 2: Confirmación de envío =====
           if (calEnviada) {
             return (
-              <>
-                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 60 }} />
-                <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 70, maxWidth: '500px', minWidth: '320px', margin: '0 auto', background: 'var(--bg-secondary)', borderRadius: '16px 16px 0 0', padding: '40px 20px', textAlign: 'center', animation: 'slideUp 0.3s ease' }}>
+              <Modal
+                isOpen={!!platoCalificar}
+                onClose={() => setPlatoCalificar(null)}
+                maxWidth={440}
+                showClose={false}
+              >
+                <div style={{ textAlign: 'center', padding: '20px 0' }}>
                   <div style={{ fontSize: '40px', marginBottom: '12px' }}>✓</div>
                   <div style={{ fontSize: '18px', fontWeight: 500, marginBottom: '6px' }}>¡Gracias!</div>
                   <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Tu calificación ayuda a otros comensales</div>
                 </div>
-              </>
+              </Modal>
             )
           }
 
+          // ===== Estado 1: Formulario =====
           return (
-            <>
-              <div onClick={() => setPlatoCalificar(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 60 }} />
-              <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 70, maxWidth: '500px', minWidth: '320px', margin: '0 auto', background: 'var(--bg-secondary)', borderRadius: '16px 16px 0 0', maxHeight: '85vh', overflowY: 'auto', animation: 'slideUp 0.3s ease' }}>
-
-                {/* Header */}
-                <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-light)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '16px', fontWeight: 500 }}>Calificar plato</span>
-                  <span onClick={() => setPlatoCalificar(null)} style={{ fontSize: '18px', color: 'var(--text-tertiary)', cursor: 'pointer' }}>✕</span>
+            <Modal
+              isOpen={!!platoCalificar}
+              onClose={() => setPlatoCalificar(null)}
+              title="Calificar plato"
+              maxWidth={500}
+            >
+              {/* Plato que va a calificar */}
+              <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-light)', borderRadius: '10px', padding: '12px', display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+                <div style={{ width: '48px', height: '48px', borderRadius: '8px', background: `${color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', fontWeight: 500, color: color, flexShrink: 0, overflow: 'hidden' }}>
+                  {plato.foto_url ? (
+                    <img src={plato.foto_url} alt={plato.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : plato.nombre.charAt(0)}
                 </div>
-
-                <div style={{ padding: '16px 20px' }}>
-
-                  {/* Plato que va a calificar */}
-                  <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-light)', borderRadius: '10px', padding: '12px', display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
-                    <div style={{ width: '48px', height: '48px', borderRadius: '8px', background: `${color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', fontWeight: 500, color: color, flexShrink: 0, overflow: 'hidden' }}>
-                      {plato.foto_url ? (
-                        <img src={plato.foto_url} alt={plato.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      ) : plato.nombre.charAt(0)}
-                    </div>
-                    <div>
-                      <div style={{ fontSize: '14px', fontWeight: 500 }}>{plato.nombre}</div>
-                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>{restaurante.nombre}</div>
-                    </div>
-                  </div>
-
-                  {/* Estrellas */}
-                  <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-                    <div style={{ fontSize: '14px', fontWeight: 500, marginBottom: '12px' }}>¿Qué te pareció?</div>
-                    <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', marginBottom: '8px' }}>
-                      {[1, 2, 3, 4, 5].map(n => (
-                        <span key={n} onClick={() => setCalEstrellas(n)} style={{
-                          fontSize: '36px', cursor: 'pointer',
-                          color: n <= calEstrellas ? '#F2A623' : 'var(--border-light)',
-                          transition: 'transform 0.15s',
-                          transform: n <= calEstrellas ? 'scale(1.1)' : 'scale(1)',
-                        }}>★</span>
-                      ))}
-                    </div>
-                    {calEstrellas > 0 && <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{textoEstrellas[calEstrellas]}</div>}
-                  </div>
-
-                  {/* Tags rápidos */}
-                  <div style={{ marginBottom: '20px' }}>
-                    <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '10px' }}>¿Qué destacas? (opcional)</div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                      {tagsDisponibles.map(tag => (
-                        <div key={tag.id} onClick={() => toggleTag(tag.id)} style={{
-                          padding: '8px 14px', borderRadius: '20px', fontSize: '12px', cursor: 'pointer',
-                          background: calTags.includes(tag.id) ? 'var(--text-primary)' : 'var(--bg-secondary)',
-                          color: calTags.includes(tag.id) ? 'white' : 'var(--text-secondary)',
-                          border: calTags.includes(tag.id) ? '1px solid var(--text-primary)' : '1px solid var(--border-light)',
-                          transition: 'all 0.15s',
-                        }}>{tag.label}</div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Comentario */}
-                  <div style={{ marginBottom: '20px' }}>
-                    <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '6px' }}>Comentario (opcional)</div>
-                    <div style={{ position: 'relative' }}>
-                      <textarea value={calComentario} onChange={(e) => { if (e.target.value.length <= 200) setCalComentario(e.target.value) }}
-                        placeholder="Cuéntanos más sobre tu experiencia..."
-                        style={{
-                          width: '100%', padding: '12px', border: '1px solid var(--border-light)', borderRadius: '10px',
-                          fontSize: '13px', fontFamily: 'var(--font-body)', outline: 'none', resize: 'none', minHeight: '80px',
-                        }} />
-                      <span style={{ position: 'absolute', right: '12px', bottom: '8px', fontSize: '10px', color: calComentario.length > 180 ? 'var(--color-warning)' : 'var(--text-tertiary)' }}>
-                        {calComentario.length}/200
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Enviar */}
-                  <div onClick={enviarCalificacion} style={{
-                    background: calEstrellas > 0 ? 'var(--text-primary)' : 'var(--border-light)',
-                    color: calEstrellas > 0 ? 'white' : 'var(--text-tertiary)',
-                    borderRadius: '12px', padding: '16px', textAlign: 'center',
-                    fontSize: '15px', fontWeight: 500, cursor: calEstrellas > 0 ? 'pointer' : 'default',
-                    marginBottom: '12px',
-                  }}>
-                    Enviar calificación
-                  </div>
-
-                  <div style={{ textAlign: 'center', fontSize: '11px', color: 'var(--text-tertiary)' }}>
-                    Tu reseña es anónima y ayuda a otros comensales
-                  </div>
+                <div>
+                  <div style={{ fontSize: '14px', fontWeight: 500 }}>{plato.nombre}</div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>{restaurante.nombre}</div>
                 </div>
               </div>
-            </>
+
+              {/* Estrellas */}
+              <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+                <div style={{ fontSize: '14px', fontWeight: 500, marginBottom: '12px' }}>¿Qué te pareció?</div>
+                <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', marginBottom: '8px' }}>
+                  {[1, 2, 3, 4, 5].map(n => (
+                    <span key={n} onClick={() => setCalEstrellas(n)} style={{
+                      fontSize: '36px', cursor: 'pointer',
+                      color: n <= calEstrellas ? '#F2A623' : 'var(--border-light)',
+                      transition: 'transform 0.15s',
+                      transform: n <= calEstrellas ? 'scale(1.1)' : 'scale(1)',
+                    }}>★</span>
+                  ))}
+                </div>
+                {calEstrellas > 0 && <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{textoEstrellas[calEstrellas]}</div>}
+              </div>
+
+              {/* Tags rápidos */}
+              <div style={{ marginBottom: '20px' }}>
+                <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '10px' }}>¿Qué destacas? (opcional)</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {tagsDisponibles.map(tag => (
+                    <div key={tag.id} onClick={() => toggleTag(tag.id)} style={{
+                      padding: '8px 14px', borderRadius: '20px', fontSize: '12px', cursor: 'pointer',
+                      background: calTags.includes(tag.id) ? 'var(--text-primary)' : 'var(--bg-secondary)',
+                      color: calTags.includes(tag.id) ? 'white' : 'var(--text-secondary)',
+                      border: calTags.includes(tag.id) ? '1px solid var(--text-primary)' : '1px solid var(--border-light)',
+                      transition: 'all 0.15s',
+                    }}>{tag.label}</div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Comentario */}
+              <div style={{ marginBottom: '20px' }}>
+                <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '6px' }}>Comentario (opcional)</div>
+                <div style={{ position: 'relative' }}>
+                  <textarea value={calComentario} onChange={(e) => { if (e.target.value.length <= 200) setCalComentario(e.target.value) }}
+                    placeholder="Cuéntanos más sobre tu experiencia..."
+                    style={{
+                      width: '100%', padding: '12px', border: '1px solid var(--border-light)', borderRadius: '10px',
+                      fontSize: '13px', fontFamily: 'var(--font-body)', outline: 'none', resize: 'none', minHeight: '80px',
+                    }} />
+                  <span style={{ position: 'absolute', right: '12px', bottom: '8px', fontSize: '10px', color: calComentario.length > 180 ? 'var(--color-warning)' : 'var(--text-tertiary)' }}>
+                    {calComentario.length}/200
+                  </span>
+                </div>
+              </div>
+
+              {/* Enviar */}
+              <div onClick={enviarCalificacion} style={{
+                background: calEstrellas > 0 ? 'var(--text-primary)' : 'var(--border-light)',
+                color: calEstrellas > 0 ? 'white' : 'var(--text-tertiary)',
+                borderRadius: '12px', padding: '16px', textAlign: 'center',
+                fontSize: '15px', fontWeight: 500, cursor: calEstrellas > 0 ? 'pointer' : 'default',
+                marginBottom: '12px',
+              }}>
+                Enviar calificación
+              </div>
+
+              <div style={{ textAlign: 'center', fontSize: '11px', color: 'var(--text-tertiary)' }}>
+                Tu reseña es anónima y ayuda a otros comensales
+              </div>
+            </Modal>
           )
         })()}
         {/* Modal detalle plato */}
@@ -1395,96 +1395,120 @@ export default function MenuPublicoPage() {
           const cantidadActual = pedido[plato.id] || 0
           const cantidadMostrar = cantidadActual || 1
 
-          
           return (
-            <>
-              <div onClick={() => setPlatoDetalle(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 60 }} />
-              <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 70, maxWidth: '500px', minWidth: '320px', margin: '0 auto', background: 'var(--bg-secondary)', borderRadius: '16px 16px 0 0', maxHeight: '85vh', overflowY: 'auto', animation: 'slideUp 0.3s ease' }}>
-                {/* Foto grande */}
-                <div style={{ height: '200px', background: `${color}15`, borderRadius: '16px 16px 0 0', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}>
-                  {esBasicoPublico && plato.foto_url ? (
-                    <img src={plato.foto_url} alt={plato.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  ) : (
-                    <span style={{ fontSize: '60px', fontWeight: 500, color: color, opacity: 0.3 }}>{plato.nombre.charAt(0)}</span>
+            <Modal
+              isOpen={!!platoDetalle}
+              onClose={() => setPlatoDetalle(null)}
+              maxWidth={500}
+              noPadding
+              showClose={false}
+            >
+              {/* Foto grande */}
+              <div style={{
+                height: '200px',
+                background: `${color}15`,
+                borderRadius: '14px 14px 0 0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                position: 'relative',
+                overflow: 'hidden',
+              }}>
+                {esBasicoPublico && plato.foto_url ? (
+                  <img src={plato.foto_url} alt={plato.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : (
+                  <span style={{ fontSize: '60px', fontWeight: 500, color: color, opacity: 0.3 }}>{plato.nombre.charAt(0)}</span>
+                )}
+                <div onClick={() => setPlatoDetalle(null)} style={{
+                  position: 'absolute',
+                  top: '12px',
+                  right: '12px',
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '50%',
+                  background: 'rgba(0,0,0,0.3)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'white',
+                  fontSize: '16px',
+                  cursor: 'pointer',
+                }}>✕</div>
+              </div>
+
+              <div style={{ padding: '16px 20px' }}>
+                {/* Nombre y calificación */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '8px' }}>
+                  <div style={{ fontSize: '20px', fontWeight: 500 }}>{plato.nombre}</div>
+                  {config?.calificaciones_activo && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <span style={{ fontSize: '13px', color: '#F2A623' }}>★</span>
+                      <span style={{ fontSize: '14px', fontWeight: 500 }}>{plato.estrellas}</span>
+                      <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>({plato.resenas})</span>
+                    </div>
                   )}
-                  <div onClick={() => setPlatoDetalle(null)} style={{ position: 'absolute', top: '12px', right: '12px', width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '16px', cursor: 'pointer' }}>✕</div>
                 </div>
 
-                <div style={{ padding: '16px 20px' }}>
-                  {/* Nombre y calificación */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '8px' }}>
-                    <div style={{ fontSize: '20px', fontWeight: 500 }}>{plato.nombre}</div>
-                    {config?.calificaciones_activo && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <span style={{ fontSize: '13px', color: '#F2A623' }}>★</span>
-                        <span style={{ fontSize: '14px', fontWeight: 500 }}>{plato.estrellas}</span>
-                        <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>({plato.resenas})</span>
+                <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: '14px' }}>{plato.descripcion}</div>
+                <div style={{ fontSize: '22px', fontWeight: 500, marginBottom: '16px' }}>${plato.precio.toLocaleString('es-CO')}</div>
+
+                {/* Reseñas */}
+                {config?.calificaciones_activo && (
+                  <>
+                    <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '10px' }}>Reseñas {resenasReales.length > 0 ? `(${resenasReales.length})` : ''}</div>
+                    {resenasReales.length > 0 ? (
+                      <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-light)', borderRadius: '10px', overflow: 'hidden', marginBottom: '14px' }}>
+                        {resenasReales.map((r: any, i: number) => (
+                          <div key={i} style={{ padding: '12px 14px', borderBottom: i < resenasReales.length - 1 ? '1px solid var(--border-light)' : 'none' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                              <div style={{ fontSize: '11px', color: '#F2A623' }}>{'★'.repeat(r.estrellas)}{'☆'.repeat(5 - r.estrellas)}</div>
+                              <div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>
+                                {new Date(r.created_at).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })}
+                              </div>
+                            </div>
+                            {r.tags && r.tags.length > 0 && (
+                              <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginBottom: '4px' }}>
+                                {r.tags.map((t: string, ti: number) => (
+                                  <span key={ti} style={{ fontSize: '10px', background: 'var(--bg-tertiary)', padding: '2px 6px', borderRadius: '4px', color: 'var(--text-secondary)' }}>{t}</span>
+                                ))}
+                              </div>
+                            )}
+                            {r.comentario && <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{r.comentario}</div>}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-light)', borderRadius: '10px', padding: '16px', textAlign: 'center', marginBottom: '14px' }}>
+                        <div style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>Aún no hay reseñas. ¡Sé el primero!</div>
                       </div>
                     )}
+                    <div onClick={() => { setPlatoCalificar(plato.id); setPlatoDetalle(null); setCalEstrellas(0); setCalTags([]); setCalComentario(''); setCalEnviada(false) }} style={{ border: '1px dashed var(--border-medium)', borderRadius: '10px', padding: '14px', textAlign: 'center', cursor: 'pointer', marginBottom: '16px' }}>
+                      <div style={{ fontSize: '13px', fontWeight: 500 }}>Calificar este plato</div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>Comparte tu experiencia</div>
+                    </div>
+                  </>
+                )}
+
+                {/* Agregar al pedido */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'var(--bg-primary)', border: '1px solid var(--border-light)', borderRadius: '10px', padding: '10px 14px' }}>
+                    <div onClick={() => { if (cantidadActual > 0) quitarDelPedido(plato.id) }} style={{
+                      width: '28px', height: '28px', borderRadius: '50%', border: '1px solid var(--border-light)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', cursor: 'pointer',
+                      color: cantidadActual > 0 ? 'var(--text-secondary)' : 'var(--border-light)',
+                    }}>-</div>
+                    <span style={{ fontSize: '16px', fontWeight: 500, minWidth: '20px', textAlign: 'center' }}>{cantidadMostrar}</span>
+                    <div onClick={() => agregarAlPedido(plato.id)} style={{ width: '28px', height: '28px', borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '16px', cursor: 'pointer' }}>+</div>
                   </div>
-
-                  <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: '14px' }}>{plato.descripcion}</div>
-                  <div style={{ fontSize: '22px', fontWeight: 500, marginBottom: '16px' }}>${plato.precio.toLocaleString('es-CO')}</div>
-
-                  {/* Reseñas */}
-                  {config?.calificaciones_activo && (
-                    <>
-                      <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '10px' }}>Reseñas {resenasReales.length > 0 ? `(${resenasReales.length})` : ''}</div>
-                      {resenasReales.length > 0 ? (
-                        <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-light)', borderRadius: '10px', overflow: 'hidden', marginBottom: '14px' }}>
-                          {resenasReales.map((r: any, i: number) => (
-                            <div key={i} style={{ padding: '12px 14px', borderBottom: i < resenasReales.length - 1 ? '1px solid var(--border-light)' : 'none' }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                                <div style={{ fontSize: '11px', color: '#F2A623' }}>{'★'.repeat(r.estrellas)}{'☆'.repeat(5 - r.estrellas)}</div>
-                                <div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>
-                                  {new Date(r.created_at).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })}
-                                </div>
-                              </div>
-                              {r.tags && r.tags.length > 0 && (
-                                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginBottom: '4px' }}>
-                                  {r.tags.map((t: string, ti: number) => (
-                                    <span key={ti} style={{ fontSize: '10px', background: 'var(--bg-tertiary)', padding: '2px 6px', borderRadius: '4px', color: 'var(--text-secondary)' }}>{t}</span>
-                                  ))}
-                                </div>
-                              )}
-                              {r.comentario && <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{r.comentario}</div>}
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-light)', borderRadius: '10px', padding: '16px', textAlign: 'center', marginBottom: '14px' }}>
-                          <div style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>Aún no hay reseñas. ¡Sé el primero!</div>
-                        </div>
-                      )}
-                      <div onClick={() => { setPlatoCalificar(plato.id); setPlatoDetalle(null); setCalEstrellas(0); setCalTags([]); setCalComentario(''); setCalEnviada(false) }} style={{ border: '1px dashed var(--border-medium)', borderRadius: '10px', padding: '14px', textAlign: 'center', cursor: 'pointer', marginBottom: '16px' }}>
-                        <div style={{ fontSize: '13px', fontWeight: 500 }}>Calificar este plato</div>
-                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>Comparte tu experiencia</div>
-                      </div>
-                    </>
-                  )}
-                      
-
-                  {/* Agregar al pedido */}
-                  <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'var(--bg-primary)', border: '1px solid var(--border-light)', borderRadius: '10px', padding: '10px 14px' }}>
-                      <div onClick={() => { if (cantidadActual > 0) quitarDelPedido(plato.id) }} style={{
-                        width: '28px', height: '28px', borderRadius: '50%', border: '1px solid var(--border-light)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', cursor: 'pointer',
-                        color: cantidadActual > 0 ? 'var(--text-secondary)' : 'var(--border-light)',
-                      }}>-</div>
-                      <span style={{ fontSize: '16px', fontWeight: 500, minWidth: '20px', textAlign: 'center' }}>{cantidadMostrar}</span>
-                      <div onClick={() => agregarAlPedido(plato.id)} style={{ width: '28px', height: '28px', borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '16px', cursor: 'pointer' }}>+</div>
-                    </div>
-                    <div onClick={() => { if (cantidadActual === 0) agregarAlPedido(plato.id); setPlatoDetalle(null) }} style={{
-                      flex: 1, background: color, color: 'white', borderRadius: '10px',
-                      padding: '14px', textAlign: 'center', fontSize: '14px', fontWeight: 500, cursor: 'pointer',
-                    }}>
-                      Agregar ${(cantidadMostrar * plato.precio).toLocaleString('es-CO')}
-                    </div>
+                  <div onClick={() => { if (cantidadActual === 0) agregarAlPedido(plato.id); setPlatoDetalle(null) }} style={{
+                    flex: 1, background: color, color: 'white', borderRadius: '10px',
+                    padding: '14px', textAlign: 'center', fontSize: '14px', fontWeight: 500, cursor: 'pointer',
+                  }}>
+                    Agregar ${(cantidadMostrar * plato.precio).toLocaleString('es-CO')}
                   </div>
                 </div>
               </div>
-            </>
+            </Modal>
           )
         })()}
 
