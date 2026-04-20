@@ -51,6 +51,7 @@ export default function MenuPublicoPage() {
   const [promoDetalle, setPromoDetalle] = useState<any>(null)
   const [promoSeleccion, setPromoSeleccion] = useState<string[]>([])
   const [mostrarCombos, setMostrarCombos] = useState(false)
+  const [comboDetalle, setComboDetalle] = useState<any>(null)
   const [platoGanador, setPlatoGanador] = useState<any>(null)
 
   useEffect(() => {
@@ -156,6 +157,7 @@ export default function MenuPublicoPage() {
           precio: c.precio,
           precioIndividual: c.precio_individual,
           platos: c.combo_platos?.map((cp: any) => cp.platos?.nombre || 'Plato') || [],
+          platosIds: c.combo_platos?.map((cp: any) => cp.plato_id) || [],
         })))
       }
 
@@ -935,21 +937,25 @@ export default function MenuPublicoPage() {
           <div id="combos-section" style={{ padding: '0 16px', marginBottom: '14px' }}>
             <div style={{ fontSize: '14px', fontWeight: 500, marginBottom: '8px', paddingTop: '4px' }}>🍱 Combos</div>
             {combosVisibles.map((combo: any) => (
-              <div key={combo.id} style={{
+              <div key={combo.id} onClick={() => setComboDetalle(combo)} style={{
                 background: 'var(--bg-secondary)', border: `1px solid ${color}30`,
                 borderRadius: '10px', padding: '12px', marginBottom: '8px',
+                cursor: 'pointer',
               }}>
                 <div style={{ fontSize: '14px', fontWeight: 500 }}>{combo.nombre}</div>
                 {combo.descripcion && <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>{combo.descripcion}</div>}
                 <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '4px' }}>{combo.platos.join(' + ')}</div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                     <span style={{ fontSize: '15px', fontWeight: 500, color: color }}>${combo.precio.toLocaleString('es-CO')}</span>
                     <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', textDecoration: 'line-through' }}>${combo.precioIndividual.toLocaleString('es-CO')}</span>
                     <span style={{ fontSize: '11px', color: 'var(--color-green)', fontWeight: 500 }}>-${(combo.precioIndividual - combo.precio).toLocaleString('es-CO')}</span>
                   </div>
-                  <Qty id={combo.id} />
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <Qty id={combo.id} />
+                  </div>
                 </div>
+                <div style={{ fontSize: '11px', color: color, marginTop: '6px', fontWeight: 500 }}>Ver detalles →</div>
               </div>
             ))}
           </div>
@@ -984,7 +990,205 @@ export default function MenuPublicoPage() {
             })}
           </div>
         )}
+        {/* Modal detalle combo */}
+        {comboDetalle && (() => {
+          // Obtener los platos completos del combo desde categorías
+          const platosDelCombo = categorias
+            .flatMap((c: any) => c.platos)
+            .filter((p: any) => comboDetalle.platosIds?.includes(p.id))
 
+          const ahorro = comboDetalle.precioIndividual - comboDetalle.precio
+          const porcentajeAhorro = Math.round((ahorro / comboDetalle.precioIndividual) * 100)
+
+          return (
+            <Modal
+              isOpen={!!comboDetalle}
+              onClose={() => setComboDetalle(null)}
+              maxWidth={500}
+              noPadding
+              showClose={false}
+            >
+              {/* Header con nombre y badge de ahorro */}
+              <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-light)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+                  <span style={{
+                    fontSize: '16px',
+                    fontWeight: 500,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}>🍱 {comboDetalle.nombre}</span>
+                  <span style={{
+                    fontSize: '11px',
+                    fontWeight: 500,
+                    color: 'white',
+                    background: 'var(--color-green)',
+                    padding: '2px 8px',
+                    borderRadius: '10px',
+                    flexShrink: 0,
+                  }}>
+                    -{porcentajeAhorro}%
+                  </span>
+                </div>
+                <span onClick={() => setComboDetalle(null)} style={{
+                  fontSize: '18px',
+                  color: 'var(--text-tertiary)',
+                  cursor: 'pointer',
+                  marginLeft: '12px',
+                  padding: '4px 8px',
+                  borderRadius: '6px',
+                  lineHeight: 1,
+                }}>✕</span>
+              </div>
+
+              <div style={{ padding: '16px 20px' }}>
+                {/* Descripción del combo */}
+                {comboDetalle.descripcion && (
+                  <div style={{
+                    fontSize: '13px',
+                    color: 'var(--text-secondary)',
+                    marginBottom: '16px',
+                    lineHeight: 1.5,
+                  }}>
+                    {comboDetalle.descripcion}
+                  </div>
+                )}
+
+                {/* Título de la sección */}
+                <div style={{
+                  fontSize: '12px',
+                  fontWeight: 500,
+                  color: 'var(--text-secondary)',
+                  marginBottom: '8px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                }}>
+                  Incluye {platosDelCombo.length} platos
+                </div>
+
+                {/* Lista de platos del combo */}
+                {platosDelCombo.map((plato: any) => (
+                  <div key={plato.id} style={{
+                    padding: '12px',
+                    borderRadius: '10px',
+                    marginBottom: '8px',
+                    border: '1px solid var(--border-light)',
+                    background: 'var(--bg-primary)',
+                    display: 'flex',
+                    gap: '10px',
+                    alignItems: 'center',
+                  }}>
+                    <div style={{
+                      width: '52px',
+                      height: '52px',
+                      borderRadius: '8px',
+                      background: `${color}15`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      overflow: 'hidden',
+                      flexShrink: 0,
+                    }}>
+                      {esBasicoPublico && plato.foto_url ? (
+                        <img src={plato.foto_url} alt={plato.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        <span style={{ fontSize: '20px', fontWeight: 500, color: color }}>
+                          {plato.nombre.charAt(0)}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: '13px', fontWeight: 500 }}>{plato.nombre}</div>
+                      {plato.descripcion && (
+                        <div style={{
+                          fontSize: '11px',
+                          color: 'var(--text-secondary)',
+                          marginTop: '2px',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical' as any,
+                        }}>
+                          {plato.descripcion}
+                        </div>
+                      )}
+                      <div style={{
+                        fontSize: '11px',
+                        color: 'var(--text-tertiary)',
+                        marginTop: '4px',
+                      }}>
+                        Precio individual: ${plato.precio.toLocaleString('es-CO')}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                {/* Resumen de precios */}
+                <div style={{
+                  background: 'var(--bg-tertiary)',
+                  borderRadius: '10px',
+                  padding: '14px',
+                  marginTop: '16px',
+                  marginBottom: '16px',
+                }}>
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    fontSize: '12px',
+                    color: 'var(--text-secondary)',
+                    marginBottom: '6px',
+                  }}>
+                    <span>Comprando por separado</span>
+                    <span style={{ textDecoration: 'line-through' }}>${comboDetalle.precioIndividual.toLocaleString('es-CO')}</span>
+                  </div>
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    fontSize: '15px',
+                    fontWeight: 500,
+                    marginBottom: '6px',
+                  }}>
+                    <span>Precio del combo</span>
+                    <span style={{ color: color }}>${comboDetalle.precio.toLocaleString('es-CO')}</span>
+                  </div>
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    fontSize: '12px',
+                    color: 'var(--color-green)',
+                    fontWeight: 500,
+                    paddingTop: '6px',
+                    borderTop: '1px solid var(--border-light)',
+                  }}>
+                    <span>Tu ahorro</span>
+                    <span>${ahorro.toLocaleString('es-CO')}</span>
+                  </div>
+                </div>
+
+                {/* Botón agregar al pedido */}
+                <div onClick={() => {
+                  agregarAlPedido(comboDetalle.id)
+                  setComboDetalle(null)
+                }} style={{
+                  background: color,
+                  color: 'white',
+                  borderRadius: '12px',
+                  padding: '16px',
+                  textAlign: 'center',
+                  fontSize: '15px',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                }}>
+                  Agregar combo al pedido · ${comboDetalle.precio.toLocaleString('es-CO')}
+                </div>
+              </div>
+            </Modal>
+          )
+        })()}
         {/* Modal detalle promo */}
         {promoDetalle && (() => {
           const platosPromo = categorias.flatMap((c: any) => c.platos).filter((p: any) => 
@@ -1020,102 +1224,128 @@ export default function MenuPublicoPage() {
           }
 
           return (
-            <>
-              <div onClick={() => setPromoDetalle(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 60 }} />
-              <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 70, maxWidth: '500px', minWidth: '320px', margin: '0 auto', background: 'var(--bg-secondary)', borderRadius: '16px 16px 0 0', maxHeight: '80vh', overflowY: 'auto', animation: 'slideUp 0.3s ease' }}>
-                <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-light)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <span style={{ fontSize: '16px', fontWeight: 500 }}>{promoDetalle.nombre}</span>
-                    <span style={{ fontSize: '12px', fontWeight: 500, color: 'white', background: color, padding: '2px 8px', borderRadius: '10px', marginLeft: '8px' }}>
-                      {promoDetalle.tipo === 'dos_por_uno' ? '2x1' : promoDetalle.tipo === 'descuento' ? `${promoDetalle.valor}% OFF` : `$${parseInt(promoDetalle.valor || '0').toLocaleString('es-CO')}`}
-                    </span>
-                  </div>
-                  <span onClick={() => setPromoDetalle(null)} style={{ fontSize: '18px', color: 'var(--text-tertiary)', cursor: 'pointer' }}>✕</span>
+            <Modal
+              isOpen={!!promoDetalle}
+              onClose={() => setPromoDetalle(null)}
+              maxWidth={500}
+              noPadding
+              showClose={false}
+            >
+              {/* Header personalizado con título + badge de descuento */}
+              <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-light)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+                  <span style={{
+                    fontSize: '16px',
+                    fontWeight: 500,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}>{promoDetalle.nombre}</span>
+                  <span style={{
+                    fontSize: '12px',
+                    fontWeight: 500,
+                    color: 'white',
+                    background: color,
+                    padding: '2px 8px',
+                    borderRadius: '10px',
+                    flexShrink: 0,
+                  }}>
+                    {promoDetalle.tipo === 'dos_por_uno' ? '2x1' : promoDetalle.tipo === 'descuento' ? `${promoDetalle.valor}% OFF` : `$${parseInt(promoDetalle.valor || '0').toLocaleString('es-CO')}`}
+                  </span>
+                </div>
+                <span onClick={() => setPromoDetalle(null)} style={{
+                  fontSize: '18px',
+                  color: 'var(--text-tertiary)',
+                  cursor: 'pointer',
+                  marginLeft: '12px',
+                  padding: '4px 8px',
+                  borderRadius: '6px',
+                  lineHeight: 1,
+                }}>✕</span>
+              </div>
+
+              <div style={{ padding: '16px 20px' }}>
+                <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '12px' }}>
+                  {promoDetalle.tipo === 'dos_por_uno' && 'Selecciona un plato y lleva 2 por el precio de 1'}
+                  {promoDetalle.tipo === 'descuento' && `Selecciona los platos con ${promoDetalle.valor}% de descuento`}
+                  {promoDetalle.tipo === 'precio_especial' && `Platos a precio especial de $${parseInt(promoDetalle.valor || '0').toLocaleString('es-CO')}`}
                 </div>
 
-                <div style={{ padding: '16px 20px' }}>
-                  <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '12px' }}>
-                    {promoDetalle.tipo === 'dos_por_uno' && 'Selecciona un plato y lleva 2 por el precio de 1'}
-                    {promoDetalle.tipo === 'descuento' && `Selecciona los platos con ${promoDetalle.valor}% de descuento`}
-                    {promoDetalle.tipo === 'precio_especial' && `Platos a precio especial de $${parseInt(promoDetalle.valor || '0').toLocaleString('es-CO')}`}
-                  </div>
+                {platosPromo.map((plato: any) => {
+                  const seleccionado = promoSeleccion.includes(plato.id)
+                  const maxSeleccion = promoDetalle.tipo === 'dos_por_uno' ? 1 : platosPromo.length
+                  const puedeSeleccionar = seleccionado || promoSeleccion.length < maxSeleccion
 
-                  {platosPromo.map((plato: any) => {
-                    const seleccionado = promoSeleccion.includes(plato.id)
-                    const maxSeleccion = promoDetalle.tipo === 'dos_por_uno' ? 1 : platosPromo.length
-                    const puedeSeleccionar = seleccionado || promoSeleccion.length < maxSeleccion
-
-                    return (
-                      <div key={plato.id} onClick={() => {
-                        if (seleccionado) {
-                          setPromoSeleccion(promoSeleccion.filter(id => id !== plato.id))
-                        } else if (puedeSeleccionar) {
-                          if (promoDetalle.tipo === 'dos_por_uno') {
-                            setPromoSeleccion([plato.id])
-                          } else {
-                            setPromoSeleccion([...promoSeleccion, plato.id])
-                          }
+                  return (
+                    <div key={plato.id} onClick={() => {
+                      if (seleccionado) {
+                        setPromoSeleccion(promoSeleccion.filter(id => id !== plato.id))
+                      } else if (puedeSeleccionar) {
+                        if (promoDetalle.tipo === 'dos_por_uno') {
+                          setPromoSeleccion([plato.id])
+                        } else {
+                          setPromoSeleccion([...promoSeleccion, plato.id])
                         }
-                      }} style={{
-                        padding: '12px', borderRadius: '10px', marginBottom: '8px', cursor: puedeSeleccionar || seleccionado ? 'pointer' : 'default',
-                        border: seleccionado ? `2px solid ${color}` : '1px solid var(--border-light)',
-                        background: seleccionado ? `${color}08` : 'var(--bg-primary)',
-                        opacity: !puedeSeleccionar && !seleccionado ? 0.4 : 1,
-                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                      }}>
-                        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                          <div style={{ width: '44px', height: '44px', borderRadius: '8px', background: `${color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
-                            {plato.foto_url ? (
-                              <img src={plato.foto_url} alt={plato.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                            ) : <span style={{ fontSize: '16px', color: color }}>{plato.nombre.charAt(0)}</span>}
-                          </div>
-                          <div>
-                            <div style={{ fontSize: '13px', fontWeight: 500 }}>{plato.nombre}</div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
-                              {promoDetalle.tipo === 'dos_por_uno' ? (
-                                <>
-                                  <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', textDecoration: 'line-through' }}>${(plato.precio * 2).toLocaleString('es-CO')}</span>
-                                  <span style={{ fontSize: '13px', fontWeight: 500, color: color }}>${plato.precio.toLocaleString('es-CO')}</span>
-                                  <span style={{ fontSize: '10px', color: 'var(--color-green)', fontWeight: 500 }}>× 2 unidades</span>
-                                </>
-                              ) : promoDetalle.tipo === 'descuento' ? (
-                                <>
-                                  <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', textDecoration: 'line-through' }}>${plato.precio.toLocaleString('es-CO')}</span>
-                                  <span style={{ fontSize: '13px', fontWeight: 500, color: color }}>${Math.round(plato.precio * (1 - (promoDetalle.valor || 0) / 100)).toLocaleString('es-CO')}</span>
-                                </>
-                              ) : (
-                                <>
-                                  <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', textDecoration: 'line-through' }}>${plato.precio.toLocaleString('es-CO')}</span>
-                                  <span style={{ fontSize: '13px', fontWeight: 500, color: color }}>${parseInt(promoDetalle.valor || '0').toLocaleString('es-CO')}</span>
-                                </>
-                              )}
-                            </div>
-                          </div>
+                      }
+                    }} style={{
+                      padding: '12px', borderRadius: '10px', marginBottom: '8px', cursor: puedeSeleccionar || seleccionado ? 'pointer' : 'default',
+                      border: seleccionado ? `2px solid ${color}` : '1px solid var(--border-light)',
+                      background: seleccionado ? `${color}08` : 'var(--bg-primary)',
+                      opacity: !puedeSeleccionar && !seleccionado ? 0.4 : 1,
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    }}>
+                      <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                        <div style={{ width: '44px', height: '44px', borderRadius: '8px', background: `${color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
+                          {plato.foto_url ? (
+                            <img src={plato.foto_url} alt={plato.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          ) : <span style={{ fontSize: '16px', color: color }}>{plato.nombre.charAt(0)}</span>}
                         </div>
-                        <div style={{
-                          width: '24px', height: '24px', borderRadius: '50%',
-                          border: seleccionado ? 'none' : '2px solid var(--border-light)',
-                          background: seleccionado ? color : 'transparent',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        }}>
-                          {seleccionado && <span style={{ color: 'white', fontSize: '14px' }}>✓</span>}
+                        <div>
+                          <div style={{ fontSize: '13px', fontWeight: 500 }}>{plato.nombre}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+                            {promoDetalle.tipo === 'dos_por_uno' ? (
+                              <>
+                                <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', textDecoration: 'line-through' }}>${(plato.precio * 2).toLocaleString('es-CO')}</span>
+                                <span style={{ fontSize: '13px', fontWeight: 500, color: color }}>${plato.precio.toLocaleString('es-CO')}</span>
+                                <span style={{ fontSize: '10px', color: 'var(--color-green)', fontWeight: 500 }}>× 2 unidades</span>
+                              </>
+                            ) : promoDetalle.tipo === 'descuento' ? (
+                              <>
+                                <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', textDecoration: 'line-through' }}>${plato.precio.toLocaleString('es-CO')}</span>
+                                <span style={{ fontSize: '13px', fontWeight: 500, color: color }}>${Math.round(plato.precio * (1 - (promoDetalle.valor || 0) / 100)).toLocaleString('es-CO')}</span>
+                              </>
+                            ) : (
+                              <>
+                                <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', textDecoration: 'line-through' }}>${plato.precio.toLocaleString('es-CO')}</span>
+                                <span style={{ fontSize: '13px', fontWeight: 500, color: color }}>${parseInt(promoDetalle.valor || '0').toLocaleString('es-CO')}</span>
+                              </>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    )
-                  })}
-
-                  {promoSeleccion.length > 0 && (
-                    <div onClick={agregarPromoAlPedido} style={{
-                      background: color, color: 'white', borderRadius: '12px',
-                      padding: '16px', textAlign: 'center', fontSize: '15px',
-                      fontWeight: 500, cursor: 'pointer', marginTop: '12px',
-                    }}>
-                      Agregar al pedido
+                      <div style={{
+                        width: '24px', height: '24px', borderRadius: '50%',
+                        border: seleccionado ? 'none' : '2px solid var(--border-light)',
+                        background: seleccionado ? color : 'transparent',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        {seleccionado && <span style={{ color: 'white', fontSize: '14px' }}>✓</span>}
+                      </div>
                     </div>
-                  )}
-                </div>
+                  )
+                })}
+
+                {promoSeleccion.length > 0 && (
+                  <div onClick={agregarPromoAlPedido} style={{
+                    background: color, color: 'white', borderRadius: '12px',
+                    padding: '16px', textAlign: 'center', fontSize: '15px',
+                    fontWeight: 500, cursor: 'pointer', marginTop: '12px',
+                  }}>
+                    Agregar al pedido
+                  </div>
+                )}
               </div>
-            </>
+            </Modal>
           )
         })()}
         {/* Categorías y platos */}
