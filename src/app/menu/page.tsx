@@ -6,6 +6,7 @@ import { useAuth } from '@/hooks'
 import { createClient } from '@/lib/supabase-browser'
 import Cropper from 'react-easy-crop'
 import TimePicker from '@/components/ui/TimePicker'
+import Modal from '@/components/ui/Modal'
 
 interface Plato {
   id: string; nombre: string; precio: number; descripcion: string; disponible: boolean; foto_url: string | null
@@ -1465,77 +1466,79 @@ export default function MiMenuPage() {
         {horarioCategoria && (() => {
           const cat = categorias.find(c => c.id === horarioCategoria)
           return (
-            <>
-              <div onClick={() => { setHorarioCategoria(null); setAvisoHorario([]); setConfirmarHorario(false) }} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 60 }} />
-              <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 70, maxWidth: '500px', minWidth: '320px', margin: '0 auto', background: 'var(--bg-secondary)', borderRadius: '16px 16px 0 0', padding: '20px', animation: 'slideUp 0.3s ease', maxHeight: '80vh', overflowY: 'auto' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                  <span style={{ fontSize: '16px', fontWeight: 500 }}>Horario de "{cat?.nombre}"</span>
-                  <span onClick={() => { setHorarioCategoria(null); setAvisoHorario([]); setConfirmarHorario(false) }} style={{ fontSize: '18px', color: 'var(--text-tertiary)', cursor: 'pointer' }}>✕</span>
-                </div>
-                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '14px' }}>
-                  Define en qué horario esta categoría es visible en el menú. Déjalo vacío para que se muestre siempre.
-                </div>
-                <div style={{ marginBottom: '14px' }}>
-                  <label className="label">Horario de visibilidad</label>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
-                    <TimePicker
-                      value={horarioCatInicio}
-                      onChange={(v) => { setHorarioCatInicio(v); setAvisoHorario([]); setConfirmarHorario(false) }}
-                    />
-                    <span style={{ color: 'var(--text-tertiary)', fontSize: '13px' }}>—</span>
-                    <TimePicker
-                      value={horarioCatFin}
-                      onChange={(v) => { setHorarioCatFin(v); setAvisoHorario([]); setConfirmarHorario(false) }}
-                    />
-                  </div>
-                </div>
-                {horarioCatInicio && horarioCatFin && avisoHorario.length === 0 && (
-                  <div style={{ fontSize: '12px', color: 'var(--color-info)', marginBottom: '14px', background: 'var(--color-info-light)', padding: '10px', borderRadius: '8px' }}>
-                    "{cat?.nombre}" será visible de {formato12h(horarioCatInicio)} a {formato12h(horarioCatFin)}
-                  </div>
-                )}
-                {avisoHorario.length > 0 && (
-                  <div style={{ marginBottom: '14px', background: 'var(--color-warning-light)', border: '1px solid var(--color-warning)', borderRadius: '8px', padding: '12px' }}>
-                    <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--color-warning)', marginBottom: '8px' }}>
-                      Esto afectará otras funciones
-                    </div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '10px' }}>
-                      Al asignar horario a "{cat?.nombre}", lo siguiente solo será visible de {formato12h(horarioCatInicio)} a {formato12h(horarioCatFin)}:
-                    </div>
-                    {avisoHorario.map((a, i) => (
-                      <div key={i} style={{ fontSize: '12px', color: 'var(--text-primary)', padding: '6px 0', borderBottom: i < avisoHorario.length - 1 ? '1px solid var(--border-light)' : 'none', display: 'flex', gap: '6px', alignItems: 'start' }}>
-                        <span style={{ color: 'var(--color-warning)' }}>⚠</span>
-                        <span>{a}</span>
-                      </div>
-                    ))}
-                    <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '10px' }}>
-                      Puedes revisar combos, promos y sorpréndeme después si necesitas ajustarlos.
-                    </div>
-                  </div>
-                )}
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  {avisoHorario.length > 0 ? (
-                    <>
-                      <button onClick={() => { setConfirmarHorario(true); setTimeout(() => guardarHorarioCategoria(), 50) }} className="btn-primary" style={{ flex: 1, padding: '12px', fontSize: '13px' }}>
-                        Entendido, guardar
-                      </button>
-                      <button onClick={() => { setAvisoHorario([]); setConfirmarHorario(false) }} className="btn-outline" style={{ flex: 1, padding: '12px', fontSize: '13px' }}>
-                        Cancelar
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button onClick={guardarHorarioCategoria} className="btn-primary" style={{ flex: 1, padding: '12px', fontSize: '13px' }}>Guardar</button>
-                      <button onClick={() => {
-                        setHorarioCatInicio('')
-                        setHorarioCatFin('')
-                        setAvisoHorario([])
-                      }} className="btn-outline" style={{ padding: '12px 16px', fontSize: '13px' }}>Limpiar</button>
-                    </>
-                  )}
+            <Modal
+              isOpen={!!horarioCategoria}
+              onClose={() => { setHorarioCategoria(null); setAvisoHorario([]); setConfirmarHorario(false) }}
+              title={`Horario de "${cat?.nombre || ''}"`}
+              maxWidth={500}
+            >
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '14px' }}>
+                Define en qué horario esta categoría es visible en el menú. Déjalo vacío para que se muestre siempre.
+              </div>
+
+              <div style={{ marginBottom: '14px' }}>
+                <label className="label">Horario de visibilidad</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
+                  <TimePicker
+                    value={horarioCatInicio}
+                    onChange={(v) => { setHorarioCatInicio(v); setAvisoHorario([]); setConfirmarHorario(false) }}
+                  />
+                  <span style={{ color: 'var(--text-tertiary)', fontSize: '13px' }}>—</span>
+                  <TimePicker
+                    value={horarioCatFin}
+                    onChange={(v) => { setHorarioCatFin(v); setAvisoHorario([]); setConfirmarHorario(false) }}
+                  />
                 </div>
               </div>
-            </>
+
+              {horarioCatInicio && horarioCatFin && avisoHorario.length === 0 && (
+                <div style={{ fontSize: '12px', color: 'var(--color-info)', marginBottom: '14px', background: 'var(--color-info-light)', padding: '10px', borderRadius: '8px' }}>
+                  "{cat?.nombre}" será visible de {formato12h(horarioCatInicio)} a {formato12h(horarioCatFin)}
+                </div>
+              )}
+
+              {avisoHorario.length > 0 && (
+                <div style={{ marginBottom: '14px', background: 'var(--color-warning-light)', border: '1px solid var(--color-warning)', borderRadius: '8px', padding: '12px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--color-warning)', marginBottom: '8px' }}>
+                    Esto afectará otras funciones
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '10px' }}>
+                    Al asignar horario a "{cat?.nombre}", lo siguiente solo será visible de {formato12h(horarioCatInicio)} a {formato12h(horarioCatFin)}:
+                  </div>
+                  {avisoHorario.map((a, i) => (
+                    <div key={i} style={{ fontSize: '12px', color: 'var(--text-primary)', padding: '6px 0', borderBottom: i < avisoHorario.length - 1 ? '1px solid var(--border-light)' : 'none', display: 'flex', gap: '6px', alignItems: 'start' }}>
+                      <span style={{ color: 'var(--color-warning)' }}>⚠</span>
+                      <span>{a}</span>
+                    </div>
+                  ))}
+                  <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '10px' }}>
+                    Puedes revisar combos, promos y sorpréndeme después si necesitas ajustarlos.
+                  </div>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: '8px' }}>
+                {avisoHorario.length > 0 ? (
+                  <>
+                    <button onClick={() => { setConfirmarHorario(true); setTimeout(() => guardarHorarioCategoria(), 50) }} className="btn-primary" style={{ flex: 1, padding: '12px', fontSize: '13px' }}>
+                      Entendido, guardar
+                    </button>
+                    <button onClick={() => { setAvisoHorario([]); setConfirmarHorario(false) }} className="btn-outline" style={{ flex: 1, padding: '12px', fontSize: '13px' }}>
+                      Cancelar
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button onClick={guardarHorarioCategoria} className="btn-primary" style={{ flex: 1, padding: '12px', fontSize: '13px' }}>Guardar</button>
+                    <button onClick={() => {
+                      setHorarioCatInicio('')
+                      setHorarioCatFin('')
+                      setAvisoHorario([])
+                    }} className="btn-outline" style={{ padding: '12px 16px', fontSize: '13px' }}>Limpiar</button>
+                  </>
+                )}
+              </div>
+            </Modal>
           )
         })()}
 
