@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { loginConEmail, loginConGoogle } from '@/lib/auth'
 import PasswordInput from '@/components/ui/PasswordInput'
+import Modal from '@/components/ui/Modal'
 
 function LoginContent() {
   const router = useRouter()
@@ -250,39 +251,50 @@ function LoginContent() {
         </p>
       </div>
         {/* Modal recuperar contraseña */}
-        {mostrarRecuperar && (
-          <>
-            <div onClick={() => setMostrarRecuperar(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 60 }} />
-            <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 70, maxWidth: '500px', minWidth: '320px', margin: '0 auto', background: 'var(--bg-secondary)', borderRadius: '16px 16px 0 0', padding: '20px', animation: 'slideUp 0.3s ease' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                <span style={{ fontSize: '16px', fontWeight: 500 }}>Recuperar contraseña</span>
-                <span onClick={() => setMostrarRecuperar(false)} style={{ fontSize: '18px', color: 'var(--text-tertiary)', cursor: 'pointer' }}>✕</span>
+        <Modal
+          isOpen={mostrarRecuperar}
+          onClose={() => setMostrarRecuperar(false)}
+          title="Recuperar contraseña"
+        >
+          {recuperado ? (
+            <div style={{ textAlign: 'center', padding: '8px 0' }}>
+              <div style={{ fontSize: '32px', marginBottom: '12px' }}>📧</div>
+              <div style={{ fontSize: '14px', fontWeight: 500, marginBottom: '6px' }}>Revisa tu correo</div>
+              <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                Te enviamos un enlace a <strong>{emailRecuperar}</strong> para restablecer tu contraseña.
               </div>
-              {recuperado ? (
-                <div style={{ textAlign: 'center', padding: '20px 0' }}>
-                  <div style={{ fontSize: '32px', marginBottom: '12px' }}>📧</div>
-                  <div style={{ fontSize: '14px', fontWeight: 500, marginBottom: '6px' }}>Revisa tu correo</div>
-                  <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                    Te enviamos un enlace a <strong>{emailRecuperar}</strong> para restablecer tu contraseña.
-                  </div>
-                  <button onClick={() => setMostrarRecuperar(false)} className="btn-primary" style={{ marginTop: '16px', padding: '12px 24px', fontSize: '13px' }}>Entendido</button>
-                </div>
-              ) : (
-                <>
-                  <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '14px' }}>
-                    Ingresa tu correo y te enviaremos un enlace para restablecer tu contraseña.
-                  </div>
-                  <input className="input" type="email" placeholder="tu@correo.com" value={emailRecuperar}
-                    onChange={(e) => setEmailRecuperar(e.target.value)} style={{ marginBottom: '12px' }} />
-                  <button onClick={handleRecuperar} className="btn-primary" disabled={recuperando}
-                    style={{ width: '100%', padding: '12px', fontSize: '13px', opacity: recuperando ? 0.7 : 1 }}>
-                    {recuperando ? 'Enviando...' : 'Enviar enlace'}
-                  </button>
-                </>
-              )}
+              <button
+                onClick={() => setMostrarRecuperar(false)}
+                className="btn-primary"
+                style={{ marginTop: '16px', padding: '12px 24px', fontSize: '13px' }}
+              >
+                Entendido
+              </button>
             </div>
-          </>
-        )}
+          ) : (
+            <>
+              <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '14px' }}>
+                Ingresa tu correo y te enviaremos un enlace para restablecer tu contraseña.
+              </div>
+              <input
+                className="input"
+                type="email"
+                placeholder="tu@correo.com"
+                value={emailRecuperar}
+                onChange={(e) => setEmailRecuperar(e.target.value)}
+                style={{ marginBottom: '12px' }}
+              />
+              <button
+                onClick={handleRecuperar}
+                className="btn-primary"
+                disabled={recuperando}
+                style={{ width: '100%', padding: '12px', fontSize: '13px', opacity: recuperando ? 0.7 : 1 }}
+              >
+                {recuperando ? 'Enviando...' : 'Enviar enlace'}
+              </button>
+            </>
+          )}
+        </Modal>
     </div>
   )
 }
