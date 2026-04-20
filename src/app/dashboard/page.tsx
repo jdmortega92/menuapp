@@ -35,7 +35,8 @@ export default function DashboardPage() {
   })
 
   const [platosMasVistos, setPlatosMasVistos] = useState<any[]>([])
-  const [platosMenusVistos, setPlatosMenusVistos] = useState<any[]>([])
+  const [platosInteresBajo, setPlatosInteresBajo] = useState<any[]>([])
+  const [platosSinVistas, setPlatosSinVistas] = useState<any[]>([])
   const [horariosPico, setHorariosPico] = useState<any[]>([])
   const [escaneosPorDia, setEscaneosPorDia] = useState<any[]>([])
   const [resenas, setResenas] = useState<any[]>([])
@@ -132,33 +133,72 @@ export default function DashboardPage() {
         .gte('fecha', desde)
         .lte('fecha', hasta)
 
-      if (vistasData && vistasData.length > 0) {
+      // Siempre cargar todos los platos (con created_at) para análisis de antigüedad
+      const { data: platosInfo } = await supabase
+        .from('platos')
+        .select('id, nombre, created_at')
+        .eq('restaurante_id', rest!.id)
+
+      if (platosInfo && platosInfo.length > 0) {
         const conteo: Record<string, number> = {}
-        vistasData.forEach((v: any) => { conteo[v.plato_id] = (conteo[v.plato_id] || 0) + 1 })
-        const { data: platosInfo } = await supabase
-          .from('platos')
-          .select('id, nombre')
-          .eq('restaurante_id', rest!.id)
-        if (platosInfo) {
-          // Platos con vistas (ordenados de más a menos)
-          const conVistas = Object.entries(conteo)
-            .map(([id, vistas]) => ({
-              id,
-              nombre: platosInfo.find((p: any) => p.id === id)?.nombre || 'Plato',
-              vistas,
-            }))
-            .sort((a: any, b: any) => b.vistas - a.vistas)
-
-          // Platos sin ninguna vista
-          const sinVistas = platosInfo
-            .filter((p: any) => !conteo[p.id])
-            .map((p: any) => ({ id: p.id, nombre: p.nombre, vistas: 0 }))
-
-          setPlatosMasVistos(conVistas.slice(0, 5))
-          setPlatosMenusVistos([...conVistas.slice(5), ...sinVistas].slice(0, 5))
+        if (vistasData) {
+          vistasData.forEach((v: any) => { conteo[v.plato_id] = (conteo[v.plato_id] || 0) + 1 })
         }
+
+        // Fecha de inicio del periodo para filtrar por antigüedad del plato
+        const desdePeriodo = new Date(desde + 'T00:00:00')
+
+        // Platos con vistas (ordenados de más a menos)
+        const platosConVistas = platosInfo
+          .filter((p: any) => conteo[p.id])
+          .map((p: any) => ({
+            id: p.id,
+            nombre: p.nombre,
+            vistas: conteo[p.id],
+            created_at: p.created_at,
+          }))
+          .sort((a: any, b: any) => b.vistas - a.vistas)
+
+        // ===== Platos más vistos (top 5) =====
+        setPlatosMasVistos(platosConVistas.slice(0, 5))
+
+        // ===== Interés bajo: platos con vistas pero en el 30% más bajo =====
+        // Solo aplica si hay al menos 6 platos con vistas (si no, ya los muestra el top)
+        let interesBajo: any[] = []
+        if (platosConVistas.length >= 6) {
+          const promedio = platosConVistas.reduce((sum: number, p: any) => sum + p.vistas, 0) / platosConVistas.length
+          const corteMinimo = Math.floor(platosConVistas.length * 0.7) // Último 30%
+          interesBajo = platosConVistas
+            .slice(corteMinimo)
+            .filter((p: any) => p.vistas < promedio)
+            .slice(0, 5)
+        }
+        setPlatosInteresBajo(interesBajo)
+
+        // ===== Sin vistas en el periodo (solo platos creados antes del periodo) =====
+        const sinVistasPeriodo = platosInfo
+          .filter((p: any) => !conteo[p.id])
+          .filter((p: any) => {
+            const createdAt = new Date(p.created_at)
+            return createdAt < desdePeriodo
+          })
+          .map((p: any) => {
+            const createdAt = new Date(p.created_at)
+            const diasCreado = Math.floor((hoy.getTime() - createdAt.getTime()) / (24 * 60 * 60 * 1000))
+            return {
+              id: p.id,
+              nombre: p.nombre,
+              created_at: p.created_at,
+              diasCreado,
+            }
+          })
+          .sort((a: any, b: any) => b.diasCreado - a.diasCreado) // Más viejos primero
+          .slice(0, 5)
+        setPlatosSinVistas(sinVistasPeriodo)
       } else {
         setPlatosMasVistos([])
+        setPlatosInteresBajo([])
+        setPlatosSinVistas([])
       }
 
       // Horarios pico + Heatmap día × hora
@@ -336,7 +376,8 @@ export default function DashboardPage() {
         }
       } else {
         setPlatosMasVistos([])
-        setPlatosMenusVistos([])
+        setPlatosInteresBajo([])
+        setPlatosSinVistas([])
       }
 
       // ===== Datos del periodo anterior =====
@@ -969,32 +1010,72 @@ export default function DashboardPage() {
       y = (doc as any).lastAutoTable.finalY + 10
     }
 
-    // ===== PLATOS MENOS VISTOS =====
-    if (platosMenusVistos.length > 0) {
+    // ===== PLATOS CON INTERÉS BAJO =====
+    if (platosInteresBajo.length > 0) {
       if (y > 210) { doc.addPage(); pintarFondo(); y = 20 }
 
       doc.setTextColor(...TEXTO)
       doc.setFontSize(12)
       doc.setFont('helvetica', 'bold')
-      doc.text('Platos que necesitan atención', margen, y)
+      doc.text('Platos con interés bajo', margen, y)
 
       doc.setTextColor(...TEXTO_SEC)
       doc.setFontSize(8)
       doc.setFont('helvetica', 'normal')
-      doc.text('Considera mejorar fotos, descripción o desactivar temporalmente', margen, y + 4)
+      doc.text('Reciben visitas pero pocos los exploran. Revisa foto, descripción o precio.', margen, y + 4)
       y += 9
 
       ;autoTable(doc, {
         startY: y,
         head: [['Plato', 'Vistas']],
-        body: platosMenusVistos.map((p: any) => [p.nombre, p.vistas === 0 ? 'Sin vistas' : p.vistas.toString()]),
+        body: platosInteresBajo.map((p: any) => [p.nombre, p.vistas.toString()]),
         margin: { left: margen, right: margen },
         styles: { fontSize: 9, cellPadding: 4, textColor: TEXTO, lineColor: BORDE_SUAVE, lineWidth: 0.1 },
         headStyles: { fillColor: CREMA_OSCURO, textColor: TEXTO_SEC, fontStyle: 'bold', fontSize: 8 },
         alternateRowStyles: { fillColor: CREMA_MEDIO },
         columnStyles: {
           0: { fontStyle: 'bold' },
-          1: { halign: 'right', textColor: ROJO_PELIGRO, fontStyle: 'bold' },
+          1: { halign: 'right', fontStyle: 'bold', textColor: NARANJA_BORDE },
+        },
+      })
+
+      y = (doc as any).lastAutoTable.finalY + 10
+    }
+
+    // ===== PLATOS SIN VISTAS =====
+    if (platosSinVistas.length > 0) {
+      if (y > 210) { doc.addPage(); pintarFondo(); y = 20 }
+
+      doc.setTextColor(...TEXTO)
+      doc.setFontSize(12)
+      doc.setFont('helvetica', 'bold')
+      const tituloSinVistas = `Sin vistas ${filtroTiempo === 'hoy' ? 'hoy' : filtroTiempo === 'semana' ? 'esta semana' : 'este mes'}`
+      doc.text(tituloSinVistas, margen, y)
+
+      doc.setTextColor(...TEXTO_SEC)
+      doc.setFontSize(8)
+      doc.setFont('helvetica', 'normal')
+      doc.text('Revisa si están activos y considera promocionarlos.', margen, y + 4)
+      y += 9
+
+      ;autoTable(doc, {
+        startY: y,
+        head: [['Plato', 'Antigüedad']],
+        body: platosSinVistas.map((p: any) => {
+          const antiguedad = p.diasCreado === 0 ? 'Hoy'
+            : p.diasCreado === 1 ? 'Hace 1 día'
+            : p.diasCreado < 30 ? `Hace ${p.diasCreado} días`
+            : p.diasCreado < 60 ? 'Hace 1 mes'
+            : `Hace ${Math.floor(p.diasCreado / 30)} meses`
+          return [p.nombre, antiguedad]
+        }),
+        margin: { left: margen, right: margen },
+        styles: { fontSize: 9, cellPadding: 4, textColor: TEXTO, lineColor: BORDE_SUAVE, lineWidth: 0.1 },
+        headStyles: { fillColor: CREMA_OSCURO, textColor: TEXTO_SEC, fontStyle: 'bold', fontSize: 8 },
+        alternateRowStyles: { fillColor: CREMA_MEDIO },
+        columnStyles: {
+          0: { fontStyle: 'bold' },
+          1: { halign: 'right', textColor: TEXTO_SEC },
         },
       })
 
@@ -2136,47 +2217,51 @@ export default function DashboardPage() {
 
         
 
-        {/* Platos más vistos */}
+        {/* ===== BLOQUE 1: Platos más vistos (top performers) ===== */}
         {esBasico ? (
           platosMasVistos.length > 0 ? (
             <div style={{ padding: '0 20px', marginBottom: '14px' }}>
-              <div className="card" style={{ padding: '14px' }}>
-                <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '12px' }}>Platos más vistos</div>
-                {platosMasVistos.slice(0, 5).map((p: any, i: number) => (
-                  <div key={i} style={{ marginBottom: '10px' }}>
+              <div className="card" style={{ padding: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '4px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 500 }}>Platos más vistos</div>
+                  <div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>
+                    top {platosMasVistos.length}
+                  </div>
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '14px' }}>
+                  Los que están generando más interés en tu menú
+                </div>
+                {platosMasVistos.map((p: any, i: number) => (
+                  <div key={i} style={{ marginBottom: i < platosMasVistos.length - 1 ? '10px' : 0 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', marginBottom: '4px' }}>
-                      <span>{p.nombre}</span>
-                      <span style={{ color: 'var(--color-info)', fontSize: '11px' }}>{p.vistas} vistas</span>
+                      <span style={{ fontWeight: i === 0 ? 500 : 400 }}>{p.nombre}</span>
+                      <span style={{ color: 'var(--color-info)', fontSize: '11px' }}>
+                        {p.vistas} {p.vistas === 1 ? 'vista' : 'vistas'}
+                      </span>
                     </div>
                     <div style={{ height: '6px', background: 'var(--bg-tertiary)', borderRadius: '3px', overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: `${(p.vistas / platosMasVistos[0].vistas) * 100}%`, background: 'var(--color-info)', borderRadius: '3px', opacity: 1 - i * 0.15 }} />
+                      <div style={{
+                        height: '100%',
+                        width: `${(p.vistas / platosMasVistos[0].vistas) * 100}%`,
+                        background: 'var(--color-info)',
+                        borderRadius: '3px',
+                        opacity: 1 - i * 0.15,
+                        transition: 'width 0.3s',
+                      }} />
                     </div>
                   </div>
                 ))}
-                {platosMenusVistos.length > 0 && (
-                  <>
-                    <div style={{ fontSize: '13px', fontWeight: 500, marginTop: '16px', marginBottom: '12px' }}>Platos menos vistos</div>
-                    {platosMenusVistos.map((p: any, i: number) => (
-                      <div key={i} style={{ marginBottom: '10px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', marginBottom: '4px' }}>
-                          <span style={{ color: p.vistas === 0 ? 'var(--text-tertiary)' : 'var(--color-danger)' }}>{p.nombre}</span>
-                          <span style={{ color: p.vistas === 0 ? 'var(--text-tertiary)' : 'var(--color-danger)', fontSize: '11px' }}>{p.vistas === 0 ? 'Sin vistas' : `${p.vistas} vistas`}</span>
-                        </div>
-                        {p.vistas > 0 && platosMasVistos[0]?.vistas > 0 && (
-                          <div style={{ height: '6px', background: 'var(--bg-tertiary)', borderRadius: '3px', overflow: 'hidden' }}>
-                            <div style={{ height: '100%', width: `${(p.vistas / platosMasVistos[0].vistas) * 100}%`, background: 'var(--color-danger)', borderRadius: '3px', opacity: 0.7 }} />
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </>
-                )}
               </div>
             </div>
           ) : (
             <div style={{ padding: '0 20px', marginBottom: '14px' }}>
               <div className="card" style={{ padding: '20px', textAlign: 'center' }}>
-                <div style={{ fontSize: '13px', color: 'var(--text-tertiary)' }}>Sin datos de platos vistos para este periodo</div>
+                <div style={{ fontSize: '13px', color: 'var(--text-tertiary)' }}>
+                  Aún no hay vistas a platos en este periodo
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '4px' }}>
+                  Los datos aparecen cuando los comensales abren el detalle de un plato
+                </div>
               </div>
             </div>
           )
@@ -2186,6 +2271,82 @@ export default function DashboardPage() {
               <div style={{ fontSize: '30px', marginBottom: '6px' }}>🔒</div>
               <div style={{ fontSize: '13px', fontWeight: 500 }}>Platos más vistos</div>
               <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>Disponible en Plan Básico</div>
+            </div>
+          </div>
+        )}
+
+        {/* ===== BLOQUE 2: Platos con interés bajo ===== */}
+        {esBasico && platosInteresBajo.length > 0 && (
+          <div style={{ padding: '0 20px', marginBottom: '14px' }}>
+            <div className="card" style={{ padding: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '4px' }}>
+                <div style={{ fontSize: '13px', fontWeight: 500 }}>Con interés bajo</div>
+                <div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>
+                  últimos del ranking
+                </div>
+              </div>
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '14px', lineHeight: 1.5 }}>
+                Reciben visitas pero pocos los exploran. Revisa foto, descripción o precio.
+              </div>
+              {platosInteresBajo.map((p: any, i: number) => (
+                <div key={i} style={{ marginBottom: i < platosInteresBajo.length - 1 ? '10px' : 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', marginBottom: '4px' }}>
+                    <span>{p.nombre}</span>
+                    <span style={{ color: 'var(--color-warning)', fontSize: '11px' }}>
+                      {p.vistas} {p.vistas === 1 ? 'vista' : 'vistas'}
+                    </span>
+                  </div>
+                  <div style={{ height: '6px', background: 'var(--bg-tertiary)', borderRadius: '3px', overflow: 'hidden' }}>
+                    <div style={{
+                      height: '100%',
+                      width: `${platosMasVistos[0]?.vistas ? (p.vistas / platosMasVistos[0].vistas) * 100 : 20}%`,
+                      background: 'var(--color-warning)',
+                      borderRadius: '3px',
+                      opacity: 0.8,
+                      transition: 'width 0.3s',
+                    }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ===== BLOQUE 3: Sin vistas en el periodo ===== */}
+        {esBasico && platosSinVistas.length > 0 && (
+          <div style={{ padding: '0 20px', marginBottom: '14px' }}>
+            <div className="card" style={{ padding: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '4px' }}>
+                <div style={{ fontSize: '13px', fontWeight: 500 }}>
+                  Sin vistas {filtroTiempo === 'hoy' ? 'hoy' : filtroTiempo === 'semana' ? 'esta semana' : 'este mes'}
+                </div>
+                <div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>
+                  {platosSinVistas.length} {platosSinVistas.length === 1 ? 'plato' : 'platos'}
+                </div>
+              </div>
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '14px', lineHeight: 1.5 }}>
+                Estos platos no recibieron vistas en el periodo. Revisa si están activos y considera promocionarlos.
+              </div>
+              {platosSinVistas.map((p: any, i: number) => (
+                <div key={i} style={{
+                  padding: '10px 12px',
+                  background: 'var(--bg-tertiary)',
+                  borderRadius: 'var(--radius-sm)',
+                  marginBottom: i < platosSinVistas.length - 1 ? '6px' : 0,
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                }}>
+                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{p.nombre}</span>
+                  <span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>
+                    {p.diasCreado === 0 ? 'hoy'
+                      : p.diasCreado === 1 ? 'hace 1 día'
+                      : p.diasCreado < 30 ? `hace ${p.diasCreado} días`
+                      : p.diasCreado < 60 ? 'hace 1 mes'
+                      : `hace ${Math.floor(p.diasCreado / 30)} meses`}
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
         )}
