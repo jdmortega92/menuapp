@@ -2238,7 +2238,7 @@ export default function MenuPublicoPage() {
                         <div style={{ fontSize: '12px', color: 'var(--theme-text-subtle)' }}>Aún no hay reseñas. ¡Sé el primero!</div>
                       </div>
                     )}
-                    <div onClick={() => { setPlatoCalificar(plato.id); setPlatoDetalle(null); setCalEstrellas(0); setCalTags([]); setCalComentario(''); setCalEnviada(false) }} style={{
+                    <div onClick={() => { setCalEstrellas(0); setCalTags([]); setCalComentario(''); setCalEnviada(false); setPlatoCalificar(plato.id) }} style={{
                       border: '1px dashed var(--theme-border-strong)',
                       borderRadius: 'var(--theme-radius-card)',
                       padding: '14px',

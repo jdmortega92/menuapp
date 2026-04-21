@@ -168,10 +168,10 @@ export default function ConfigPage() {
   ]
 
   const temas = [
-    { id: 'claro', nombre: 'Claro', desc: 'Fondo blanco, texto oscuro' },
-    { id: 'oscuro', nombre: 'Oscuro', desc: 'Fondo negro, texto claro' },
-    { id: 'natural', nombre: 'Natural', desc: 'Tonos cálidos y tierra' },
-    { id: 'premium', nombre: 'Premium', desc: 'Elegante y sofisticado' },
+    { id: 'claro', nombre: 'Claro', desc: 'Minimalista, versátil', plan: 'gratis' },
+    { id: 'oscuro', nombre: 'Oscuro', desc: 'Nocturno, sofisticado', plan: 'pro' },
+    { id: 'natural', nombre: 'Natural', desc: 'Artesanal, cálido', plan: 'pro' },
+    { id: 'premium', nombre: 'Premium', desc: 'Refinado, elegante', plan: 'pro' },
   ]
 
   const tiposNegocio = [
@@ -366,10 +366,17 @@ export default function ConfigPage() {
     setGuardando(true)
     const supabase = createClient()
 
+    // Validación defensiva: si el tema requiere Pro y el usuario no es Pro, degradar a Claro
+    const temaRequierePro = ['oscuro', 'natural', 'premium'].includes(tema)
+    const temaFinal = (temaRequierePro && !esPro) ? 'claro' : tema
+
     await supabase.from('restaurantes').update({
       nombre, tipo, ciudad, whatsapp, direccion, descripcion,
-      color_principal: colorPrincipal, tema,
+      color_principal: colorPrincipal, tema: temaFinal,
     }).eq('id', rest.id)
+
+    // Sincronizar estado local si se degradó
+    if (temaFinal !== tema) setTema(temaFinal)
 
     setGuardando(false)
     setGuardado(true)
@@ -505,20 +512,213 @@ export default function ConfigPage() {
               <div style={{ marginBottom: '16px' }}>
                 <label className="label">Tema del menú</label>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '6px' }}>
-                  {temas.map(t => (
-                    <div key={t.id} onClick={() => setTema(t.id)} style={{
-                      padding: '12px', borderRadius: 'var(--radius-sm)', cursor: 'pointer',
-                      border: `1px solid ${tema === t.id ? colorPrincipal : 'var(--border-light)'}`,
-                      background: tema === t.id ? `${colorPrincipal}08` : 'transparent',
-                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    }}>
-                      <div>
-                        <div style={{ fontSize: '13px', fontWeight: 500 }}>{t.nombre}</div>
-                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{t.desc}</div>
+                  {temas.map(t => {
+                    const bloqueado = t.plan === 'pro' && !esPro
+                    return (
+                      <div
+                        key={t.id}
+                        onClick={() => { if (!bloqueado) setTema(t.id) }}
+                        style={{
+                          padding: '12px', borderRadius: 'var(--radius-sm)',
+                          cursor: bloqueado ? 'not-allowed' : 'pointer',
+                          opacity: bloqueado ? 0.55 : 1,
+                          border: `1px solid ${tema === t.id && !bloqueado ? colorPrincipal : 'var(--border-light)'}`,
+                          background: tema === t.id && !bloqueado ? `${colorPrincipal}08` : 'transparent',
+                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ fontSize: '13px', fontWeight: 500 }}>{t.nombre}</span>
+                            {t.plan === 'pro' && (
+                              <span className="badge badge-warning">Pro</span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                            {t.desc}
+                          </div>
+                          {bloqueado && (
+                            <div
+                              onClick={(e) => { e.stopPropagation(); router.push('/suscripcion') }}
+                              style={{
+                                fontSize: '11px',
+                                color: 'var(--color-info)',
+                                marginTop: '6px',
+                                cursor: 'pointer',
+                                fontWeight: 500,
+                              }}
+                            >
+                              Desbloquear con Plan Pro →
+                            </div>
+                          )}
+                        </div>
+                        {bloqueado ? (
+                          <span style={{ fontSize: '16px', marginLeft: '8px' }}>🔒</span>
+                        ) : (
+                          tema === t.id && (
+                            <div style={{
+                              width: '8px', height: '8px', borderRadius: '50%',
+                              background: colorPrincipal, marginLeft: '8px',
+                            }} />
+                          )
+                        )}
                       </div>
-                      {tema === t.id && <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: colorPrincipal }} />}
+                    )
+                  })}
+                </div>
+
+                {/* Preview en vivo del tema */}
+                <div style={{ marginTop: '14px' }}>
+                  <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Vista previa
+                  </div>
+                  <div className={`theme-${tema}`} style={{
+                    borderRadius: '12px',
+                    overflow: 'hidden',
+                    border: '1px solid var(--border-light)',
+                    background: 'var(--theme-bg)',
+                    padding: '16px',
+                    transition: 'all 0.25s ease',
+                  }}>
+                    {/* Banner del preview */}
+                    {bannerUrl ? (
+                      <div style={{
+                        width: '100%',
+                        aspectRatio: '3/1',
+                        borderRadius: 'var(--theme-radius-image)',
+                        overflow: 'hidden',
+                        marginBottom: '-24px',
+                      }}>
+                        <img src={bannerUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      </div>
+                    ) : (
+                      <div style={{
+                        width: '100%',
+                        aspectRatio: '3/1',
+                        borderRadius: 'var(--theme-radius-image)',
+                        background: `linear-gradient(135deg, ${colorPrincipal}40, ${colorPrincipal}15)`,
+                        marginBottom: '-24px',
+                      }} />
+                    )}
+
+                    {/* Logo circular */}
+                    <div style={{
+                      width: '48px',
+                      height: '48px',
+                      borderRadius: '50%',
+                      background: 'var(--theme-surface)',
+                      border: '3px solid var(--theme-bg)',
+                      overflow: 'hidden',
+                      marginLeft: '4px',
+                      position: 'relative',
+                      zIndex: 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}>
+                      {logoUrl ? (
+                        <img src={logoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        <span style={{
+                          fontSize: '16px',
+                          fontWeight: 500,
+                          color: 'var(--theme-text)',
+                          fontFamily: 'var(--theme-font-display)',
+                        }}>
+                          {(nombre || 'TR').charAt(0).toUpperCase()}
+                        </span>
+                      )}
                     </div>
-                  ))}
+
+                    {/* Nombre y meta */}
+                    <div style={{ marginTop: '10px', marginBottom: '12px' }}>
+                      <div style={{
+                        fontSize: '16px',
+                        color: 'var(--theme-text)',
+                        fontFamily: 'var(--theme-font-display)',
+                        fontWeight: 'var(--theme-title-weight)' as any,
+                        letterSpacing: 'var(--theme-title-letter-spacing)',
+                        textTransform: 'var(--theme-title-transform)' as any,
+                        lineHeight: 1.2,
+                      }}>
+                        {nombre || 'Tu Restaurante'}
+                      </div>
+                      <div style={{
+                        fontSize: '11px',
+                        color: 'var(--theme-text-muted)',
+                        fontFamily: 'var(--theme-font-body)',
+                        marginTop: '4px',
+                      }}>
+                        Restaurante · {ciudad || 'Tu ciudad'}
+                      </div>
+                    </div>
+
+                    {/* Tarjeta de plato ficticia */}
+                    <div style={{
+                      background: 'var(--theme-surface)',
+                      borderRadius: 'var(--theme-radius-card)',
+                      border: '1px solid var(--theme-border)',
+                      padding: '10px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      boxShadow: 'var(--theme-shadow-card)',
+                    }}>
+                      {/* Foto placeholder */}
+                      <div style={{
+                        width: '44px',
+                        height: '44px',
+                        borderRadius: 'var(--theme-radius-image)',
+                        background: `linear-gradient(135deg, ${colorPrincipal}30, ${colorPrincipal}10)`,
+                        flexShrink: 0,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '18px',
+                      }}>
+                        🍔
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{
+                          fontSize: '13px',
+                          fontWeight: 500,
+                          color: 'var(--theme-text)',
+                          fontFamily: 'var(--theme-font-body)',
+                        }}>
+                          Hamburguesa Clásica
+                        </div>
+                        <div style={{
+                          fontSize: '11px',
+                          color: 'var(--theme-text-muted)',
+                          fontFamily: 'var(--theme-font-body)',
+                          marginTop: '2px',
+                        }}>
+                          $25.000
+                        </div>
+                      </div>
+                      {/* Botón + con color del usuario */}
+                      <div style={{
+                        width: '28px',
+                        height: '28px',
+                        borderRadius: '50%',
+                        background: colorPrincipal,
+                        color: 'white',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '16px',
+                        fontWeight: 500,
+                        flexShrink: 0,
+                      }}>
+                        +
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '6px', textAlign: 'center' }}>
+                    Así se verá tu menú con el tema seleccionado
+                  </div>
                 </div>
               </div>
 
