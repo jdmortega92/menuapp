@@ -10,6 +10,12 @@ interface ModalProps {
   maxWidth?: number
   showClose?: boolean
   noPadding?: boolean
+  /**
+   * Clase de tema a aplicar al modal (ej: 'theme-claro', 'theme-oscuro').
+   * Permite que el modal herede el sistema de variables de tema del menú público.
+   * Si no se pasa, el modal usa los colores globales por defecto (útil para el admin).
+   */
+  themeClass?: string
 }
 
 export default function Modal({
@@ -20,14 +26,18 @@ export default function Modal({
   maxWidth = 440,
   showClose = true,
   noPadding = false,
+  themeClass,
 }: ModalProps) {
-  const [esDesktop, setEsDesktop] = useState(false)
+  // Inicialización perezosa: detecta la pantalla ANTES del primer render
+  // Esto elimina el "flash" donde el modal aparece primero abajo y salta al centro
+  const [esDesktop, setEsDesktop] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return window.matchMedia('(min-width: 640px)').matches
+  })
 
-  // Detectar tamaño de pantalla
+  // Escuchar cambios dinámicos de tamaño de pantalla
   useEffect(() => {
     const mediaQuery = window.matchMedia('(min-width: 640px)')
-    setEsDesktop(mediaQuery.matches)
-
     const handler = (e: MediaQueryListEvent) => setEsDesktop(e.matches)
     mediaQuery.addEventListener('change', handler)
     return () => mediaQuery.removeEventListener('change', handler)
@@ -53,8 +63,19 @@ export default function Modal({
 
   if (!isOpen) return null
 
+  // Resuelve los colores de fondo, texto y bordes:
+  // - Si hay themeClass: usa variables de tema (se adaptan al contenedor temático)
+  // - Si no hay themeClass: usa variables globales (comportamiento legacy para admin)
+  const usarTema = !!themeClass
+  const backgroundModal = usarTema ? 'var(--theme-surface)' : 'var(--bg-secondary)'
+  const colorTexto = usarTema ? 'var(--theme-text)' : 'var(--text-primary)'
+  const colorTextoSubtle = usarTema ? 'var(--theme-text-subtle)' : 'var(--text-tertiary)'
+  const colorBorder = usarTema ? 'var(--theme-border)' : 'var(--border-light)'
+  const radioModal = usarTema ? 'var(--theme-radius-modal)' : '14px'
+  const radioMobile = usarTema ? 'var(--theme-radius-modal) var(--theme-radius-modal) 0 0' : '16px 16px 0 0'
+
   return (
-    <>
+    <div className={themeClass}>
       {/* Backdrop */}
       <div
         onClick={onClose}
@@ -81,8 +102,8 @@ export default function Modal({
             minWidth: '320px',
             maxWidth: `${maxWidth}px`,
             maxHeight: '85vh',
-            background: 'var(--bg-secondary)',
-            borderRadius: '14px',
+            background: backgroundModal,
+            borderRadius: radioModal,
             boxShadow: '0 20px 60px rgba(0, 0, 0, 0.25)',
             overflow: 'auto',
             animation: 'modalFadeScale 0.25s ease-out',
@@ -94,8 +115,8 @@ export default function Modal({
             minWidth: '320px',
             maxWidth: '500px',
             margin: '0 auto',
-            background: 'var(--bg-secondary)',
-            borderRadius: '16px 16px 0 0',
+            background: backgroundModal,
+            borderRadius: radioMobile,
             maxHeight: '85vh',
             overflow: 'auto',
             animation: 'slideUp 0.3s ease',
@@ -109,13 +130,16 @@ export default function Modal({
             justifyContent: 'space-between',
             alignItems: 'center',
             padding: esDesktop ? '20px 24px 16px' : '20px 20px 16px',
-            borderBottom: title ? '1px solid var(--border-light)' : 'none',
+            borderBottom: title ? `1px solid ${colorBorder}` : 'none',
           }}>
             {title ? (
               <span style={{
                 fontSize: esDesktop ? '16px' : '15px',
-                fontWeight: 500,
-                color: 'var(--text-primary)',
+                fontWeight: usarTema ? ('var(--theme-title-weight)' as any) : 500,
+                fontFamily: usarTema ? 'var(--theme-font-display)' : 'var(--font-body)',
+                letterSpacing: usarTema ? 'var(--theme-title-letter-spacing)' : 'normal',
+                textTransform: usarTema ? ('var(--theme-title-transform)' as any) : 'none',
+                color: colorTexto,
                 flex: 1,
                 minWidth: 0,
                 overflow: 'hidden',
@@ -135,7 +159,7 @@ export default function Modal({
                   border: 'none',
                   cursor: 'pointer',
                   fontSize: '18px',
-                  color: 'var(--text-tertiary)',
+                  color: colorTextoSubtle,
                   padding: '4px 8px',
                   borderRadius: '6px',
                   lineHeight: 1,
@@ -165,6 +189,6 @@ export default function Modal({
           to { opacity: 1; }
         }
       `}</style>
-    </>
+    </div>
   )
 }

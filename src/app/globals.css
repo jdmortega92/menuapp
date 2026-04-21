@@ -40,6 +40,153 @@
   --transition-slow: 400ms ease;
 }
 
+/* =========================================================
+   SISTEMA DE TEMAS DEL MENÚ PÚBLICO
+   ─────────────────────────────────────────────────────────
+   Los temas se aplican solo al menú público (clase .theme-*)
+   Cada tema sobreescribe estas variables de tema.
+   El color principal del restaurante se pasa por `color` inline.
+   ========================================================= */
+
+.theme-claro {
+  /* Superficies */
+  --theme-bg: #FDFBF7;
+  --theme-surface: #FFFFFF;
+  --theme-surface-muted: #F5F4F0;
+
+  /* Texto */
+  --theme-text: #1A1A18;
+  --theme-text-muted: #6B6A65;
+  --theme-text-subtle: #A3A29C;
+
+  /* Bordes */
+  --theme-border: #E8E6E0;
+  --theme-border-strong: #D3D1C7;
+
+  /* Tipografía */
+  --theme-font-body: 'DM Sans', system-ui, sans-serif;
+  --theme-font-display: 'DM Sans', system-ui, sans-serif;
+  --theme-title-weight: 600;
+  --theme-title-letter-spacing: -0.2px;
+  --theme-title-transform: none;
+
+  /* Formas y bordes redondeados */
+  --theme-radius-card: 10px;
+  --theme-radius-modal: 14px;
+  --theme-radius-image: 8px;
+  --theme-radius-button: 12px;
+
+  /* Sombras */
+  --theme-shadow-card: 0 1px 3px rgba(0,0,0,0.04);
+  --theme-shadow-modal: 0 20px 60px rgba(0,0,0,0.15);
+}
+
+.theme-oscuro {
+  /* Superficies */
+  --theme-bg: #0F0F0E;
+  --theme-surface: #1C1C1A;
+  --theme-surface-muted: #252523;
+
+  /* Texto */
+  --theme-text: #F5F4F0;
+  --theme-text-muted: #A3A29C;
+  --theme-text-subtle: #6B6A65;
+
+  /* Bordes */
+  --theme-border: #2A2A27;
+  --theme-border-strong: #3D3D39;
+
+  /* Tipografía (igual que claro) */
+  --theme-font-body: 'DM Sans', system-ui, sans-serif;
+  --theme-font-display: 'DM Sans', system-ui, sans-serif;
+  --theme-title-weight: 600;
+  --theme-title-letter-spacing: -0.2px;
+  --theme-title-transform: none;
+
+  /* Formas (igual que claro) */
+  --theme-radius-card: 10px;
+  --theme-radius-modal: 14px;
+  --theme-radius-image: 8px;
+  --theme-radius-button: 12px;
+
+  /* Sombras adaptadas a oscuro */
+  --theme-shadow-card: 0 1px 3px rgba(0,0,0,0.2);
+  --theme-shadow-modal: 0 20px 60px rgba(0,0,0,0.5);
+}
+
+.theme-natural {
+  /* Superficies (tonos tierra más cálidos e intensos) */
+  --theme-bg: #F0E6D2;
+  --theme-surface: #FAF4E6;
+  --theme-surface-muted: #E8DBC2;
+
+  /* Texto (marrón oscuro con más contraste) */
+  --theme-text: #3E2F1A;
+  --theme-text-muted: #7A6B4E;
+  --theme-text-subtle: #A89570;
+
+  /* Bordes más visibles */
+  --theme-border: #D9C9A8;
+  --theme-border-strong: #C4AE85;
+
+  /* Tipografía serif para display */
+  --theme-font-body: 'DM Sans', system-ui, sans-serif;
+  --theme-font-display: 'Playfair Display', Georgia, serif;
+  --theme-title-weight: 600;
+  --theme-title-letter-spacing: -0.3px;
+  --theme-title-transform: none;
+
+  /* Bordes más redondos (orgánico) */
+  --theme-radius-card: 16px;
+  --theme-radius-modal: 18px;
+  --theme-radius-image: 12px;
+  --theme-radius-button: 14px;
+
+  /* Sombras más marcadas con tinte cálido */
+  --theme-shadow-card: 0 2px 6px rgba(62,47,26,0.08);
+  --theme-shadow-modal: 0 20px 60px rgba(62,47,26,0.22);
+}
+
+.theme-premium {
+  /* Superficies (blanco hueso + negro profundo de texto) */
+  --theme-bg: #FAF8F3;
+  --theme-surface: #FFFFFF;
+  --theme-surface-muted: #F0EDE5;
+
+  /* Texto */
+  --theme-text: #1A1A18;
+  --theme-text-muted: #6B6A65;
+  --theme-text-subtle: #A89070;
+
+  /* Bordes */
+  --theme-border: #E0DDD3;
+  --theme-border-strong: #BFB8A5;
+
+  /* Tipografía serif + mayúsculas en títulos */
+  --theme-font-body: 'DM Sans', system-ui, sans-serif;
+  --theme-font-display: 'Playfair Display', Georgia, serif;
+  --theme-title-weight: 500;
+  --theme-title-letter-spacing: 1.5px;
+  --theme-title-transform: uppercase;
+
+  /* Bordes angulares (refinado) */
+  --theme-radius-card: 4px;
+  --theme-radius-modal: 6px;
+  --theme-radius-image: 2px;
+  --theme-radius-button: 4px;
+
+  /* Sombras más refinadas y elegantes */
+  --theme-shadow-card: 0 2px 8px rgba(0,0,0,0.06);
+  --theme-shadow-modal: 0 24px 70px rgba(0,0,0,0.16);
+}
+
+/* Default: si no hay clase de tema, usar Claro como fallback */
+.theme-claro, .theme-oscuro, .theme-natural, .theme-premium {
+  background: var(--theme-bg);
+  color: var(--theme-text);
+  font-family: var(--theme-font-body);
+}
+
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 html, body {
