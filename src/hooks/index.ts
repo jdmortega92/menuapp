@@ -12,9 +12,15 @@ export function useAuth() {
 
   useEffect(() => {
     const supabase = createClient()
+    let isMounted = true // Flag para prevenir updates en componentes desmontados
 
     async function obtenerSesion() {
-      const { data: { user } } = await supabase.auth.getUser()
+      // getSession() lee del storage local sin adquirir lock (más rápido y sin conflictos)
+      // A diferencia de getUser() que siempre hace una llamada al servidor
+      const { data: { session } } = await supabase.auth.getSession()
+      const user = session?.user
+
+      if (!isMounted) return // Cleanup: si el componente se desmontó, no actualizar estado
 
       if (user) {
         setUsuario({
@@ -30,16 +36,20 @@ export function useAuth() {
           .eq('usuario_id', user.id)
           .single()
 
+        if (!isMounted) return // Verificar de nuevo después del await async
+
         if (rest) setRestaurante(rest)
       }
 
-      setCargando(false)
+      if (isMounted) setCargando(false)
     }
 
     obtenerSesion()
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
+        if (!isMounted) return
+
         if (session?.user) {
           setUsuario({
             id: session.user.id,
@@ -54,7 +64,10 @@ export function useAuth() {
       }
     )
 
-    return () => subscription.unsubscribe()
+    return () => {
+      isMounted = false
+      subscription.unsubscribe()
+    }
   }, [])
 
   return { usuario, restaurante, cargando }
