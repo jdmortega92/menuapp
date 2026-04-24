@@ -38,6 +38,7 @@ export default function MenuPublicoPage() {
   const [calTags, setCalTags] = useState<string[]>([])
   const [calComentario, setCalComentario] = useState('')
   const [calEnviada, setCalEnviada] = useState(false)
+  const [mostrarTodasResenas, setMostrarTodasResenas] = useState(false)
 
   const [restaurante, setRestaurante] = useState<any>(null)
   const [config, setConfig] = useState<any>(null)
@@ -111,17 +112,39 @@ export default function MenuPublicoPage() {
         .eq('restaurante_id', rest.id)
         .order('orden', { ascending: true })
 
+      // Cargar calificaciones para calcular promedio y conteo por plato
+      const { data: calificacionesData } = await supabase
+        .from('calificaciones')
+        .select('plato_id, estrellas')
+        .eq('restaurante_id', rest.id)
+
+      // Agrupar por plato: total de estrellas y conteo de reseñas
+      const statsPorPlato: Record<string, { total: number; count: number }> = {}
+      if (calificacionesData) {
+        calificacionesData.forEach((c: any) => {
+          if (!statsPorPlato[c.plato_id]) {
+            statsPorPlato[c.plato_id] = { total: 0, count: 0 }
+          }
+          statsPorPlato[c.plato_id].total += c.estrellas
+          statsPorPlato[c.plato_id].count += 1
+        })
+      }
+
       if (cats && platos) {
         setCategorias(cats.map(cat => ({
           id: cat.id, nombre: cat.nombre, hora_inicio: cat.hora_inicio || null, hora_fin: cat.hora_fin || null,
           platos: platos
             .filter((p: any) => p.categoria_id === cat.id)
-            .map((p: any) => ({
-              id: p.id, nombre: p.nombre, precio: p.precio,
-              descripcion: p.descripcion || '', disponible: p.disponible,
-              foto_url: p.foto_url || null,
-              estrellas: 0, resenas: 0,
-            })),
+            .map((p: any) => {
+              const stats = statsPorPlato[p.id]
+              return {
+                id: p.id, nombre: p.nombre, precio: p.precio,
+                descripcion: p.descripcion || '', disponible: p.disponible,
+                foto_url: p.foto_url || null,
+                estrellas: stats ? Number((stats.total / stats.count).toFixed(1)) : 0,
+                resenas: stats?.count || 0,
+              }
+            }),
         })))
       }
 
@@ -207,6 +230,7 @@ export default function MenuPublicoPage() {
   useEffect(() => {
     if (!platoDetalle || !restaurante) return
     setResenasReales([])
+    setMostrarTodasResenas(false) // Resetear al abrir otro plato
     // Registrar vista del plato
     const supabaseVista = createClient()
     const fechaCOL = new Date(new Date().getTime() - 5 * 60 * 60 * 1000).toISOString().split('T')[0]
@@ -222,7 +246,7 @@ export default function MenuPublicoPage() {
       .select('*')
       .eq('plato_id', platoDetalle)
       .order('created_at', { ascending: false })
-      .limit(5)
+      .limit(50)
       .then(({ data }: any) => {
         if (data) setResenasReales(data)
         else setResenasReales([])
@@ -1716,7 +1740,11 @@ export default function MenuPublicoPage() {
                       }}>
                         ${plato.precio.toLocaleString('es-CO')}
                       </span>
-                      {config?.calificaciones_activo && <span style={{ fontSize: '10px', color: '#F2A623' }}>★ {plato.estrellas}</span>}
+                      {config?.calificaciones_activo && plato.resenas > 0 && (
+                        <span style={{ fontSize: '10px', color: '#F2A623' }}>
+                          ★ {plato.estrellas} <span style={{ color: 'var(--theme-text-subtle)' }}>({plato.resenas})</span>
+                        </span>
+                      )}
                     </div>
                     {plato.disponible ? <Qty id={plato.id} /> : <span style={{ fontSize: '10px', color: 'var(--color-danger)', fontWeight: 500 }}>Agotado</span>}
                   </div>
@@ -1955,13 +1983,26 @@ export default function MenuPublicoPage() {
           async function enviarCalificacion() {
             if (calEstrellas === 0) return
             const supabase = createClient()
-            await supabase.from('calificaciones').insert({
-              plato_id: plato.id,
-              restaurante_id: restaurante.id,
-              estrellas: calEstrellas,
-              tags: calTags,
-              comentario: calComentario || null,
-            })
+
+            // Guardar en Supabase y obtener la reseña recién creada
+            const { data: nuevaResena } = await supabase
+              .from('calificaciones')
+              .insert({
+                plato_id: plato.id,
+                restaurante_id: restaurante.id,
+                estrellas: calEstrellas,
+                tags: calTags,
+                comentario: calComentario || null,
+              })
+              .select()
+              .single()
+
+            // Optimistic update: agregar la nueva reseña al estado local inmediatamente
+            // Así el usuario la ve al cerrar el modal de calificar, sin recargar el plato
+            if (nuevaResena) {
+              setResenasReales(prev => [nuevaResena, ...prev].slice(0, 5))
+            }
+
             setCalEnviada(true)
             setTimeout(() => { setPlatoCalificar(null); setCalEnviada(false) }, 2000)
           }
@@ -1975,6 +2016,7 @@ export default function MenuPublicoPage() {
                 maxWidth={440}
                 showClose={false}
                 themeClass={themeClass}
+                stackLevel={1}
               >
                 <div style={{ textAlign: 'center', padding: '20px 0' }}>
                   <div style={{ fontSize: '40px', marginBottom: '12px' }}>✓</div>
@@ -2003,6 +2045,7 @@ export default function MenuPublicoPage() {
               title="Calificar plato"
               maxWidth={500}
               themeClass={themeClass}
+              stackLevel={1}
             >
               {/* Plato que va a calificar */}
               <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-light)', borderRadius: '10px', padding: '12px', display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
@@ -2144,7 +2187,7 @@ export default function MenuPublicoPage() {
                   }}>
                     {plato.nombre}
                   </div>
-                  {config?.calificaciones_activo && (
+                  {config?.calificaciones_activo && plato.resenas > 0 && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                       <span style={{ fontSize: '13px', color: '#F2A623' }}>★</span>
                       <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--theme-text)' }}>{plato.estrellas}</span>
@@ -2182,50 +2225,74 @@ export default function MenuPublicoPage() {
                       Reseñas {resenasReales.length > 0 ? `(${resenasReales.length})` : ''}
                     </div>
                     {resenasReales.length > 0 ? (
-                      <div style={{
-                        background: 'var(--theme-bg)',
-                        border: '1px solid var(--theme-border)',
-                        borderRadius: 'var(--theme-radius-card)',
-                        overflow: 'hidden',
-                        marginBottom: '14px',
-                      }}>
-                        {resenasReales.map((r: any, i: number) => (
-                          <div key={i} style={{
-                            padding: '12px 14px',
-                            borderBottom: i < resenasReales.length - 1 ? '1px solid var(--theme-border)' : 'none',
-                          }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                              <div style={{ fontSize: '11px', color: '#F2A623' }}>{'★'.repeat(r.estrellas)}{'☆'.repeat(5 - r.estrellas)}</div>
-                              <div style={{ fontSize: '10px', color: 'var(--theme-text-subtle)' }}>
-                                {new Date(r.created_at).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })}
+                      <>
+                        <div style={{
+                          background: 'var(--theme-bg)',
+                          border: '1px solid var(--theme-border)',
+                          borderRadius: 'var(--theme-radius-card)',
+                          overflow: 'hidden',
+                          marginBottom: '10px',
+                        }}>
+                          {(mostrarTodasResenas ? resenasReales : resenasReales.slice(0, 3)).map((r: any, i: number, arr: any[]) => (
+                            <div key={i} style={{
+                              padding: '12px 14px',
+                              borderBottom: i < arr.length - 1 ? '1px solid var(--theme-border)' : 'none',
+                            }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                                <div style={{ fontSize: '11px', color: '#F2A623' }}>{'★'.repeat(r.estrellas)}{'☆'.repeat(5 - r.estrellas)}</div>
+                                <div style={{ fontSize: '10px', color: 'var(--theme-text-subtle)' }}>
+                                  {new Date(r.created_at).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })}
+                                </div>
                               </div>
+                              {r.tags && r.tags.length > 0 && (
+                                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginBottom: '4px' }}>
+                                  {r.tags.map((t: string, ti: number) => (
+                                    <span key={ti} style={{
+                                      fontSize: '10px',
+                                      background: 'var(--theme-surface-muted)',
+                                      padding: '2px 6px',
+                                      borderRadius: '4px',
+                                      color: 'var(--theme-text-muted)',
+                                    }}>
+                                      {t}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                              {r.comentario && (
+                                <div style={{
+                                  fontSize: '12px',
+                                  color: 'var(--theme-text-muted)',
+                                }}>
+                                  {r.comentario}
+                                </div>
+                              )}
                             </div>
-                            {r.tags && r.tags.length > 0 && (
-                              <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginBottom: '4px' }}>
-                                {r.tags.map((t: string, ti: number) => (
-                                  <span key={ti} style={{
-                                    fontSize: '10px',
-                                    background: 'var(--theme-surface-muted)',
-                                    padding: '2px 6px',
-                                    borderRadius: '4px',
-                                    color: 'var(--theme-text-muted)',
-                                  }}>
-                                    {t}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                            {r.comentario && (
-                              <div style={{
-                                fontSize: '12px',
-                                color: 'var(--theme-text-muted)',
-                              }}>
-                                {r.comentario}
-                              </div>
-                            )}
+                          ))}
+                        </div>
+
+                        {/* Botón Ver más / Ver menos */}
+                        {resenasReales.length > 3 && (
+                          <div
+                            onClick={() => setMostrarTodasResenas(!mostrarTodasResenas)}
+                            style={{
+                              textAlign: 'center',
+                              padding: '10px',
+                              fontSize: '12px',
+                              fontWeight: 500,
+                              color: color,
+                              cursor: 'pointer',
+                              marginBottom: '14px',
+                              borderRadius: 'var(--theme-radius-image)',
+                              transition: 'background 0.15s ease',
+                            }}
+                          >
+                            {mostrarTodasResenas 
+                              ? '− Ver menos reseñas' 
+                              : `+ Ver las ${resenasReales.length} reseñas`}
                           </div>
-                        ))}
-                      </div>
+                        )}
+                      </>
                     ) : (
                       <div style={{
                         background: 'var(--theme-bg)',

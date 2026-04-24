@@ -16,8 +16,13 @@ interface ModalProps {
    * Si no se pasa, el modal usa los colores globales por defecto (útil para el admin).
    */
   themeClass?: string
+  /**
+   * Nivel de apilamiento del modal (modal stack). Por default 0 (z-index base 60/70).
+   * Usa 1 para modales que deben aparecer encima de otro modal abierto.
+   * Cada nivel suma 20 al z-index para mantener separación visual clara.
+   */
+  stackLevel?: number
 }
-
 export default function Modal({
   isOpen,
   onClose,
@@ -27,6 +32,7 @@ export default function Modal({
   showClose = true,
   noPadding = false,
   themeClass,
+  stackLevel = 0,
 }: ModalProps) {
   // Inicialización perezosa: detecta la pantalla ANTES del primer render
   // Esto elimina el "flash" donde el modal aparece primero abajo y salta al centro
@@ -74,6 +80,13 @@ export default function Modal({
   const radioModal = usarTema ? 'var(--theme-radius-modal)' : '14px'
   const radioMobile = usarTema ? 'var(--theme-radius-modal) var(--theme-radius-modal) 0 0' : '16px 16px 0 0'
 
+  // Z-index dinámicos: cada nivel suma 20 al base (60 backdrop, 70 contenedor)
+  // Nivel 0: backdrop=60, contenedor=70 (default)
+  // Nivel 1: backdrop=80, contenedor=90 (modal encima de otro modal)
+  // Nivel 2: backdrop=100, contenedor=110 (modal triple-apilado, caso raro)
+  const zIndexBackdrop = 60 + (stackLevel * 20)
+  const zIndexContainer = 70 + (stackLevel * 20)
+
   return (
     <div className={themeClass}>
       {/* Backdrop */}
@@ -83,7 +96,7 @@ export default function Modal({
           position: 'fixed',
           inset: 0,
           background: 'rgba(0, 0, 0, 0.5)',
-          zIndex: 60,
+          zIndex: zIndexBackdrop,
           animation: 'fadeIn 0.2s ease',
         }}
       />
@@ -92,7 +105,7 @@ export default function Modal({
       <div
         style={{
           position: 'fixed',
-          zIndex: 70,
+          zIndex: zIndexContainer,
           ...(esDesktop ? {
             // ===== DESKTOP: Centrado =====
             top: '50%',
