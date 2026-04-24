@@ -314,10 +314,30 @@ export default function MenuPublicoPage() {
     ? categoriasPorHorario.map((cat: any) => ({ ...cat, platos: cat.platos.filter((p: any) => p.nombre.toLowerCase().includes(busqueda.toLowerCase()) || p.descripcion?.toLowerCase().includes(busqueda.toLowerCase())) })).filter((cat: any) => cat.platos.length > 0)
     : categoriasPorHorario
 
-  function agregarAlPedido(platoId: string) { setPedido({ ...pedido, [platoId]: (pedido[platoId] || 0) + 1 }) }
+  function agregarAlPedido(platoId: string) {
+    // Si el plato tiene promo 2x1, sumar de 2 en 2 (lleva 4, paga 2)
+    const esPromo2x1 = preciosPromo[platoId]?.etiqueta === '2x1'
+    const incremento = esPromo2x1 ? 2 : 1
+    setPedido({ ...pedido, [platoId]: (pedido[platoId] || 0) + incremento })
+  }
+
   function quitarDelPedido(platoId: string) {
-    const c = (pedido[platoId] || 0) - 1
-    if (c <= 0) { const n = { ...pedido }; delete n[platoId]; setPedido(n) } else { setPedido({ ...pedido, [platoId]: c }) }
+    // Si el plato tiene promo 2x1, restar de 2 en 2 para mantener múltiplos
+    const esPromo2x1 = preciosPromo[platoId]?.etiqueta === '2x1'
+    const decremento = esPromo2x1 ? 2 : 1
+    const c = (pedido[platoId] || 0) - decremento
+
+    if (c <= 0) {
+      const n = { ...pedido }
+      delete n[platoId]
+      // Si se elimina totalmente, limpiar también el precio promo asociado
+      const p = { ...preciosPromo }
+      delete p[platoId]
+      setPedido(n)
+      setPreciosPromo(p)
+    } else {
+      setPedido({ ...pedido, [platoId]: c })
+    }
   }
 
   const itemsPedido = Object.entries(pedido).map(([id, cantidad]) => {
@@ -1847,10 +1867,15 @@ export default function MenuPublicoPage() {
                     fontSize: '13px',
                     fontWeight: 500,
                     color: 'var(--theme-text)',
+                    fontFamily: 'var(--theme-font-body)',
                   }}>
                     {item.plato.nombre}
                   </div>
-                  <div style={{ fontSize: '12px', color: 'var(--theme-text-muted)' }}>
+                  <div style={{
+                    fontSize: '12px',
+                    color: 'var(--theme-text-muted)',
+                    fontFamily: 'var(--theme-font-body)',
+                  }}>
                     {item.promo ? (
                       <><span style={{ textDecoration: 'line-through', marginRight: '4px' }}>${item.plato.precio.toLocaleString('es-CO')}</span><span style={{ color: color, fontWeight: 500 }}>${item.promo.precioUnitario.toLocaleString('es-CO')} c/u</span> <span style={{ fontSize: '10px', color: 'var(--color-green)' }}>({item.promo.etiqueta})</span></>
                     ) : `$${item.plato.precio.toLocaleString('es-CO')} c/u`}
@@ -1875,6 +1900,7 @@ export default function MenuPublicoPage() {
                     minWidth: '16px',
                     textAlign: 'center',
                     color: 'var(--theme-text)',
+                    fontFamily: 'var(--theme-font-body)',
                   }}>
                     {item.cantidad}
                   </span>
@@ -1886,6 +1912,7 @@ export default function MenuPublicoPage() {
                   minWidth: '70px',
                   textAlign: 'right',
                   color: 'var(--theme-text)',
+                  fontFamily: 'var(--theme-font-body)',
                 }}>
                   ${((item.promo ? item.promo.precioUnitario : item.plato.precio) * item.cantidad).toLocaleString('es-CO')}
                 </div>
@@ -1913,8 +1940,8 @@ export default function MenuPublicoPage() {
               paddingTop: '14px',
               borderTop: '1px solid var(--theme-border)',
             }}>
-              <span style={{ fontSize: '15px', fontWeight: 500, color: 'var(--theme-text)' }}>Total</span>
-              <span style={{ fontSize: '20px', fontWeight: 500, color: 'var(--theme-text)' }}>${totalPedido.toLocaleString('es-CO')}</span>
+              <span style={{ fontSize: '15px', fontWeight: 500, color: 'var(--theme-text)', fontFamily: 'var(--theme-font-body)' }}>Total</span>
+              <span style={{ fontSize: '20px', fontWeight: 500, color: 'var(--theme-text)', fontFamily: 'var(--theme-font-body)' }}>${totalPedido.toLocaleString('es-CO')}</span>
             </div>
             {esQR ? (
               <div style={{ marginTop: '16px', textAlign: 'center' }}>

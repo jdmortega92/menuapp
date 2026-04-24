@@ -193,7 +193,7 @@ export default function ConfigPage() {
         canvas.width = ancho
         canvas.height = alto
         ctx.drawImage(img, pixelCrop.x, pixelCrop.y, pixelCrop.width, pixelCrop.height, 0, 0, ancho, alto)
-        canvas.toBlob((blob) => resolve(blob!), 'image/jpeg', 0.85)
+        canvas.toBlob((blob) => resolve(blob!), 'image/jpeg', 0.82)
       }
       img.src = imageSrc
     })
