@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks'
 import { createClient } from '@/lib/supabase-browser'
+import BottomNav from '@/components/BottomNav'
 
 
 export default function DashboardPage() {
@@ -2418,28 +2419,7 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Bottom nav */}
-        <div style={{
-          display: 'flex', borderTop: '1px solid var(--border-light)',
-          background: 'var(--bg-secondary)', position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50,
-          maxWidth: '500px', minWidth: '320px', margin: '0 auto',
-        }}>
-          {[
-            { icon: '◉', label: 'Inicio', href: '/dashboard', active: true },
-            { icon: '≡', label: 'Menú', href: '/menu', active: false },
-            { icon: '◻', label: 'QR', href: '/qr', active: false },
-            { icon: '⊙', label: 'Config', href: '/config', active: false },
-          ].map((item: any, i: number) => (
-            <div key={i} onClick={() => router.push(item.href)} style={{
-              flex: 1, padding: '10px', textAlign: 'center', cursor: 'pointer',
-              color: item.active ? 'var(--color-info)' : 'var(--text-tertiary)',
-              fontWeight: item.active ? 500 : 400,
-            }}>
-              <div style={{ fontSize: '16px', marginBottom: '2px' }}>{item.icon}</div>
-              <div style={{ fontSize: '10px' }}>{item.label}</div>
-            </div>
-          ))}
-        </div>
+        <BottomNav />
 
       </div>
 
