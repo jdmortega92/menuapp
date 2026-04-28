@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks'
+import { createClient } from '@/lib/supabase-browser'
 import QRCode from 'qrcode'
 
 export default function MiQRPage() {
@@ -22,6 +23,21 @@ export default function MiQRPage() {
   const [qrGenerado, setQrGenerado] = useState(false)
   const urlCompleta = `https://menuapp-iota.vercel.app/${restaurante.slug}`
 
+  /**
+   * Marca el menú como compartido en la base de datos.
+   * Esto completa el paso "Comparte tu menú" del onboarding.
+   * Idempotente: si ya está marcado, no hace nada (ahorra requests).
+   */
+  async function marcarMenuComoCompartido() {
+    if (!rest?.id || rest.menu_compartido === true) return
+
+    const supabase = createClient()
+    await supabase
+      .from('restaurantes')
+      .update({ menu_compartido: true })
+      .eq('id', rest.id)
+  }
+
   useEffect(() => {
     if (qrCanvasRef.current && restaurante.slug) {
       QRCode.toCanvas(qrCanvasRef.current, urlCompleta, {
@@ -32,7 +48,26 @@ export default function MiQRPage() {
     }
   }, [restaurante.slug, urlCompleta])
 
+  // Marca el QR como generado en la base de datos al visitar esta página por primera vez.
+  // Esto completa automáticamente el paso "Genera tu código QR" del onboarding.
+  useEffect(() => {
+    if (!rest?.id || rest.qr_generado === true) return
+
+    async function marcarQRGenerado() {
+      const supabase = createClient()
+      await supabase
+        .from('restaurantes')
+        .update({ qr_generado: true })
+        .eq('id', rest!.id)
+    }
+
+    marcarQRGenerado()
+  }, [rest?.id, rest?.qr_generado])
+
   function descargarQR(formato: 'png' | 'svg', url: string, nombre: string) {
+    // Descargar el QR cuenta como compartir (el usuario lo va a imprimir/usar)
+    marcarMenuComoCompartido()
+
     if (formato === 'png') {
       QRCode.toDataURL(url, { width: 600, margin: 2, color: { dark: '#1A1A18', light: '#FFFFFF' } }, (err: any, dataUrl: string) => {
         if (err) return
@@ -55,6 +90,10 @@ export default function MiQRPage() {
 
   function compartirEnlace(red: string) {
     const texto = `Mira el menú de ${restaurante.nombre}: ${urlCompleta}`
+
+    // Marcar como compartido en el onboarding (fire-and-forget)
+    marcarMenuComoCompartido()
+
     if (red === 'WhatsApp') {
       window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, '_blank')
     } else if (red === 'Facebook') {
@@ -82,6 +121,10 @@ export default function MiQRPage() {
       document.execCommand('copy')
       document.body.removeChild(input)
     }
+
+    // Copiar el enlace cuenta como compartir (intención clara del usuario)
+    marcarMenuComoCompartido()
+
     setCopiado(true)
     setTimeout(() => setCopiado(false), 2000)
   }

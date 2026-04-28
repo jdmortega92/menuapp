@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks'
 import { createClient } from '@/lib/supabase-browser'
 
+
 export default function DashboardPage() {
   const router = useRouter()
   const [mostrarPerfil, setMostrarPerfil] = useState(false)
@@ -19,6 +20,8 @@ export default function DashboardPage() {
     iniciales: rest?.nombre ? rest.nombre.split(' ').map((w: any) => w[0]).join('').slice(0, 2).toUpperCase() : 'MR',
     plan: plan,
   }
+
+  
 
   const [stats, setStats] = useState({
     escaneos: 0,
@@ -2439,6 +2442,8 @@ export default function DashboardPage() {
         </div>
 
       </div>
+
+      
     </div>
   )
 }

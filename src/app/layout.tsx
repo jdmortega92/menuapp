@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import OnboardingProvider from '@/components/OnboardingProvider'
 
 export const metadata: Metadata = {
   title: 'MenuApp — El menú digital más inteligente de Colombia',
@@ -14,7 +15,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es">
-      <body>{children}</body>
+      <body>
+        {children}
+        <OnboardingProvider />
+      </body>
     </html>
   )
 }

@@ -32,6 +32,14 @@ export interface Restaurante {
   created_at: string
   periodo_plan?: string
   codigo_referido?: string
+
+  // ===== Onboarding =====
+  /** Si el usuario cerró manualmente el widget de onboarding (no vuelve a aparecer) */
+  onboarding_cerrado?: boolean
+  /** Si el usuario ya visitó la página de QR al menos una vez */
+  qr_generado?: boolean
+    /** Si el usuario ya compartió/copió/descargó su menú al menos una vez */
+  menu_compartido?: boolean
 }
 
 export type TipoNegocio =
