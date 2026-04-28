@@ -341,3 +341,29 @@ p { font-size: 0.9375rem; line-height: 1.6; color: var(--text-secondary); }
 
 .page-content { padding-bottom: 80px; }
 
+/* ============================================
+   PREVENIR INTERFERENCIAS DEL NAVEGADOR MÓVIL
+   ============================================ */
+
+/* Aplicar a TODO el body, excepto inputs y elementos editables */
+body {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Permitir selección en inputs, textareas y elementos editables */
+input,
+textarea,
+select,
+[contenteditable="true"],
+.seleccionable {
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
+}
+
