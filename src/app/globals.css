@@ -340,3 +340,45 @@ p { font-size: 0.9375rem; line-height: 1.6; color: var(--text-secondary); }
 }
 
 .page-content { padding-bottom: 80px; }
+
+/* ============================================
+   PREVENIR INTERFERENCIAS DEL NAVEGADOR MÓVIL
+   ============================================
+   Desactiva el menú contextual de long-press y
+   "Touch to Search" de Chrome móvil en elementos
+   interactivos. Mejora la sensación nativa de la app.
+*/
+
+/* Elementos clickeables: nav, botones, links */
+button,
+[role="button"],
+a {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Cards y contenedores interactivos */
+.card {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Permitir selección en inputs y textareas */
+input,
+textarea,
+[contenteditable="true"] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Para elementos donde el usuario SÍ debe poder seleccionar
+   (ej: enlace del menú público en /qr) */
+.seleccionable {
+  -webkit-user-select: text;
+  user-select: text;
+}
