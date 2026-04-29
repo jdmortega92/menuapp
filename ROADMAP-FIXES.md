@@ -325,11 +325,13 @@ These were resolved in a working session before this document existed. Mentioned
 # 📋 BACKLOG
 
 > Bugs and ideas found during testing. Add new items at the top using the template below. When promoting an item to a real batch, move it up and delete it from here.
+>
+> **Numbering**: BACKLOG items use the `BL.X` prefix (BackLog) to avoid colliding with active batch letters (Batch A, B, C…). When promoting to a real batch, renumber to that batch's prefix.
 
 ## Template (copy this for each new item)
 
 ```markdown
-### B.X 🟡 Short title here
+### BL.X 🟡 Short title here
 - **Found**: 2026-MM-DD
 - **Symptom**: What's wrong / what you observed.
 - **Steps to reproduce**: 1. … 2. … 3. …
@@ -341,7 +343,7 @@ These were resolved in a working session before this document existed. Mentioned
 
 ## Items
 
-### B.1 🟢 Visibility windows don't auto-refresh
+### BL.1 🟢 Visibility windows don't auto-refresh
 - **Found**: 2026-04-28
 - **Symptom**: All time-based visibility (plato del día, categories, promos) is computed only at page load. A visitor with the menu open across a boundary sees stale state.
 - **Where**: `src/app/[slug]/page.tsx` — `horaActual` is computed once at render, not reactive.

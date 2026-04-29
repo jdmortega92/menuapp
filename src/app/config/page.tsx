@@ -6,6 +6,7 @@ import { useAuth } from '@/hooks'
 import { createClient } from '@/lib/supabase-browser'
 import Cropper from 'react-easy-crop'
 import TimePicker from '@/components/ui/TimePicker'
+import TimeRangeHelper from '@/components/ui/TimeRangeHelper'
 import PasswordInput from '@/components/ui/PasswordInput'
 import { isPasswordValid, getPasswordError } from '@/lib/passwordValidation'
 import PhoneInput from '@/components/ui/PhoneInput'
@@ -958,6 +959,9 @@ export default function ConfigPage() {
                         }}
                       />
                     </div>
+                  )}
+                  {!h.cerrado && (
+                    <TimeRangeHelper start={h.hora_apertura} end={h.hora_cierre} verb="Abierto" />
                   )}
                 </div>
               ))}

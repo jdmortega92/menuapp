@@ -8,6 +8,7 @@ import Cropper from 'react-easy-crop'
 import TimePicker from '@/components/ui/TimePicker'
 import Modal from '@/components/ui/Modal'
 import BottomNav from '@/components/BottomNav'
+import TimeRangeHelper from '@/components/ui/TimeRangeHelper'
 import { formato12h } from '@/lib/time'
 
 interface Plato {
@@ -1246,6 +1247,11 @@ export default function MiMenuPage() {
                         onChange={(v) => setPlatoDiaConfig({ ...platoDiaConfig, horaFin: v })}
                       />
                     </div>
+                    <TimeRangeHelper
+                      start={platoDiaConfig.horaInicio}
+                      end={platoDiaConfig.horaFin}
+                      verb="Disponible"
+                    />
                   </div>
 
                   {platoDiaConfig.platoId && platoDiaConfig.precioEspecial && (
@@ -1479,13 +1485,12 @@ export default function MiMenuPage() {
                     onChange={(v) => { setHorarioCatFin(v); setAvisoHorario([]); setConfirmarHorario(false) }}
                   />
                 </div>
+                <TimeRangeHelper
+                  start={horarioCatInicio}
+                  end={horarioCatFin}
+                  verb={`"${cat?.nombre || ''}" visible`}
+                />
               </div>
-
-              {horarioCatInicio && horarioCatFin && avisoHorario.length === 0 && (
-                <div style={{ fontSize: '12px', color: 'var(--color-info)', marginBottom: '14px', background: 'var(--color-info-light)', padding: '10px', borderRadius: '8px' }}>
-                  "{cat?.nombre}" será visible de {formato12h(horarioCatInicio)} a {formato12h(horarioCatFin)}
-                </div>
-              )}
 
               {avisoHorario.length > 0 && (
                 <div style={{ marginBottom: '14px', background: 'var(--color-warning-light)', border: '1px solid var(--color-warning)', borderRadius: '8px', padding: '12px' }}>
