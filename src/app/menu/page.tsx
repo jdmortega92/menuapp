@@ -58,8 +58,8 @@ export default function MiMenuPage() {
   const [platoGanadorActivo, setPlatoGanadorActivo] = useState(false)
   const [guardandoGanador, setGuardandoGanador] = useState(false)
   const [horarioCategoria, setHorarioCategoria] = useState<string | null>(null)
-  const [avisoHorario, setAvisoHorario] = useState<string[]>([])
-  const [confirmarHorario, setConfirmarHorario] = useState(false)
+  const [guardandoHorarioCat, setGuardandoHorarioCat] = useState(false)
+  const [guardadoHorarioCat, setGuardadoHorarioCat] = useState(false)
   const [horarioCatInicio, setHorarioCatInicio] = useState('')
   const [horarioCatFin, setHorarioCatFin] = useState('')
 
@@ -118,24 +118,19 @@ export default function MiMenuPage() {
   async function guardarHorarioCategoria() {
     if (!horarioCategoria || !rest?.id) return
 
-    // Si tiene horario nuevo, revisar afectados
-    if (horarioCatInicio && horarioCatFin && !confirmarHorario) {
-      const afectados = detectarAfectados(horarioCategoria)
-      if (afectados.length > 0) {
-        setAvisoHorario(afectados)
-        return
-      }
-    }
-
+    setGuardandoHorarioCat(true)
     const supabase = createClient()
     await supabase.from('categorias').update({
       hora_inicio: horarioCatInicio || null,
       hora_fin: horarioCatFin || null,
     }).eq('id', horarioCategoria)
     setCategorias(categorias.map(c => c.id === horarioCategoria ? { ...c, hora_inicio: horarioCatInicio || null, hora_fin: horarioCatFin || null } : c))
-    setHorarioCategoria(null)
-    setAvisoHorario([])
-    setConfirmarHorario(false)
+    setGuardandoHorarioCat(false)
+    setGuardadoHorarioCat(true)
+    setTimeout(() => {
+      setGuardadoHorarioCat(false)
+      setHorarioCategoria(null)
+    }, 1200)
   }
   
   async function actualizarSorprendemeCats(nuevas: string[]) {
@@ -1464,7 +1459,7 @@ export default function MiMenuPage() {
           return (
             <Modal
               isOpen={!!horarioCategoria}
-              onClose={() => { setHorarioCategoria(null); setAvisoHorario([]); setConfirmarHorario(false) }}
+              onClose={() => setHorarioCategoria(null)}
               title={`Horario de "${cat?.nombre || ''}"`}
               maxWidth={500}
             >
@@ -1477,12 +1472,12 @@ export default function MiMenuPage() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
                   <TimePicker
                     value={horarioCatInicio}
-                    onChange={(v) => { setHorarioCatInicio(v); setAvisoHorario([]); setConfirmarHorario(false) }}
+                    onChange={(v) => setHorarioCatInicio(v)}
                   />
                   <span style={{ color: 'var(--text-tertiary)', fontSize: '13px' }}>—</span>
                   <TimePicker
                     value={horarioCatFin}
-                    onChange={(v) => { setHorarioCatFin(v); setAvisoHorario([]); setConfirmarHorario(false) }}
+                    onChange={(v) => setHorarioCatFin(v)}
                   />
                 </div>
                 <TimeRangeHelper
@@ -1492,47 +1487,52 @@ export default function MiMenuPage() {
                 />
               </div>
 
-              {avisoHorario.length > 0 && (
-                <div style={{ marginBottom: '14px', background: 'var(--color-warning-light)', border: '1px solid var(--color-warning)', borderRadius: '8px', padding: '12px' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--color-warning)', marginBottom: '8px' }}>
-                    Esto afectará otras funciones
-                  </div>
-                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '10px' }}>
-                    Al asignar horario a "{cat?.nombre}", lo siguiente solo será visible de {formato12h(horarioCatInicio)} a {formato12h(horarioCatFin)}:
-                  </div>
-                  {avisoHorario.map((a, i) => (
-                    <div key={i} style={{ fontSize: '12px', color: 'var(--text-primary)', padding: '6px 0', borderBottom: i < avisoHorario.length - 1 ? '1px solid var(--border-light)' : 'none', display: 'flex', gap: '6px', alignItems: 'start' }}>
-                      <span style={{ color: 'var(--color-warning)' }}>⚠</span>
-                      <span>{a}</span>
-                    </div>
-                  ))}
-                  <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '10px' }}>
-                    Puedes revisar combos, promos y sorpréndeme después si necesitas ajustarlos.
-                  </div>
-                </div>
-              )}
+              {(() => {
+                const avisoHorario = horarioCategoria && horarioCatInicio && horarioCatFin
+                  ? detectarAfectados(horarioCategoria)
+                  : []
+                return (
+                  <>
+                    {avisoHorario.length > 0 && (
+                      <div style={{ marginBottom: '14px', background: 'var(--color-warning-light)', border: '1px solid var(--color-warning)', borderRadius: '8px', padding: '12px' }}>
+                        <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--color-warning)', marginBottom: '8px' }}>
+                          Esto afectará otras funciones
+                        </div>
+                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '10px' }}>
+                          Al asignar horario a "{cat?.nombre}", lo siguiente solo será visible de {formato12h(horarioCatInicio)} a {formato12h(horarioCatFin)}:
+                        </div>
+                        {avisoHorario.map((a, i) => (
+                          <div key={i} style={{ fontSize: '12px', color: 'var(--text-primary)', padding: '6px 0', borderBottom: i < avisoHorario.length - 1 ? '1px solid var(--border-light)' : 'none', display: 'flex', gap: '6px', alignItems: 'start' }}>
+                            <span style={{ color: 'var(--color-warning)' }}>⚠</span>
+                            <span>{a}</span>
+                          </div>
+                        ))}
+                        <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '10px' }}>
+                          Puedes revisar combos, promos y sorpréndeme después si necesitas ajustarlos.
+                        </div>
+                      </div>
+                    )}
 
-              <div style={{ display: 'flex', gap: '8px' }}>
-                {avisoHorario.length > 0 ? (
-                  <>
-                    <button onClick={() => { setConfirmarHorario(true); setTimeout(() => guardarHorarioCategoria(), 50) }} className="btn-primary" style={{ flex: 1, padding: '12px', fontSize: '13px' }}>
-                      Entendido, guardar
-                    </button>
-                    <button onClick={() => { setAvisoHorario([]); setConfirmarHorario(false) }} className="btn-outline" style={{ flex: 1, padding: '12px', fontSize: '13px' }}>
-                      Cancelar
-                    </button>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        onClick={guardarHorarioCategoria}
+                        disabled={guardandoHorarioCat}
+                        className="btn-primary"
+                        style={{ flex: 1, padding: '12px', fontSize: '13px' }}
+                      >
+                        {guardandoHorarioCat ? 'Guardando...' : guardadoHorarioCat ? '✓ Guardado' : 'Guardar'}
+                      </button>
+                      <button
+                        onClick={() => { setHorarioCatInicio(''); setHorarioCatFin('') }}
+                        className="btn-outline"
+                        style={{ padding: '12px 16px', fontSize: '13px' }}
+                      >
+                        Limpiar
+                      </button>
+                    </div>
                   </>
-                ) : (
-                  <>
-                    <button onClick={guardarHorarioCategoria} className="btn-primary" style={{ flex: 1, padding: '12px', fontSize: '13px' }}>Guardar</button>
-                    <button onClick={() => {
-                      setHorarioCatInicio('')
-                      setHorarioCatFin('')
-                      setAvisoHorario([])
-                    }} className="btn-outline" style={{ padding: '12px 16px', fontSize: '13px' }}>Limpiar</button>
-                  </>
-                )}
-              </div>
+                )
+              })()}
             </Modal>
           )
         })()}

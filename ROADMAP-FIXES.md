@@ -345,10 +345,13 @@ These were resolved in a working session before this document existed. Mentioned
 
 ### BL.2 🟡 Remove menu_por_horario_activo from schema and UI
 - **Found**: 2026-04-29 during A.2.
-- **Symptom**: The toggle is now disabled in the UI but the field still exists in `config_restaurante` and the form state. Once we're confident no users rely on the old behavior, remove it.
+- **Status**: UI removal DONE 2026-04-29 (toggle no longer in config page). Remaining work below.
+- **Symptom**: The field still exists in `config_restaurante` (DB), the TypeScript types (`src/types/index.ts:205`), and the config form state (`src/app/config/page.tsx:38, 106, 354`). Pre-launch, no users depend on it — clean it up.
 - **Steps**:
   - Migration: drop column `menu_por_horario_activo` from `config_restaurante`.
-  - Remove from TypeScript types, form state, and the disabled input element.
+  - Remove the field from `src/types/index.ts`.
+  - Remove from `toggles` form state default + DB-load mapping in `config/page.tsx`.
+  - Remove the `requiereBasico` plan-gate entry that references it.
 - **Priority**: 🟡 high — visual cleanup once no production users have surprise dependencies on the legacy semantics.
 
 ### BL.1 🟢 Visibility windows don't auto-refresh
