@@ -270,12 +270,16 @@ export default function MenuPublicoPage() {
   const ahora = new Date()
   const horaActual = `${ahora.getHours().toString().padStart(2, '0')}:${ahora.getMinutes().toString().padStart(2, '0')}`
 
-  const categoriasPorHorario = config?.menu_por_horario_activo
-    ? categorias.filter((cat: any) => {
-        if (!cat.hora_inicio || !cat.hora_fin) return true
-        return horaActual >= cat.hora_inicio && horaActual <= cat.hora_fin
-      })
-    : categorias
+  // Las categorías con horario configurado siempre respetan su ventana,
+  // independientemente del antiguo toggle global. Soporta rangos que cruzan
+  // medianoche (inicio > fin) y normaliza HH:MM:SS → HH:MM.
+  const categoriasPorHorario = categorias.filter((cat: any) => {
+    if (!cat.hora_inicio || !cat.hora_fin) return true
+    const inicio = cat.hora_inicio.slice(0, 5)
+    const fin = cat.hora_fin.slice(0, 5)
+    if (inicio > fin) return horaActual >= inicio || horaActual <= fin
+    return horaActual >= inicio && horaActual <= fin
+  })
   
   // IDs de platos visibles por horario
   const platosVisiblesIds = new Set(categoriasPorHorario.flatMap((c: any) => c.platos.map((p: any) => p.id)))
@@ -284,7 +288,6 @@ export default function MenuPublicoPage() {
   const combosVisibles = combosPublico.filter((combo: any) => {
     // Excluir combos sin precio válido
     if (combo.precio === null || combo.precio === undefined) return false
-    if (!config?.menu_por_horario_activo) return true
     const platosDelCombo = categorias.flatMap((c: any) => c.platos).filter((p: any) => combo.platos?.includes(p.nombre))
     return platosDelCombo.every((p: any) => platosVisiblesIds.has(p.id))
   })
@@ -296,8 +299,6 @@ export default function MenuPublicoPage() {
     if (requiereValor && (promo.valor === null || promo.valor === undefined || promo.valor === 0)) {
       return false
     }
-    // Filtro de horario
-    if (!config?.menu_por_horario_activo) return true
     return promo.platosIds?.every((id: string) => platosVisiblesIds.has(id))
   })
 
@@ -310,13 +311,11 @@ export default function MenuPublicoPage() {
     // Ventana del mismo día
     return horaActual >= horaInicio && horaActual <= horaFin
   })()
-  const platoDiaVisible = platoDia && platoDiaEnHorario &&
-    (!config?.menu_por_horario_activo || platosVisiblesIds.has(platoDia.id))
-  const platoGanadorVisible = platoGanador && (!config?.menu_por_horario_activo || platosVisiblesIds.has(platoGanador.id))
+  const platoDiaVisible = platoDia && platoDiaEnHorario && platosVisiblesIds.has(platoDia.id)
+  const platoGanadorVisible = platoGanador && platosVisiblesIds.has(platoGanador.id)
 
   // Sorpréndeme: verificar si ambas categorías están activas
   const sorprendemeVisible = (() => {
-    if (!config?.menu_por_horario_activo) return true
     const catsSorprendeme = config?.sorprendeme_categorias || []
     if (catsSorprendeme.length !== 2) return true
     return catsSorprendeme.every((catId: string) => categoriasPorHorario.some((c: any) => c.id === catId))
@@ -1808,7 +1807,7 @@ export default function MenuPublicoPage() {
         ))}
 
         {/* Aviso platos no disponibles en pedido */}
-        {config?.menu_por_horario_activo && totalProductos > 0 && itemsPedido.some(i => !platosVisiblesIds.has(i.plato.id) && !combosVisibles.some((c: any) => c.id === i.plato.id)) && (
+        {totalProductos > 0 && itemsPedido.some(i => !platosVisiblesIds.has(i.plato.id) && !combosVisibles.some((c: any) => c.id === i.plato.id)) && (
           <div style={{ padding: '0 16px 10px' }}>
             <div style={{
               background: 'var(--color-warning-light)',

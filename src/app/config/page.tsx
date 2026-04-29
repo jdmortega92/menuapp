@@ -809,17 +809,18 @@ export default function ConfigPage() {
                 { key: 'whatsapp_activo', label: 'Pedidos por WhatsApp', desc: 'Los clientes pueden pedir por WhatsApp', plan: 'gratis' },
                 { key: 'calificaciones_activo', label: 'Calificaciones', desc: 'Los clientes pueden calificar platos', plan: 'gratis' },
                 { key: 'sorprendeme_activo', label: 'Sorpréndeme', desc: 'Combinación aleatoria de platos', plan: 'gratis' },
-                { key: 'menu_por_horario_activo', label: 'Menú por horario', desc: 'Categorías visibles por horario', plan: 'basico' },
+                { key: 'menu_por_horario_activo', label: 'Menú por horario', desc: 'Categorías visibles por horario', plan: 'basico', disabled: true, note: 'Las categorías ya respetan automáticamente sus horarios configurados. Este interruptor está deshabilitado y será eliminado en una próxima versión.' },
                 { key: 'combos_activo', label: 'Combos', desc: 'Paquetes de platos con descuento', plan: 'pro' },
                 { key: 'promos_activo', label: 'Promociones', desc: '2x1, descuento, precio especial', plan: 'pro' },
                 { key: 'plato_dia_activo', label: 'Plato del día', desc: 'Plato destacado con cuenta regresiva', plan: 'pro' },
                 { key: 'plato_ganador_activo', label: 'Plato ganador', desc: 'Plato premiado o recomendado', plan: 'pro' },
-              ].map((item) => {
+              ].map((item: any) => {
                 const bloqueado = (item.plan === 'pro' && !esPro) || (item.plan === 'basico' && !esBasico)
+                const deshabilitado = item.disabled === true
                 return (
                   <div key={item.key} style={{
                     padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    borderBottom: '1px solid var(--border-light)', opacity: bloqueado ? 0.5 : 1,
+                    borderBottom: '1px solid var(--border-light)', opacity: bloqueado || deshabilitado ? 0.5 : 1,
                   }}>
                     <div style={{ flex: 1 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -831,9 +832,26 @@ export default function ConfigPage() {
                         )}
                       </div>
                       <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>{item.desc}</div>
+                      {deshabilitado && !bloqueado && item.note && (
+                        <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '4px', fontStyle: 'italic', lineHeight: 1.4 }}>
+                          {item.note}
+                        </div>
+                      )}
                     </div>
                     {bloqueado ? (
                       <span style={{ fontSize: '16px' }}>🔒</span>
+                    ) : deshabilitado ? (
+                      <div style={{
+                        width: '36px', height: '20px', borderRadius: '10px',
+                        background: toggles[item.key as keyof typeof toggles] ? 'var(--color-info)' : 'var(--border-light)',
+                        position: 'relative', cursor: 'not-allowed',
+                      }}>
+                        <div style={{
+                          width: '16px', height: '16px', borderRadius: '50%', background: 'white',
+                          position: 'absolute', top: '2px',
+                          left: toggles[item.key as keyof typeof toggles] ? '18px' : '2px',
+                        }} />
+                      </div>
                     ) : (
                       <div onClick={() => handleToggle(item.key as keyof typeof toggles)} style={{
                         width: '36px', height: '20px', borderRadius: '10px',

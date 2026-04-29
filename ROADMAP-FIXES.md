@@ -343,6 +343,14 @@ These were resolved in a working session before this document existed. Mentioned
 
 ## Items
 
+### BL.2 🟡 Remove menu_por_horario_activo from schema and UI
+- **Found**: 2026-04-29 during A.2.
+- **Symptom**: The toggle is now disabled in the UI but the field still exists in `config_restaurante` and the form state. Once we're confident no users rely on the old behavior, remove it.
+- **Steps**:
+  - Migration: drop column `menu_por_horario_activo` from `config_restaurante`.
+  - Remove from TypeScript types, form state, and the disabled input element.
+- **Priority**: 🟡 high — visual cleanup once no production users have surprise dependencies on the legacy semantics.
+
 ### BL.1 🟢 Visibility windows don't auto-refresh
 - **Found**: 2026-04-28
 - **Symptom**: All time-based visibility (plato del día, categories, promos) is computed only at page load. A visitor with the menu open across a boundary sees stale state.
