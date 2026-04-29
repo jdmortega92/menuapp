@@ -8,24 +8,13 @@ import Cropper from 'react-easy-crop'
 import TimePicker from '@/components/ui/TimePicker'
 import Modal from '@/components/ui/Modal'
 import BottomNav from '@/components/BottomNav'
+import { formato12h } from '@/lib/time'
 
 interface Plato {
   id: string; nombre: string; precio: number; descripcion: string; disponible: boolean; foto_url: string | null
 }
 interface Categoria {
   id: string; nombre: string; orden: number; platos: Plato[]; hora_inicio?: string | null; hora_fin?: string | null
-}
-
-// Helper: formatea "HH:MM" o "HH:MM:SS" a "H:MM a.m./p.m."
-function formato12h(hora: string | null | undefined): string {
-  if (!hora) return ''
-  const partes = hora.split(':')
-  const h24 = parseInt(partes[0])
-  const mm = (partes[1] || '00').padStart(2, '0')
-  if (isNaN(h24)) return hora
-  const esPM = h24 >= 12
-  const h12 = h24 === 0 ? 12 : h24 > 12 ? h24 - 12 : h24
-  return `${h12}:${mm} ${esPM ? 'p.m.' : 'a.m.'}`
 }
 
 export default function MiMenuPage() {
