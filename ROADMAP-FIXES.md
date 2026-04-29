@@ -211,6 +211,24 @@ These were resolved in a working session before this document existed. Mentioned
   - Bar height stays constant regardless of number of products.
   - Total price and "Ver pedido" button are always fully visible.
 
+### G.3 🟡 Time picker shows natural-language interpretation
+- **Found**: 2026-04-28
+- **Symptom**: User configured "8:00 a.m. — 12:45 p.m." thinking "8am to 12:45 at midnight today". The actual interpretation is 08:00–12:45 (only morning). Confusion stems from the fact that "12:45 p.m." sounds late but is actually afternoon.
+- **Affected forms**:
+  - Plato del día time range
+  - Category visibility time range
+  - Restaurant opening hours
+  - Promo time range (if applicable)
+- **Acceptance criteria**:
+  - Below each time-range picker, render a helper line in natural Spanish.
+  - Examples:
+    - 08:00–18:00 → "Visible de 8:00 a.m. a 6:00 p.m."
+    - 08:00–00:45 → "Visible de 8:00 a.m. hasta las 12:45 a.m. del día siguiente"
+    - 22:00–02:00 → "Visible de 10:00 p.m. hasta las 2:00 a.m. del día siguiente"
+  - Detect overnight (start > end) and append "del día siguiente".
+  - Build as a reusable React component, e.g. `TimeRangeHelper`, in `src/components/ui/`.
+- **Priority**: 🟡 high — affects every owner configuring schedules.
+
 ---
 
 ## Batch H — Performance & data layer
@@ -323,7 +341,12 @@ These were resolved in a working session before this document existed. Mentioned
 
 ## Items
 
-_(empty — add as you find them)_
+### B.1 🟢 Visibility windows don't auto-refresh
+- **Found**: 2026-04-28
+- **Symptom**: All time-based visibility (plato del día, categories, promos) is computed only at page load. A visitor with the menu open across a boundary sees stale state.
+- **Where**: `src/app/[slug]/page.tsx` — `horaActual` is computed once at render, not reactive.
+- **Acceptance criteria**: re-evaluate every 60s OR refresh on focus.
+- **Priority**: 🟢 low (edge case).
 
 ---
 

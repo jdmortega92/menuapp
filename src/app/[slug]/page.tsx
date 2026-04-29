@@ -17,6 +17,11 @@ function formato12h(hora: string | null | undefined): string {
   return `${h12}:${mm} ${esPM ? 'p.m.' : 'a.m.'}`
 }
 
+// Helper: formatea precios de forma segura (evita crashes si viene null/undefined)
+function formatoPrecio(valor: number | null | undefined): string {
+  return (valor ?? 0).toLocaleString('es-CO')
+}
+
 export default function MenuPublicoPage() {
   const params = useParams()
   const searchParams = useSearchParams()
@@ -157,12 +162,13 @@ export default function MenuPublicoPage() {
         .maybeSingle()
 
       if (pd?.platos) {
+        const normalizar = (t: string | null | undefined) => t ? t.slice(0, 5) : null
         setPlatoDia({
           id: pd.platos.id, nombre: pd.platos.nombre,
           precio: pd.platos.precio, precioEspecial: pd.precio_especial,
           descripcion: pd.platos.descripcion,
-          horaInicio: pd.horario_inicio || '11:00',
-          horaFin: pd.horario_fin || '15:00',
+          horaInicio: normalizar(pd.horario_inicio),
+          horaFin: normalizar(pd.horario_fin),
         })
       }
       // Combos
@@ -272,7 +278,7 @@ export default function MenuPublicoPage() {
   ]
 
   // Filtrar por horario si está activo
-  const ahora = new Date(new Date().getTime() - 5 * 60 * 60 * 1000)
+  const ahora = new Date()
   const horaActual = `${ahora.getHours().toString().padStart(2, '0')}:${ahora.getMinutes().toString().padStart(2, '0')}`
 
   const categoriasPorHorario = config?.menu_por_horario_activo
@@ -287,19 +293,36 @@ export default function MenuPublicoPage() {
 
   // Filtrar combos: solo mostrar si TODOS sus platos son visibles
   const combosVisibles = combosPublico.filter((combo: any) => {
+    // Excluir combos sin precio válido
+    if (combo.precio === null || combo.precio === undefined) return false
     if (!config?.menu_por_horario_activo) return true
     const platosDelCombo = categorias.flatMap((c: any) => c.platos).filter((p: any) => combo.platos?.includes(p.nombre))
     return platosDelCombo.every((p: any) => platosVisiblesIds.has(p.id))
   })
 
-  // Filtrar promos: solo mostrar si TODOS sus platos son visibles
+  // Filtrar promos: solo mostrar si TODOS sus platos son visibles Y la promo es válida
   const promosVisibles = promosPublico.filter((promo: any) => {
+    // Excluir promos con datos inválidos (valor null/undefined cuando se requiere)
+    const requiereValor = promo.tipo === 'descuento' || promo.tipo === 'precio_especial'
+    if (requiereValor && (promo.valor === null || promo.valor === undefined || promo.valor === 0)) {
+      return false
+    }
+    // Filtro de horario
     if (!config?.menu_por_horario_activo) return true
     return promo.platosIds?.every((id: string) => platosVisiblesIds.has(id))
   })
 
-  // Plato del día: verificar si es visible
-  const platoDiaVisible = platoDia && (!config?.menu_por_horario_activo || platosVisiblesIds.has(platoDia.id))
+  // Plato del día: verificar si es visible (respeta su propia ventana horaria)
+  const platoDiaEnHorario = (() => {
+    if (!platoDia?.horaInicio || !platoDia?.horaFin) return true
+    const { horaInicio, horaFin } = platoDia
+    // Ventana que cruza medianoche (ej. 20:00–02:00): activa si >= inicio O <= fin
+    if (horaInicio > horaFin) return horaActual >= horaInicio || horaActual <= horaFin
+    // Ventana del mismo día
+    return horaActual >= horaInicio && horaActual <= horaFin
+  })()
+  const platoDiaVisible = platoDia && platoDiaEnHorario &&
+    (!config?.menu_por_horario_activo || platosVisiblesIds.has(platoDia.id))
   const platoGanadorVisible = platoGanador && (!config?.menu_por_horario_activo || platosVisiblesIds.has(platoGanador.id))
 
   // Sorpréndeme: verificar si ambas categorías están activas
@@ -1022,9 +1045,11 @@ export default function MenuPublicoPage() {
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                 <span style={{ fontSize: '11px', fontWeight: 500, color: color }}>⏰ PLATO DEL DÍA</span>
-                <span style={{ fontSize: '10px', color: 'var(--theme-text-subtle)' }}>
-                  {formato12h(platoDia.horaInicio)} — {formato12h(platoDia.horaFin)}
-                </span>
+                {platoDia.horaInicio && platoDia.horaFin && (
+                  <span style={{ fontSize: '10px', color: 'var(--theme-text-subtle)' }}>
+                    {formato12h(platoDia.horaInicio)} — {formato12h(platoDia.horaFin)}
+                  </span>
+                )}
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
@@ -1048,12 +1073,31 @@ export default function MenuPublicoPage() {
                       color: 'var(--theme-text-subtle)',
                       textDecoration: 'line-through',
                     }}>
-                      ${platoDia.precio.toLocaleString('es-CO')}
+                      ${formatoPrecio(platoDia.precio)}
                     </span>
-                    <span style={{ fontSize: '14px', fontWeight: 500, color: color }}>${platoDia.precioEspecial.toLocaleString('es-CO')}</span>
+                    <span style={{ fontSize: '14px', fontWeight: 500, color: color }}>${formatoPrecio(platoDia.precioEspecial)}</span>
                   </div>
                 </div>
-                <Qty id={platoDia.id} />
+                <div onClick={(e) => {
+                  e.stopPropagation()
+                  // Agregar plato del día CON precio especial registrado
+                  setPedido({ ...pedido, [platoDia.id]: (pedido[platoDia.id] || 0) + 1 })
+                  setPreciosPromo({
+                    ...preciosPromo,
+                    [platoDia.id]: { precioUnitario: platoDia.precioEspecial, etiqueta: 'Plato del día' }
+                  })
+                }} style={{
+                  width: '26px',
+                  height: '26px',
+                  borderRadius: '50%',
+                  background: color,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'white',
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                }}>+</div>
               </div>
             </div>
           </div>
@@ -1257,7 +1301,7 @@ export default function MenuPublicoPage() {
                       {promo.nombre}
                     </div>
                     <span style={{ fontSize: '12px', fontWeight: 500, color: 'white', background: color, padding: '3px 10px', borderRadius: '12px' }}>
-                      {promo.tipo === 'dos_por_uno' ? '2x1' : promo.tipo === 'descuento' ? `${promo.valor}% OFF` : `$${parseInt(promo.valor || '0').toLocaleString('es-CO')}`}
+                      {promo.tipo === 'dos_por_uno' ? '2x1' : promo.tipo === 'descuento' ? `${promo.valor ?? 0}% OFF` : `$${formatoPrecio(parseInt(promo.valor || '0'))}`}
                     </span>
                   </div>
                   {promo.platos && promo.platos.length > 0 && (
@@ -1877,8 +1921,8 @@ export default function MenuPublicoPage() {
                     fontFamily: 'var(--theme-font-body)',
                   }}>
                     {item.promo ? (
-                      <><span style={{ textDecoration: 'line-through', marginRight: '4px' }}>${item.plato.precio.toLocaleString('es-CO')}</span><span style={{ color: color, fontWeight: 500 }}>${item.promo.precioUnitario.toLocaleString('es-CO')} c/u</span> <span style={{ fontSize: '10px', color: 'var(--color-green)' }}>({item.promo.etiqueta})</span></>
-                    ) : `$${item.plato.precio.toLocaleString('es-CO')} c/u`}
+                      <><span style={{ textDecoration: 'line-through', marginRight: '4px' }}>${formatoPrecio(item.plato.precio)}</span><span style={{ color: color, fontWeight: 500 }}>${formatoPrecio(item.promo.precioUnitario)} c/u</span> <span style={{ fontSize: '10px', color: 'var(--color-green)' }}>({item.promo.etiqueta})</span></>
+                    ) : `$${formatoPrecio(item.plato.precio)} c/u`}
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -2231,14 +2275,49 @@ export default function MenuPublicoPage() {
                 }}>
                   {plato.descripcion}
                 </div>
-                <div style={{
-                  fontSize: '22px',
-                  fontWeight: 500,
-                  marginBottom: '16px',
-                  color: 'var(--theme-text)',
-                }}>
-                  ${plato.precio.toLocaleString('es-CO')}
-                </div>
+                {(() => {
+                  const esPlatoDelDia = platoDia && platoDia.id === plato.id && esProPublico && config?.plato_dia_activo && platoDiaVisible
+                  if (esPlatoDelDia) {
+                    return (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+                        <span style={{
+                          fontSize: '16px',
+                          color: 'var(--theme-text-subtle)',
+                          textDecoration: 'line-through',
+                        }}>
+                          ${formatoPrecio(platoDia.precio)}
+                        </span>
+                        <span style={{
+                          fontSize: '22px',
+                          fontWeight: 500,
+                          color: color,
+                        }}>
+                          ${formatoPrecio(platoDia.precioEspecial)}
+                        </span>
+                        <span style={{
+                          fontSize: '11px',
+                          color: 'white',
+                          background: color,
+                          padding: '3px 8px',
+                          borderRadius: '10px',
+                          fontWeight: 500,
+                        }}>
+                          Plato del día
+                        </span>
+                      </div>
+                    )
+                  }
+                  return (
+                    <div style={{
+                      fontSize: '22px',
+                      fontWeight: 500,
+                      marginBottom: '16px',
+                      color: 'var(--theme-text)',
+                    }}>
+                      ${formatoPrecio(plato.precio)}
+                    </div>
+                  )
+                })()}
 
                 {/* Reseñas */}
                 {config?.calificaciones_activo && (
@@ -2391,19 +2470,39 @@ export default function MenuPublicoPage() {
                       cursor: 'pointer',
                     }}>+</div>
                   </div>
-                  <div onClick={() => { if (cantidadActual === 0) agregarAlPedido(plato.id); setPlatoDetalle(null) }} style={{
-                    flex: 1,
-                    background: color,
-                    color: 'white',
-                    borderRadius: 'var(--theme-radius-button)',
-                    padding: '14px',
-                    textAlign: 'center',
-                    fontSize: '14px',
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                  }}>
-                    Agregar ${(cantidadMostrar * plato.precio).toLocaleString('es-CO')}
-                  </div>
+                  {(() => {
+                    const esPlatoDelDia = platoDia && platoDia.id === plato.id && esProPublico && config?.plato_dia_activo && platoDiaVisible
+                    const precioParaCalcular = esPlatoDelDia ? platoDia.precioEspecial : plato.precio
+                    return (
+                      <div onClick={() => {
+                        if (cantidadActual === 0) {
+                          if (esPlatoDelDia) {
+                            // Agregar con precio especial registrado
+                            setPedido({ ...pedido, [plato.id]: 1 })
+                            setPreciosPromo({
+                              ...preciosPromo,
+                              [plato.id]: { precioUnitario: platoDia.precioEspecial, etiqueta: 'Plato del día' }
+                            })
+                          } else {
+                            agregarAlPedido(plato.id)
+                          }
+                        }
+                        setPlatoDetalle(null)
+                      }} style={{
+                        flex: 1,
+                        background: color,
+                        color: 'white',
+                        borderRadius: 'var(--theme-radius-button)',
+                        padding: '14px',
+                        textAlign: 'center',
+                        fontSize: '14px',
+                        fontWeight: 500,
+                        cursor: 'pointer',
+                      }}>
+                        Agregar ${formatoPrecio(cantidadMostrar * precioParaCalcular)}
+                      </div>
+                    )
+                  })()}
                 </div>
               </div>
             </Modal>
