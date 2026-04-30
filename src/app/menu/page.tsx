@@ -30,6 +30,7 @@ export default function MiMenuPage() {
   const [mostrarFormCategoria, setMostrarFormCategoria] = useState(false)
   const [nuevaCategoria, setNuevaCategoria] = useState('')
   const [intentoCategoria, setIntentoCategoria] = useState(false)
+  const [touchedCategoria, setTouchedCategoria] = useState<Record<string, boolean>>({})
   const [guardandoCat, setGuardandoCat] = useState(false)
   const [guardadoCat, setGuardadoCat] = useState(false)
   const [mostrarFormPlato, setMostrarFormPlato] = useState<string | null>(null)
@@ -38,6 +39,7 @@ export default function MiMenuPage() {
   const [editandoCategoria, setEditandoCategoria] = useState<string | null>(null)
   const [nombreEditCategoria, setNombreEditCategoria] = useState('')
   const [intentoRename, setIntentoRename] = useState(false)
+  const [touchedRename, setTouchedRename] = useState<Record<string, boolean>>({})
   const [guardandoRename, setGuardandoRename] = useState(false)
   const [guardadoRename, setGuardadoRename] = useState(false)
   const [platoExpandido, setPlatoExpandido] = useState<string | null>(null)
@@ -504,6 +506,7 @@ export default function MiMenuPage() {
   }
   async function agregarCategoria() {
     setIntentoCategoria(true)
+    setTouchedCategoria({ nombre: true })
     const errores = validarCategoria(nuevaCategoria)
     if (Object.keys(errores).length > 0 || !rest?.id) return
     setGuardandoCat(true)
@@ -523,6 +526,7 @@ export default function MiMenuPage() {
       setGuardadoCat(false)
       setNuevaCategoria('')
       setIntentoCategoria(false)
+      setTouchedCategoria({})
       setMostrarFormCategoria(false)
     }, 1200)
   }
@@ -535,6 +539,7 @@ export default function MiMenuPage() {
   }
   async function renombrarCategoria(id: string) {
     setIntentoRename(true)
+    setTouchedRename({ nombre: true })
     const errores = validarCategoria(nombreEditCategoria)
     if (Object.keys(errores).length > 0) return
     setGuardandoRename(true)
@@ -548,6 +553,7 @@ export default function MiMenuPage() {
       setEditandoCategoria(null)
       setNombreEditCategoria('')
       setIntentoRename(false)
+      setTouchedRename({})
     }, 1200)
   }
   function moverCategoria(id: string, direccion: 'arriba' | 'abajo') {
@@ -725,7 +731,7 @@ export default function MiMenuPage() {
 
             {/* Botón agregar categoría */}
             <div style={{ padding: '0 20px 12px' }}>
-              <button onClick={() => { setMostrarFormCategoria(true); setIntentoCategoria(false) }}
+              <button onClick={() => { setMostrarFormCategoria(true); setIntentoCategoria(false); setTouchedCategoria({}) }}
                 className="btn-primary" style={{ padding: '10px 16px', fontSize: '13px' }}>
                 + Categoría
               </button>
@@ -741,12 +747,13 @@ export default function MiMenuPage() {
                   <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '10px' }}>Nueva categoría</div>
                   <input className="input" placeholder="Ej: Postres" value={nuevaCategoria}
                     onChange={(e) => setNuevaCategoria(e.target.value)} autoFocus
+                    onBlur={() => setTouchedCategoria(prev => ({ ...prev, nombre: true }))}
                     onKeyDown={(e) => e.key === 'Enter' && agregarCategoria()}
                     style={{
-                      marginBottom: intentoCategoria && errores.nombre ? '4px' : '10px',
-                      borderColor: intentoCategoria && errores.nombre ? 'var(--color-danger)' : undefined,
+                      marginBottom: intentoCategoria && touchedCategoria.nombre && errores.nombre ? '4px' : '10px',
+                      borderColor: intentoCategoria && touchedCategoria.nombre && errores.nombre ? 'var(--color-danger)' : undefined,
                     }} />
-                  {intentoCategoria && errores.nombre && (
+                  {intentoCategoria && touchedCategoria.nombre && errores.nombre && (
                     <div style={{ fontSize: '11px', color: 'var(--color-danger)', marginBottom: '10px' }}>
                       {errores.nombre}
                     </div>
@@ -759,7 +766,7 @@ export default function MiMenuPage() {
                         cursor: valido ? 'pointer' : 'default',
                         ...(valido ? {} : { transform: 'none', boxShadow: 'none' }),
                       }}>{guardandoCat ? 'Guardando...' : guardadoCat ? '✓ Guardado' : 'Crear'}</button>
-                    <button onClick={() => { setMostrarFormCategoria(false); setIntentoCategoria(false); setNuevaCategoria('') }} className="btn-outline" style={{ flex: 1, padding: '10px', fontSize: '13px' }}>Cancelar</button>
+                    <button onClick={() => { setMostrarFormCategoria(false); setIntentoCategoria(false); setTouchedCategoria({}); setNuevaCategoria('') }} className="btn-outline" style={{ flex: 1, padding: '10px', fontSize: '13px' }}>Cancelar</button>
                   </div>
                 </div>
               </div>
@@ -787,10 +794,12 @@ export default function MiMenuPage() {
                   <div style={{ marginBottom: '10px' }}>
                     <div style={{ display: 'flex', gap: '8px' }}>
                       <input className="input" value={nombreEditCategoria} onChange={(e) => setNombreEditCategoria(e.target.value)}
-                        autoFocus onKeyDown={(e) => e.key === 'Enter' && renombrarCategoria(cat.id)}
+                        autoFocus
+                        onBlur={() => setTouchedRename(prev => ({ ...prev, nombre: true }))}
+                        onKeyDown={(e) => e.key === 'Enter' && renombrarCategoria(cat.id)}
                         style={{
                           flex: 1,
-                          borderColor: intentoRename && errores.nombre ? 'var(--color-danger)' : undefined,
+                          borderColor: intentoRename && touchedRename.nombre && errores.nombre ? 'var(--color-danger)' : undefined,
                         }} />
                       <button onClick={() => renombrarCategoria(cat.id)} disabled={!valido || guardandoRename || guardadoRename} className="btn-primary"
                         style={{
@@ -799,9 +808,9 @@ export default function MiMenuPage() {
                           cursor: valido ? 'pointer' : 'default',
                           ...(valido ? {} : { transform: 'none', boxShadow: 'none' }),
                         }}>{guardandoRename ? 'Guardando...' : guardadoRename ? '✓ Guardado' : 'OK'}</button>
-                      <button onClick={() => { setEditandoCategoria(null); setIntentoRename(false); setNombreEditCategoria('') }} className="btn-outline" style={{ padding: '8px 14px', fontSize: '12px' }}>✕</button>
+                      <button onClick={() => { setEditandoCategoria(null); setIntentoRename(false); setTouchedRename({}); setNombreEditCategoria('') }} className="btn-outline" style={{ padding: '8px 14px', fontSize: '12px' }}>✕</button>
                     </div>
-                    {intentoRename && errores.nombre && (
+                    {intentoRename && touchedRename.nombre && errores.nombre && (
                       <div style={{ fontSize: '11px', color: 'var(--color-danger)', marginTop: '4px' }}>
                         {errores.nombre}
                       </div>
@@ -845,7 +854,7 @@ export default function MiMenuPage() {
                       borderRadius: 'var(--radius-sm)', overflow: 'hidden', width: '180px',
                       boxShadow: 'var(--shadow-lg)', animation: 'scaleIn 0.15s ease',
                     }}>
-                      <div onClick={() => { setNombreEditCategoria(cat.nombre); setEditandoCategoria(cat.id); setMenuCategoria(null); setIntentoRename(false) }}
+                      <div onClick={() => { setNombreEditCategoria(cat.nombre); setEditandoCategoria(cat.id); setMenuCategoria(null); setIntentoRename(false); setTouchedRename({}) }}
                         style={{ padding: '10px 14px', fontSize: '13px', cursor: 'pointer', borderBottom: '1px solid var(--border-light)' }}>Renombrar</div>
                       <div onClick={() => {
                         const c = categorias.find(x => x.id === cat.id) as any
