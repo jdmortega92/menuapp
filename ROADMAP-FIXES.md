@@ -52,11 +52,13 @@ These were resolved in a working session before this document existed. Mentioned
 
 # 🐛 BUGS
 
-## Batch A — Time-based visibility (Issues #3, #4, #8)
+## Batch A — Time-based visibility (Issues #3, #4, #8) ✅ CLOSED
+
+**Status**: All four items shipped and verified in browser. Closed 2026-04-30.
 
 **Goal**: Categories, plato del día, and promos should respect their own visibility windows in the public menu.
 
-### A.1 🔴 Plato del día respects its own time window
+### A.1 ✅ Plato del día respects its own time window
 - **Symptom**: Plato del día appears in the public menu outside its configured `horaInicio`/`horaFin` window.
 - **Where**: `src/app/[slug]/page.tsx`, around the `platoDiaVisible` computation.
 - **Current code** only checks if the underlying plato is visible by category, not the plato del día's own schedule.
@@ -65,7 +67,7 @@ These were resolved in a working session before this document existed. Mentioned
   - When inside the window, it renders as today.
   - Edge case: if `horaInicio`/`horaFin` are missing, treat as "always visible".
 
-### A.2 🔴 Category-level time visibility works independently of global toggle
+### A.2 ✅ Category-level time visibility works independently of global toggle
 - **Symptom**: A category with `hora_inicio`/`hora_fin` configured does not hide outside that window unless `config.menu_por_horario_activo` is `true`.
 - **Where**: `categoriasPorHorario` filter in `page.tsx`.
 - **Decision needed**: Should category-level schedules ALWAYS work, or only when the global toggle is on?
@@ -74,7 +76,7 @@ These were resolved in a working session before this document existed. Mentioned
   - A category with a schedule set hides outside its window regardless of `menu_por_horario_activo`.
   - A category without a schedule always shows (current behavior).
 
-### A.3 🔴 Promos respect day-of-week filter
+### A.3 ✅ Promos respect day-of-week filter
 - **Symptom**: Promos appear in the public menu on days that aren't in their `dias` array.
 - **Where**: `promosVisibles` filter in `page.tsx`.
 - **Acceptance criteria**:
@@ -82,13 +84,11 @@ These were resolved in a working session before this document existed. Mentioned
   - If `promo.dias` is empty or missing, treat as "every day" (current implicit behavior).
   - Day codes: `lun`, `mar`, `mie`, `jue`, `vie`, `sab`, `dom` (already used in the code).
 
-### A.4 🟡 Refactor: extract a shared `isCurrentlyVisible()` utility
-- After A.1–A.3 are working, extract the visibility logic into a single helper, e.g., `src/lib/visibility.ts`:
-  ```ts
-  isCurrentlyVisible({ schedule?, days? }): boolean
-  ```
-- Apply it consistently across plato del día, categories, and promos.
-- Don't do this until A.1–A.3 are tested and merged. Avoid premature abstraction.
+### A.4 ✅ Refactor: extract a shared `isCurrentlyVisible()` utility
+- Helper lives at `src/lib/visibility.ts` with signature `isCurrentlyVisible({ horaInicio?, horaFin?, dias?, ahora? }): boolean`.
+- All three call sites (categories, promos, plato del día) routed through it.
+- HH:MM[:SS] normalization, overnight detection (`inicio > fin`), and `getDay()→lun/mar/...` mapping all centralized.
+- Pure refactor — same browser behavior as A.1/A.2/A.3.
 
 ---
 

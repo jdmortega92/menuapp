@@ -5,6 +5,7 @@ import { useParams, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase-browser'
 import Modal from '@/components/ui/Modal'
 import { formato12h } from '@/lib/time'
+import { isCurrentlyVisible } from '@/lib/visibility'
 
 // Helper: formatea precios de forma segura (evita crashes si viene null/undefined)
 function formatoPrecio(valor: number | null | undefined): string {
@@ -271,15 +272,10 @@ export default function MenuPublicoPage() {
   const horaActual = `${ahora.getHours().toString().padStart(2, '0')}:${ahora.getMinutes().toString().padStart(2, '0')}`
 
   // Las categorías con horario configurado siempre respetan su ventana,
-  // independientemente del antiguo toggle global. Soporta rangos que cruzan
-  // medianoche (inicio > fin) y normaliza HH:MM:SS → HH:MM.
-  const categoriasPorHorario = categorias.filter((cat: any) => {
-    if (!cat.hora_inicio || !cat.hora_fin) return true
-    const inicio = cat.hora_inicio.slice(0, 5)
-    const fin = cat.hora_fin.slice(0, 5)
-    if (inicio > fin) return horaActual >= inicio || horaActual <= fin
-    return horaActual >= inicio && horaActual <= fin
-  })
+  // independientemente del antiguo toggle global.
+  const categoriasPorHorario = categorias.filter((cat: any) =>
+    isCurrentlyVisible({ horaInicio: cat.hora_inicio, horaFin: cat.hora_fin, ahora })
+  )
   
   // IDs de platos visibles por horario
   const platosVisiblesIds = new Set(categoriasPorHorario.flatMap((c: any) => c.platos.map((p: any) => p.id)))
@@ -293,27 +289,22 @@ export default function MenuPublicoPage() {
   })
 
   // Filtrar promos: solo mostrar si TODOS sus platos son visibles Y la promo es válida
-  const codigoDia = ['dom','lun','mar','mie','jue','vie','sab'][ahora.getDay()]
   const promosVisibles = promosPublico.filter((promo: any) => {
     // Excluir promos con datos inválidos (valor null/undefined cuando se requiere)
     const requiereValor = promo.tipo === 'descuento' || promo.tipo === 'precio_especial'
     if (requiereValor && (promo.valor === null || promo.valor === undefined || promo.valor === 0)) {
       return false
     }
-    // dias vacío/ausente = todos los días
-    if (promo.dias?.length > 0 && !promo.dias.includes(codigoDia)) return false
+    if (!isCurrentlyVisible({ dias: promo.dias, ahora })) return false
     return promo.platosIds?.every((id: string) => platosVisiblesIds.has(id))
   })
 
-  // Plato del día: verificar si es visible (respeta su propia ventana horaria)
-  const platoDiaEnHorario = (() => {
-    if (!platoDia?.horaInicio || !platoDia?.horaFin) return true
-    const { horaInicio, horaFin } = platoDia
-    // Ventana que cruza medianoche (ej. 20:00–02:00): activa si >= inicio O <= fin
-    if (horaInicio > horaFin) return horaActual >= horaInicio || horaActual <= horaFin
-    // Ventana del mismo día
-    return horaActual >= horaInicio && horaActual <= horaFin
-  })()
+  // Plato del día: respeta su propia ventana horaria
+  const platoDiaEnHorario = isCurrentlyVisible({
+    horaInicio: platoDia?.horaInicio,
+    horaFin: platoDia?.horaFin,
+    ahora,
+  })
   const platoDiaVisible = platoDia && platoDiaEnHorario && platosVisiblesIds.has(platoDia.id)
   const platoGanadorVisible = platoGanador && platosVisiblesIds.has(platoGanador.id)
 
