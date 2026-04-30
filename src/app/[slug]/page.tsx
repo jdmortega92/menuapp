@@ -293,12 +293,15 @@ export default function MenuPublicoPage() {
   })
 
   // Filtrar promos: solo mostrar si TODOS sus platos son visibles Y la promo es válida
+  const codigoDia = ['dom','lun','mar','mie','jue','vie','sab'][ahora.getDay()]
   const promosVisibles = promosPublico.filter((promo: any) => {
     // Excluir promos con datos inválidos (valor null/undefined cuando se requiere)
     const requiereValor = promo.tipo === 'descuento' || promo.tipo === 'precio_especial'
     if (requiereValor && (promo.valor === null || promo.valor === undefined || promo.valor === 0)) {
       return false
     }
+    // dias vacío/ausente = todos los días
+    if (promo.dias?.length > 0 && !promo.dias.includes(codigoDia)) return false
     return promo.platosIds?.every((id: string) => platosVisiblesIds.has(id))
   })
 
