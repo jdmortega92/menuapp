@@ -35,6 +35,10 @@ export default function MiMenuPage() {
   const [guardadoCat, setGuardadoCat] = useState(false)
   const [mostrarFormPlato, setMostrarFormPlato] = useState<string | null>(null)
   const [nuevoPlato, setNuevoPlato] = useState({ nombre: '', precio: '', descripcion: '' })
+  const [intentoPlato, setIntentoPlato] = useState(false)
+  const [touchedPlato, setTouchedPlato] = useState<Record<string, boolean>>({})
+  const [guardandoPlato, setGuardandoPlato] = useState(false)
+  const [guardadoPlato, setGuardadoPlato] = useState(false)
   const [menuCategoria, setMenuCategoria] = useState<string | null>(null)
   const [editandoCategoria, setEditandoCategoria] = useState<string | null>(null)
   const [nombreEditCategoria, setNombreEditCategoria] = useState('')
@@ -44,6 +48,10 @@ export default function MiMenuPage() {
   const [guardadoRename, setGuardadoRename] = useState(false)
   const [platoExpandido, setPlatoExpandido] = useState<string | null>(null)
   const [editPlato, setEditPlato] = useState({ nombre: '', precio: '', descripcion: '' })
+  const [intentoEditPlato, setIntentoEditPlato] = useState(false)
+  const [touchedEditPlato, setTouchedEditPlato] = useState<Record<string, boolean>>({})
+  const [guardandoEditPlato, setGuardandoEditPlato] = useState(false)
+  const [guardadoEditPlato, setGuardadoEditPlato] = useState(false)
   const [subiendoFoto, setSubiendoFoto] = useState(false)
   const [cropModal, setCropModal] = useState<{ imagen: string; platoId: string; categoriaId: string } | null>(null)
   const [crop, setCrop] = useState({ x: 0, y: 0 })
@@ -571,8 +579,19 @@ export default function MiMenuPage() {
   }
 
   // ── Platos ──
+  function validarPlato(state: { nombre: string; precio: string }): Record<string, string> {
+    const e: Record<string, string> = {}
+    if (!state.nombre.trim()) e.nombre = 'El nombre es obligatorio'
+    const precioNum = parseInt(state.precio)
+    if (!state.precio || isNaN(precioNum) || precioNum <= 0) e.precio = 'El precio debe ser mayor a 0'
+    return e
+  }
   async function agregarPlato(categoriaId: string) {
-    if (!nuevoPlato.nombre.trim() || !nuevoPlato.precio || !rest?.id) return
+    setIntentoPlato(true)
+    setTouchedPlato({ nombre: true, precio: true })
+    const errores = validarPlato(nuevoPlato)
+    if (Object.keys(errores).length > 0 || !rest?.id) return
+    setGuardandoPlato(true)
     const supabase = createClient()
     const cat = categorias.find(c => c.id === categoriaId)
     const { data, error } = await supabase
@@ -600,8 +619,15 @@ export default function MiMenuPage() {
         return c
       }))
     }
-    setNuevoPlato({ nombre: '', precio: '', descripcion: '' })
-    setMostrarFormPlato(null)
+    setGuardandoPlato(false)
+    setGuardadoPlato(true)
+    setTimeout(() => {
+      setGuardadoPlato(false)
+      setNuevoPlato({ nombre: '', precio: '', descripcion: '' })
+      setIntentoPlato(false)
+      setTouchedPlato({})
+      setMostrarFormPlato(null)
+    }, 1200)
   }
   async function toggleDisponible(categoriaId: string, platoId: string) {
     const cat = categorias.find(c => c.id === categoriaId)
@@ -628,7 +654,11 @@ export default function MiMenuPage() {
     if (platoExpandido === platoId) setPlatoExpandido(null)
   }
   async function guardarEdicionPlato(categoriaId: string, platoId: string) {
-    if (!editPlato.nombre.trim() || !editPlato.precio) return
+    setIntentoEditPlato(true)
+    setTouchedEditPlato({ nombre: true, precio: true })
+    const errores = validarPlato(editPlato)
+    if (Object.keys(errores).length > 0) return
+    setGuardandoEditPlato(true)
     const supabase = createClient()
     await supabase.from('platos').update({
       nombre: editPlato.nombre,
@@ -643,7 +673,14 @@ export default function MiMenuPage() {
       }
       return c
     }))
-    setPlatoExpandido(null)
+    setGuardandoEditPlato(false)
+    setGuardadoEditPlato(true)
+    setTimeout(() => {
+      setGuardadoEditPlato(false)
+      setPlatoExpandido(null)
+      setIntentoEditPlato(false)
+      setTouchedEditPlato({})
+    }, 1200)
   }
   function moverPlato(categoriaId: string, platoId: string, direccion: 'arriba' | 'abajo') {
     setCategorias(categorias.map(cat => {
@@ -836,7 +873,15 @@ export default function MiMenuPage() {
                       )}
                     </div>
                     <div style={{ display: 'flex', gap: '12px' }}>
-                      <span onClick={() => setMostrarFormPlato(mostrarFormPlato === cat.id ? null : cat.id)}
+                      <span onClick={() => {
+                        const opening = mostrarFormPlato !== cat.id
+                        setMostrarFormPlato(opening ? cat.id : null)
+                        if (opening) {
+                          setIntentoPlato(false)
+                          setTouchedPlato({})
+                          setNuevoPlato({ nombre: '', precio: '', descripcion: '' })
+                        }
+                      }}
                         style={{ fontSize: '12px', color: 'var(--color-info)', cursor: 'pointer' }}>+ Plato</span>
                       <span onClick={() => setMenuCategoria(menuCategoria === cat.id ? null : cat.id)}
                         style={{ fontSize: '12px', color: 'var(--text-tertiary)', cursor: 'pointer' }}>⋯</span>
@@ -871,13 +916,36 @@ export default function MiMenuPage() {
                 )}
 
                 {/* Form nuevo plato */}
-                {mostrarFormPlato === cat.id && (
+                {mostrarFormPlato === cat.id && (() => {
+                  const errores = validarPlato(nuevoPlato)
+                  const valido = Object.keys(errores).length === 0
+                  return (
                   <div className="card" style={{ padding: '14px', marginBottom: '8px' }}>
                     <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '10px' }}>Nuevo plato en {cat.nombre}</div>
                     <input className="input" placeholder="Nombre del plato" value={nuevoPlato.nombre}
-                      onChange={(e) => setNuevoPlato({ ...nuevoPlato, nombre: e.target.value })} autoFocus style={{ marginBottom: '8px' }} />
+                      onChange={(e) => setNuevoPlato({ ...nuevoPlato, nombre: e.target.value })} autoFocus
+                      onBlur={() => setTouchedPlato(prev => ({ ...prev, nombre: true }))}
+                      style={{
+                        marginBottom: intentoPlato && touchedPlato.nombre && errores.nombre ? '4px' : '8px',
+                        borderColor: intentoPlato && touchedPlato.nombre && errores.nombre ? 'var(--color-danger)' : undefined,
+                      }} />
+                    {intentoPlato && touchedPlato.nombre && errores.nombre && (
+                      <div style={{ fontSize: '11px', color: 'var(--color-danger)', marginBottom: '8px' }}>
+                        {errores.nombre}
+                      </div>
+                    )}
                     <input className="input" type="number" placeholder="Precio (ej: 18000)" value={nuevoPlato.precio}
-                      onChange={(e) => setNuevoPlato({ ...nuevoPlato, precio: e.target.value })} style={{ marginBottom: '8px' }} />
+                      onChange={(e) => setNuevoPlato({ ...nuevoPlato, precio: e.target.value })}
+                      onBlur={() => setTouchedPlato(prev => ({ ...prev, precio: true }))}
+                      style={{
+                        marginBottom: intentoPlato && touchedPlato.precio && errores.precio ? '4px' : '8px',
+                        borderColor: intentoPlato && touchedPlato.precio && errores.precio ? 'var(--color-danger)' : undefined,
+                      }} />
+                    {intentoPlato && touchedPlato.precio && errores.precio && (
+                      <div style={{ fontSize: '11px', color: 'var(--color-danger)', marginBottom: '8px' }}>
+                        {errores.precio}
+                      </div>
+                    )}
                     <div style={{ position: 'relative', marginBottom: '10px' }}>
                       <input className="input" placeholder="Descripción (opcional)" value={nuevoPlato.descripcion}
                         onChange={(e) => { if (e.target.value.length <= MAX_DESC) setNuevoPlato({ ...nuevoPlato, descripcion: e.target.value }) }}
@@ -891,11 +959,24 @@ export default function MiMenuPage() {
                       📷 Podrás agregar foto después de crear el plato
                     </div>
                     <div style={{ display: 'flex', gap: '8px' }}>
-                      <button onClick={() => agregarPlato(cat.id)} className="btn-primary" style={{ flex: 1, padding: '10px', fontSize: '13px' }}>Agregar</button>
-                      <button onClick={() => setMostrarFormPlato(null)} className="btn-outline" style={{ flex: 1, padding: '10px', fontSize: '13px' }}>Cancelar</button>
+                      <button onClick={() => agregarPlato(cat.id)} disabled={!valido || guardandoPlato || guardadoPlato}
+                        className="btn-primary"
+                        style={{
+                          flex: 1, padding: '10px', fontSize: '13px',
+                          opacity: valido ? 1 : 0.5,
+                          cursor: valido ? 'pointer' : 'default',
+                          ...(valido ? {} : { transform: 'none', boxShadow: 'none' }),
+                        }}>{guardandoPlato ? 'Guardando...' : guardadoPlato ? '✓ Guardado' : 'Agregar'}</button>
+                      <button onClick={() => {
+                        setMostrarFormPlato(null)
+                        setIntentoPlato(false)
+                        setTouchedPlato({})
+                        setNuevoPlato({ nombre: '', precio: '', descripcion: '' })
+                      }} className="btn-outline" style={{ flex: 1, padding: '10px', fontSize: '13px' }}>Cancelar</button>
                     </div>
                   </div>
-                )}
+                  )
+                })()}
 
                 {/* Platos */}
                 {cat.platos.map((plato, pIdx) => (
@@ -904,8 +985,16 @@ export default function MiMenuPage() {
                     {/* Vista normal del plato */}
                     <div
                       onClick={() => {
-                        if (platoExpandido === plato.id) { setPlatoExpandido(null) }
-                        else { setPlatoExpandido(plato.id); setEditPlato({ nombre: plato.nombre, precio: plato.precio.toString(), descripcion: plato.descripcion || '' }) }
+                        if (platoExpandido === plato.id) {
+                          setPlatoExpandido(null)
+                          setIntentoEditPlato(false)
+                          setTouchedEditPlato({})
+                        } else {
+                          setPlatoExpandido(plato.id)
+                          setEditPlato({ nombre: plato.nombre, precio: plato.precio.toString(), descripcion: plato.descripcion || '' })
+                          setIntentoEditPlato(false)
+                          setTouchedEditPlato({})
+                        }
                       }}
                       style={{ padding: '12px', display: 'flex', gap: '12px', cursor: 'pointer' }}
                     >
@@ -950,16 +1039,39 @@ export default function MiMenuPage() {
                     </div>
 
                     {/* Panel edición expandido */}
-                    {platoExpandido === plato.id && (
+                    {platoExpandido === plato.id && (() => {
+                      const errores = validarPlato(editPlato)
+                      const valido = Object.keys(errores).length === 0
+                      return (
                       <div style={{
                         padding: '0 12px 14px', borderTop: '1px solid var(--border-light)',
                         paddingTop: '14px', animation: 'fadeInUp 0.2s ease',
                       }}>
                         <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '10px' }}>Editar plato</div>
                         <input className="input" placeholder="Nombre" value={editPlato.nombre}
-                          onChange={(e) => setEditPlato({ ...editPlato, nombre: e.target.value })} style={{ marginBottom: '8px' }} />
+                          onChange={(e) => setEditPlato({ ...editPlato, nombre: e.target.value })}
+                          onBlur={() => setTouchedEditPlato(prev => ({ ...prev, nombre: true }))}
+                          style={{
+                            marginBottom: intentoEditPlato && touchedEditPlato.nombre && errores.nombre ? '4px' : '8px',
+                            borderColor: intentoEditPlato && touchedEditPlato.nombre && errores.nombre ? 'var(--color-danger)' : undefined,
+                          }} />
+                        {intentoEditPlato && touchedEditPlato.nombre && errores.nombre && (
+                          <div style={{ fontSize: '11px', color: 'var(--color-danger)', marginBottom: '8px' }}>
+                            {errores.nombre}
+                          </div>
+                        )}
                         <input className="input" type="number" placeholder="Precio" value={editPlato.precio}
-                          onChange={(e) => setEditPlato({ ...editPlato, precio: e.target.value })} style={{ marginBottom: '8px' }} />
+                          onChange={(e) => setEditPlato({ ...editPlato, precio: e.target.value })}
+                          onBlur={() => setTouchedEditPlato(prev => ({ ...prev, precio: true }))}
+                          style={{
+                            marginBottom: intentoEditPlato && touchedEditPlato.precio && errores.precio ? '4px' : '8px',
+                            borderColor: intentoEditPlato && touchedEditPlato.precio && errores.precio ? 'var(--color-danger)' : undefined,
+                          }} />
+                        {intentoEditPlato && touchedEditPlato.precio && errores.precio && (
+                          <div style={{ fontSize: '11px', color: 'var(--color-danger)', marginBottom: '8px' }}>
+                            {errores.precio}
+                          </div>
+                        )}
                         <div style={{ position: 'relative', marginBottom: '10px' }}>
                           <input className="input" placeholder="Descripción" value={editPlato.descripcion}
                             onChange={(e) => { if (e.target.value.length <= MAX_DESC) setEditPlato({ ...editPlato, descripcion: e.target.value }) }}
@@ -995,11 +1107,24 @@ export default function MiMenuPage() {
                         <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '4px' }}>JPG o PNG · Máximo 10MB · Se redimensiona a 800px</div>
                         </div>}
                         <div style={{ display: 'flex', gap: '8px' }}>
-                          <button onClick={() => guardarEdicionPlato(cat.id, plato.id)} className="btn-primary" style={{ flex: 1, padding: '10px', fontSize: '13px' }}>Guardar</button>
-                          <button onClick={() => setPlatoExpandido(null)} className="btn-outline" style={{ flex: 1, padding: '10px', fontSize: '13px' }}>Cancelar</button>
+                          <button onClick={() => guardarEdicionPlato(cat.id, plato.id)}
+                            disabled={!valido || guardandoEditPlato || guardadoEditPlato}
+                            className="btn-primary"
+                            style={{
+                              flex: 1, padding: '10px', fontSize: '13px',
+                              opacity: valido ? 1 : 0.5,
+                              cursor: valido ? 'pointer' : 'default',
+                              ...(valido ? {} : { transform: 'none', boxShadow: 'none' }),
+                            }}>{guardandoEditPlato ? 'Guardando...' : guardadoEditPlato ? '✓ Guardado' : 'Guardar'}</button>
+                          <button onClick={() => {
+                            setPlatoExpandido(null)
+                            setIntentoEditPlato(false)
+                            setTouchedEditPlato({})
+                          }} className="btn-outline" style={{ flex: 1, padding: '10px', fontSize: '13px' }}>Cancelar</button>
                         </div>
                       </div>
-                    )}
+                      )
+                    })()}
                   </div>
                 ))}
               </div>
