@@ -29,11 +29,13 @@ export default function MiMenuPage() {
   const [busqueda, setBusqueda] = useState('')
   const [mostrarFormCategoria, setMostrarFormCategoria] = useState(false)
   const [nuevaCategoria, setNuevaCategoria] = useState('')
+  const [intentoCategoria, setIntentoCategoria] = useState(false)
   const [mostrarFormPlato, setMostrarFormPlato] = useState<string | null>(null)
   const [nuevoPlato, setNuevoPlato] = useState({ nombre: '', precio: '', descripcion: '' })
   const [menuCategoria, setMenuCategoria] = useState<string | null>(null)
   const [editandoCategoria, setEditandoCategoria] = useState<string | null>(null)
   const [nombreEditCategoria, setNombreEditCategoria] = useState('')
+  const [intentoRename, setIntentoRename] = useState(false)
   const [platoExpandido, setPlatoExpandido] = useState<string | null>(null)
   const [editPlato, setEditPlato] = useState({ nombre: '', precio: '', descripcion: '' })
   const [subiendoFoto, setSubiendoFoto] = useState(false)
@@ -491,8 +493,15 @@ export default function MiMenuPage() {
   }
 
   // ── Categorías ──
+  function validarCategoria(nombre: string): Record<string, string> {
+    const e: Record<string, string> = {}
+    if (!nombre.trim()) e.nombre = 'El nombre es obligatorio'
+    return e
+  }
   async function agregarCategoria() {
-    if (!nuevaCategoria.trim() || !rest?.id) return
+    setIntentoCategoria(true)
+    const errores = validarCategoria(nuevaCategoria)
+    if (Object.keys(errores).length > 0 || !rest?.id) return
     const supabase = createClient()
     const { data, error } = await supabase
       .from('categorias')
@@ -504,6 +513,7 @@ export default function MiMenuPage() {
       setCategorias([...categorias, { id: data.id, nombre: data.nombre, orden: data.orden, platos: [] }])
     }
     setNuevaCategoria('')
+    setIntentoCategoria(false)
     setMostrarFormCategoria(false)
   }
   async function eliminarCategoria(id: string) {
@@ -514,12 +524,15 @@ export default function MiMenuPage() {
     setMenuCategoria(null)
   }
   async function renombrarCategoria(id: string) {
-    if (!nombreEditCategoria.trim()) return
+    setIntentoRename(true)
+    const errores = validarCategoria(nombreEditCategoria)
+    if (Object.keys(errores).length > 0) return
     const supabase = createClient()
     await supabase.from('categorias').update({ nombre: nombreEditCategoria }).eq('id', id)
     setCategorias(categorias.map(c => c.id === id ? { ...c, nombre: nombreEditCategoria } : c))
     setEditandoCategoria(null)
     setNombreEditCategoria('')
+    setIntentoRename(false)
   }
   function moverCategoria(id: string, direccion: 'arriba' | 'abajo') {
     const idx = categorias.findIndex(c => c.id === id)
@@ -696,27 +709,46 @@ export default function MiMenuPage() {
 
             {/* Botón agregar categoría */}
             <div style={{ padding: '0 20px 12px' }}>
-              <button onClick={() => setMostrarFormCategoria(true)}
+              <button onClick={() => { setMostrarFormCategoria(true); setIntentoCategoria(false) }}
                 className="btn-primary" style={{ padding: '10px 16px', fontSize: '13px' }}>
                 + Categoría
               </button>
             </div>
 
             {/* Form nueva categoría */}
-            {mostrarFormCategoria && (
+            {mostrarFormCategoria && (() => {
+              const errores = validarCategoria(nuevaCategoria)
+              const valido = Object.keys(errores).length === 0
+              return (
               <div style={{ padding: '0 20px', marginBottom: '14px' }}>
                 <div className="card" style={{ padding: '14px' }}>
                   <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '10px' }}>Nueva categoría</div>
                   <input className="input" placeholder="Ej: Postres" value={nuevaCategoria}
                     onChange={(e) => setNuevaCategoria(e.target.value)} autoFocus
-                    onKeyDown={(e) => e.key === 'Enter' && agregarCategoria()} style={{ marginBottom: '10px' }} />
+                    onKeyDown={(e) => e.key === 'Enter' && agregarCategoria()}
+                    style={{
+                      marginBottom: intentoCategoria && errores.nombre ? '4px' : '10px',
+                      borderColor: intentoCategoria && errores.nombre ? 'var(--color-danger)' : undefined,
+                    }} />
+                  {intentoCategoria && errores.nombre && (
+                    <div style={{ fontSize: '11px', color: 'var(--color-danger)', marginBottom: '10px' }}>
+                      {errores.nombre}
+                    </div>
+                  )}
                   <div style={{ display: 'flex', gap: '8px' }}>
-                    <button onClick={agregarCategoria} className="btn-primary" style={{ flex: 1, padding: '10px', fontSize: '13px' }}>Crear</button>
-                    <button onClick={() => setMostrarFormCategoria(false)} className="btn-outline" style={{ flex: 1, padding: '10px', fontSize: '13px' }}>Cancelar</button>
+                    <button onClick={agregarCategoria} disabled={!valido} className="btn-primary"
+                      style={{
+                        flex: 1, padding: '10px', fontSize: '13px',
+                        opacity: valido ? 1 : 0.5,
+                        cursor: valido ? 'pointer' : 'not-allowed',
+                        ...(valido ? {} : { transform: 'none', boxShadow: 'none' }),
+                      }}>Crear</button>
+                    <button onClick={() => { setMostrarFormCategoria(false); setIntentoCategoria(false) }} className="btn-outline" style={{ flex: 1, padding: '10px', fontSize: '13px' }}>Cancelar</button>
                   </div>
                 </div>
               </div>
-            )}
+              )
+            })()}
 
             {/* Sin resultados */}
             {busqueda.trim() && totalResultados === 0 && (
@@ -732,14 +764,35 @@ export default function MiMenuPage() {
               <div key={cat.id} style={{ padding: '0 20px', marginBottom: '14px', position: 'relative' }}>
 
                 {/* Header categoría */}
-                {editandoCategoria === cat.id ? (
-                  <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
-                    <input className="input" value={nombreEditCategoria} onChange={(e) => setNombreEditCategoria(e.target.value)}
-                      autoFocus onKeyDown={(e) => e.key === 'Enter' && renombrarCategoria(cat.id)} style={{ flex: 1 }} />
-                    <button onClick={() => renombrarCategoria(cat.id)} className="btn-primary" style={{ padding: '8px 14px', fontSize: '12px' }}>OK</button>
-                    <button onClick={() => setEditandoCategoria(null)} className="btn-outline" style={{ padding: '8px 14px', fontSize: '12px' }}>✕</button>
+                {editandoCategoria === cat.id ? (() => {
+                  const errores = validarCategoria(nombreEditCategoria)
+                  const valido = Object.keys(errores).length === 0
+                  return (
+                  <div style={{ marginBottom: '10px' }}>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <input className="input" value={nombreEditCategoria} onChange={(e) => setNombreEditCategoria(e.target.value)}
+                        autoFocus onKeyDown={(e) => e.key === 'Enter' && renombrarCategoria(cat.id)}
+                        style={{
+                          flex: 1,
+                          borderColor: intentoRename && errores.nombre ? 'var(--color-danger)' : undefined,
+                        }} />
+                      <button onClick={() => renombrarCategoria(cat.id)} disabled={!valido} className="btn-primary"
+                        style={{
+                          padding: '8px 14px', fontSize: '12px',
+                          opacity: valido ? 1 : 0.5,
+                          cursor: valido ? 'pointer' : 'not-allowed',
+                          ...(valido ? {} : { transform: 'none', boxShadow: 'none' }),
+                        }}>OK</button>
+                      <button onClick={() => { setEditandoCategoria(null); setIntentoRename(false) }} className="btn-outline" style={{ padding: '8px 14px', fontSize: '12px' }}>✕</button>
+                    </div>
+                    {intentoRename && errores.nombre && (
+                      <div style={{ fontSize: '11px', color: 'var(--color-danger)', marginTop: '4px' }}>
+                        {errores.nombre}
+                      </div>
+                    )}
                   </div>
-                ) : (
+                  )
+                })() : (
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       {/* Flechas mover categoría */}
@@ -776,7 +829,7 @@ export default function MiMenuPage() {
                       borderRadius: 'var(--radius-sm)', overflow: 'hidden', width: '180px',
                       boxShadow: 'var(--shadow-lg)', animation: 'scaleIn 0.15s ease',
                     }}>
-                      <div onClick={() => { setNombreEditCategoria(cat.nombre); setEditandoCategoria(cat.id); setMenuCategoria(null) }}
+                      <div onClick={() => { setNombreEditCategoria(cat.nombre); setEditandoCategoria(cat.id); setMenuCategoria(null); setIntentoRename(false) }}
                         style={{ padding: '10px 14px', fontSize: '13px', cursor: 'pointer', borderBottom: '1px solid var(--border-light)' }}>Renombrar</div>
                       <div onClick={() => {
                         const c = categorias.find(x => x.id === cat.id) as any
