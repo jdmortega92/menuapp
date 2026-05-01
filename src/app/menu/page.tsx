@@ -70,6 +70,10 @@ export default function MiMenuPage() {
   const [guardandoCombo, setGuardandoCombo] = useState(false)
   const [guardadoCombo, setGuardadoCombo] = useState(false)
   const [nuevaPromo, setNuevaPromo] = useState({ nombre: '', descripcion: '', tipo: '', valor: '', dias: [] as string[], platoIds: [] as string[] })
+  const [intentoPromo, setIntentoPromo] = useState(false)
+  const [touchedPromo, setTouchedPromo] = useState<Record<string, boolean>>({})
+  const [guardandoPromo, setGuardandoPromo] = useState(false)
+  const [guardadoPromo, setGuardadoPromo] = useState(false)
   const [platoDiaConfig, setPlatoDiaConfig] = useState({ platoId: '', precioEspecial: '', horaInicio: '11:00', horaFin: '15:00' })
   const [guardandoPlatoDia, setGuardandoPlatoDia] = useState(false)
   const [platoDiaActivo, setPlatoDiaActivo] = useState(false)
@@ -219,8 +223,27 @@ export default function MiMenuPage() {
     setPlatoDiaConfig({ platoId: '', precioEspecial: '', horaInicio: '11:00', horaFin: '15:00' })
   }
 
+  function validarPromo(state: { nombre: string; tipo: string; valor: string; dias: string[]; platoIds: string[] }): Record<string, string> {
+    const e: Record<string, string> = {}
+    if (!state.nombre.trim()) e.nombre = 'El nombre es obligatorio'
+    if (!state.tipo) e.tipo = 'Selecciona el tipo de promoción'
+    if (state.dias.length === 0) e.dias = 'Selecciona al menos un día'
+    if (state.platoIds.length === 0) e.platos = 'Selecciona al menos un plato'
+    if (state.tipo === 'descuento') {
+      const v = parseInt(state.valor)
+      if (!state.valor || isNaN(v) || v < 1 || v > 100) e.valor = 'Ingresa un porcentaje entre 1 y 100'
+    } else if (state.tipo === 'precio_especial') {
+      const v = parseInt(state.valor)
+      if (!state.valor || isNaN(v) || v <= 0) e.valor = 'El precio especial debe ser mayor a 0'
+    }
+    return e
+  }
   async function agregarPromo() {
-    if (!nuevaPromo.nombre || !nuevaPromo.tipo || nuevaPromo.dias.length === 0 || nuevaPromo.platoIds.length === 0 || !rest?.id) return
+    setIntentoPromo(true)
+    setTouchedPromo({ nombre: true, tipo: true, valor: true, dias: true, platos: true })
+    const errores = validarPromo(nuevaPromo)
+    if (Object.keys(errores).length > 0 || !rest?.id) return
+    setGuardandoPromo(true)
     const supabase = createClient()
 
     const { data: promoData, error } = await supabase.from('promos').insert({
@@ -232,7 +255,7 @@ export default function MiMenuPage() {
       activo: true,
     }).select().single()
 
-    if (error || !promoData) { alert('Error al crear promo'); return }
+    if (error || !promoData) { setGuardandoPromo(false); alert('Error al crear promo'); return }
 
     // Insertar platos de la promo
     await supabase.from('promo_platos').insert(
@@ -245,8 +268,15 @@ export default function MiMenuPage() {
       valor: promoData.valor?.toString() || '', dias: promoData.dias || [], activo: true,
       platos: platosNombres, descripcion: nuevaPromo.descripcion,
     }])
-    setNuevaPromo({ nombre: '', descripcion: '', tipo: '', valor: '', dias: [], platoIds: [] })
-    setMostrarFormPromo(false)
+    setGuardandoPromo(false)
+    setGuardadoPromo(true)
+    setTimeout(() => {
+      setGuardadoPromo(false)
+      setNuevaPromo({ nombre: '', descripcion: '', tipo: '', valor: '', dias: [], platoIds: [] })
+      setIntentoPromo(false)
+      setTouchedPromo({})
+      setMostrarFormPromo(false)
+    }, 1200)
   }
   async function togglePromo(id: string) {
     const promo = promos.find(p => p.id === id)
@@ -1334,24 +1364,37 @@ export default function MiMenuPage() {
                     <div style={{ fontSize: '32px', marginBottom: '8px' }}>🏷️</div>
                     <div style={{ fontSize: '14px', fontWeight: 500, marginBottom: '4px' }}>Sin promociones</div>
                     <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '16px' }}>Crea ofertas para atraer más clientes</div>
-                    <button onClick={() => setMostrarFormPromo(true)} className="btn-primary" style={{ padding: '10px 20px', fontSize: '13px' }}>+ Crear promo</button>
+                    <button onClick={() => { setMostrarFormPromo(true); setIntentoPromo(false); setTouchedPromo({}) }} className="btn-primary" style={{ padding: '10px 20px', fontSize: '13px' }}>+ Crear promo</button>
                   </div>
                 ) : (
                   <>
                     {!mostrarFormPromo && (
-                      <button onClick={() => setMostrarFormPromo(true)} className="btn-primary" style={{ padding: '8px 14px', fontSize: '13px', marginBottom: '14px' }}>+ Crear promo</button>
+                      <button onClick={() => { setMostrarFormPromo(true); setIntentoPromo(false); setTouchedPromo({}) }} className="btn-primary" style={{ padding: '8px 14px', fontSize: '13px', marginBottom: '14px' }}>+ Crear promo</button>
                     )}
                   </>
                 )}
 
-                {mostrarFormPromo && (
+                {mostrarFormPromo && (() => {
+                  const errores = validarPromo(nuevaPromo)
+                  const valido = Object.keys(errores).length === 0
+                  return (
                   <div className="card" style={{ padding: '14px', marginBottom: '14px' }}>
                     <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '10px' }}>Nueva promoción</div>
                     <input className="input" placeholder="Nombre (ej: Happy Hour)" value={nuevaPromo.nombre}
-                      onChange={(e) => setNuevaPromo({ ...nuevaPromo, nombre: e.target.value })} style={{ marginBottom: '8px' }} />
+                      onChange={(e) => setNuevaPromo({ ...nuevaPromo, nombre: e.target.value })}
+                      onBlur={() => setTouchedPromo(prev => ({ ...prev, nombre: true }))}
+                      style={{
+                        marginBottom: intentoPromo && touchedPromo.nombre && errores.nombre ? '4px' : '8px',
+                        borderColor: intentoPromo && touchedPromo.nombre && errores.nombre ? 'var(--color-danger)' : undefined,
+                      }} />
+                    {intentoPromo && touchedPromo.nombre && errores.nombre && (
+                      <div style={{ fontSize: '11px', color: 'var(--color-danger)', marginBottom: '8px' }}>
+                        {errores.nombre}
+                      </div>
+                    )}
                     <input className="input" placeholder="Descripción (ej: Bebidas al 2x1 los viernes)" value={nuevaPromo.descripcion}
                       onChange={(e) => setNuevaPromo({ ...nuevaPromo, descripcion: e.target.value })} style={{ marginBottom: '8px' }} />
-                    
+
                     <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Tipo de promo:</div>
                     <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '10px' }}>
                       {[
@@ -1359,7 +1402,10 @@ export default function MiMenuPage() {
                         { id: 'descuento', label: '% Descuento' },
                         { id: 'precio_especial', label: 'Precio especial' },
                       ].map(t => (
-                        <div key={t.id} onClick={() => setNuevaPromo({ ...nuevaPromo, tipo: t.id })} style={{
+                        <div key={t.id} onClick={() => {
+                          setNuevaPromo({ ...nuevaPromo, tipo: t.id, valor: '' })
+                          setTouchedPromo(prev => ({ ...prev, tipo: true, valor: false }))
+                        }} style={{
                           padding: '7px 12px', borderRadius: '8px', fontSize: '12px', cursor: 'pointer',
                           background: nuevaPromo.tipo === t.id ? 'var(--text-primary)' : 'var(--bg-secondary)',
                           color: nuevaPromo.tipo === t.id ? 'white' : 'var(--text-secondary)',
@@ -1367,13 +1413,33 @@ export default function MiMenuPage() {
                         }}>{t.label}</div>
                       ))}
                     </div>
+                    {intentoPromo && touchedPromo.tipo && errores.tipo && (
+                      <div style={{ fontSize: '11px', color: 'var(--color-danger)', marginBottom: '8px' }}>
+                        {errores.tipo}
+                      </div>
+                    )}
                     {nuevaPromo.tipo === 'descuento' && (
                       <input className="input" type="number" placeholder="Porcentaje (ej: 20)" value={nuevaPromo.valor}
-                        onChange={(e) => setNuevaPromo({ ...nuevaPromo, valor: e.target.value })} style={{ marginBottom: '8px' }} />
+                        onChange={(e) => setNuevaPromo({ ...nuevaPromo, valor: e.target.value })}
+                        onBlur={() => setTouchedPromo(prev => ({ ...prev, valor: true }))}
+                        style={{
+                          marginBottom: intentoPromo && touchedPromo.valor && errores.valor ? '4px' : '8px',
+                          borderColor: intentoPromo && touchedPromo.valor && errores.valor ? 'var(--color-danger)' : undefined,
+                        }} />
                     )}
                     {nuevaPromo.tipo === 'precio_especial' && (
                       <input className="input" type="number" placeholder="Precio especial" value={nuevaPromo.valor}
-                        onChange={(e) => setNuevaPromo({ ...nuevaPromo, valor: e.target.value })} style={{ marginBottom: '8px' }} />
+                        onChange={(e) => setNuevaPromo({ ...nuevaPromo, valor: e.target.value })}
+                        onBlur={() => setTouchedPromo(prev => ({ ...prev, valor: true }))}
+                        style={{
+                          marginBottom: intentoPromo && touchedPromo.valor && errores.valor ? '4px' : '8px',
+                          borderColor: intentoPromo && touchedPromo.valor && errores.valor ? 'var(--color-danger)' : undefined,
+                        }} />
+                    )}
+                    {intentoPromo && touchedPromo.valor && errores.valor && (nuevaPromo.tipo === 'descuento' || nuevaPromo.tipo === 'precio_especial') && (
+                      <div style={{ fontSize: '11px', color: 'var(--color-danger)', marginBottom: '8px' }}>
+                        {errores.valor}
+                      </div>
                     )}
 
                     <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Platos en esta promo:</div>
@@ -1384,6 +1450,7 @@ export default function MiMenuPage() {
                             ? nuevaPromo.platoIds.filter(id => id !== p.id)
                             : [...nuevaPromo.platoIds, p.id]
                           setNuevaPromo({ ...nuevaPromo, platoIds: sel })
+                          setTouchedPromo(prev => ({ ...prev, platos: true }))
                         }} style={{
                           padding: '8px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                           borderBottom: '1px solid var(--border-light)', cursor: 'pointer',
@@ -1400,6 +1467,11 @@ export default function MiMenuPage() {
                         </div>
                       ))}
                     </div>
+                    {intentoPromo && touchedPromo.platos && errores.platos && (
+                      <div style={{ fontSize: '11px', color: 'var(--color-danger)', marginBottom: '8px' }}>
+                        {errores.platos}
+                      </div>
+                    )}
 
                     <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Días activos:</div>
                     <div style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}>
@@ -1409,6 +1481,7 @@ export default function MiMenuPage() {
                         return (
                           <div key={d} onClick={() => {
                             setNuevaPromo({ ...nuevaPromo, dias: sel ? nuevaPromo.dias.filter(x => x !== dias[i]) : [...nuevaPromo.dias, dias[i]] })
+                            setTouchedPromo(prev => ({ ...prev, dias: true }))
                           }} style={{
                             width: '32px', height: '32px', borderRadius: '50%', display: 'flex',
                             alignItems: 'center', justifyContent: 'center', fontSize: '11px', cursor: 'pointer',
@@ -1419,6 +1492,11 @@ export default function MiMenuPage() {
                         )
                       })}
                     </div>
+                    {intentoPromo && touchedPromo.dias && errores.dias && (
+                      <div style={{ fontSize: '11px', color: 'var(--color-danger)', marginBottom: '8px' }}>
+                        {errores.dias}
+                      </div>
+                    )}
                     {nuevaPromo.platoIds.length > 0 && (() => {
                       const platosConHorario = nuevaPromo.platoIds.map(id => ({ id, horario: getHorarioPlato(id) })).filter(p => p.horario)
                       if (platosConHorario.length === 0) return null
@@ -1430,11 +1508,18 @@ export default function MiMenuPage() {
                       )
                     })()}
                     <div style={{ display: 'flex', gap: '8px' }}>
-                      <button onClick={agregarPromo} className="btn-primary" style={{ flex: 1, padding: '10px', fontSize: '13px' }}>Crear</button>
-                      <button onClick={() => setMostrarFormPromo(false)} className="btn-outline" style={{ flex: 1, padding: '10px', fontSize: '13px' }}>Cancelar</button>
+                      <button onClick={agregarPromo} disabled={guardandoPromo || guardadoPromo} className="btn-primary"
+                        style={{
+                          flex: 1, padding: '10px', fontSize: '13px',
+                          opacity: valido ? 1 : 0.5,
+                          cursor: valido ? 'pointer' : 'default',
+                          ...(valido ? {} : { transform: 'none', boxShadow: 'none' }),
+                        }}>{guardandoPromo ? 'Guardando...' : guardadoPromo ? '✓ Guardado' : 'Crear'}</button>
+                      <button onClick={() => { setMostrarFormPromo(false); setIntentoPromo(false); setTouchedPromo({}); setNuevaPromo({ nombre: '', descripcion: '', tipo: '', valor: '', dias: [], platoIds: [] }) }} className="btn-outline" style={{ flex: 1, padding: '10px', fontSize: '13px' }}>Cancelar</button>
                     </div>
                   </div>
-                )}
+                  )
+                })()}
 
                 {promos.map((promo: any) => (
                   <div key={promo.id} className="card" style={{ padding: '14px', marginBottom: '8px' }}>
