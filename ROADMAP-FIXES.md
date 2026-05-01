@@ -343,6 +343,20 @@ These were resolved in a working session before this document existed. Mentioned
 
 ## Items
 
+### BL.3 🟢 Promo form: show final-price preview per plato
+- **Found**: 2026-04-30 during B.1.d testing.
+- **Symptom**: When configuring a promo with valor (descuento or precio_especial), the user has to do mental math to figure out what the final price will be. Promos with multiple platos selected at very different price points (e.g., $5.000 and $50.000) can produce surprising results — owner may unintentionally configure a promo where one plato becomes effectively free or another costs more than original.
+- **Acceptance**:
+  - For each selected plato, render its calculated final price based on promo.tipo:
+    - tipo='descuento' → "Plato X: $original → $final (-Y%)"
+    - tipo='precio_especial' → "Plato X: $original → $valor (ahorro $Z)"
+    - tipo='dos_por_uno' → single line "Compra 2 lleva 1 gratis (ahorro 50% en el segundo)"
+  - Style: green block matching the combo "Ahorro" block (var(--color-green-light), padding 12px, border-radius 8px).
+  - Render only when: tipo is set AND (valor is filled OR tipo='dos_por_uno') AND platoIds.length > 0.
+  - Place AFTER the dias circles, BEFORE the existing horario warning IIFE.
+- **Where**: src/app/menu/page.tsx — promo form.
+- **Priority**: 🟢 nice-to-have UX polish. Plan to bundle with batch G (visual polish).
+
 ### BL.2 🟡 Remove menu_por_horario_activo from schema and UI
 - **Found**: 2026-04-29 during A.2.
 - **Status**: UI removal DONE 2026-04-29 (toggle no longer in config page). Remaining work below.
