@@ -65,6 +65,10 @@ export default function MiMenuPage() {
   const [mostrarFormCombo, setMostrarFormCombo] = useState(false)
   const [mostrarFormPromo, setMostrarFormPromo] = useState(false)
   const [nuevoCombo, setNuevoCombo] = useState({ nombre: '', descripcion: '', platoIds: [] as string[], precio: '' })
+  const [intentoCombo, setIntentoCombo] = useState(false)
+  const [touchedCombo, setTouchedCombo] = useState<Record<string, boolean>>({})
+  const [guardandoCombo, setGuardandoCombo] = useState(false)
+  const [guardadoCombo, setGuardadoCombo] = useState(false)
   const [nuevaPromo, setNuevaPromo] = useState({ nombre: '', descripcion: '', tipo: '', valor: '', dias: [] as string[], platoIds: [] as string[] })
   const [platoDiaConfig, setPlatoDiaConfig] = useState({ platoId: '', precioEspecial: '', horaInicio: '11:00', horaFin: '15:00' })
   const [guardandoPlatoDia, setGuardandoPlatoDia] = useState(false)
@@ -463,8 +467,20 @@ export default function MiMenuPage() {
     const plato = categorias.flatMap(c => c.platos).find(p => p.id === id)
     return sum + (plato?.precio || 0)
   }, 0)
+  function validarCombo(state: { nombre: string; precio: string; platoIds: string[] }): Record<string, string> {
+    const e: Record<string, string> = {}
+    if (!state.nombre.trim()) e.nombre = 'El nombre es obligatorio'
+    const precioNum = parseInt(state.precio)
+    if (!state.precio || isNaN(precioNum) || precioNum <= 0) e.precio = 'El precio debe ser mayor a 0'
+    if (state.platoIds.length < 2) e.platos = 'Selecciona al menos 2 platos'
+    return e
+  }
   async function agregarCombo() {
-    if (!nuevoCombo.nombre || nuevoCombo.platoIds.length < 2 || !nuevoCombo.precio || !rest?.id) return
+    setIntentoCombo(true)
+    setTouchedCombo({ nombre: true, precio: true, platos: true })
+    const errores = validarCombo(nuevoCombo)
+    if (Object.keys(errores).length > 0 || !rest?.id) return
+    setGuardandoCombo(true)
     const supabase = createClient()
 
     const { data: comboData, error } = await supabase.from('combos').insert({
@@ -476,7 +492,7 @@ export default function MiMenuPage() {
       activo: true,
     }).select().single()
 
-    if (error || !comboData) { alert('Error al crear combo'); return }
+    if (error || !comboData) { setGuardandoCombo(false); alert('Error al crear combo'); return }
 
     // Insertar platos del combo
     await supabase.from('combo_platos').insert(
@@ -489,8 +505,15 @@ export default function MiMenuPage() {
       precio: comboData.precio, precioIndividual: comboData.precio_individual, activo: true,
       platosIds: nuevoCombo.platoIds,
     }])
-    setNuevoCombo({ nombre: '', descripcion: '', platoIds: [], precio: '' })
-    setMostrarFormCombo(false)
+    setGuardandoCombo(false)
+    setGuardadoCombo(true)
+    setTimeout(() => {
+      setGuardadoCombo(false)
+      setNuevoCombo({ nombre: '', descripcion: '', platoIds: [], precio: '' })
+      setIntentoCombo(false)
+      setTouchedCombo({})
+      setMostrarFormCombo(false)
+    }, 1200)
   }
   async function toggleCombo(id: string) {
     const combo = combos.find(c => c.id === id)
@@ -1174,23 +1197,36 @@ export default function MiMenuPage() {
                     <div style={{ fontSize: '32px', marginBottom: '8px' }}>🍱</div>
                     <div style={{ fontSize: '14px', fontWeight: 500, marginBottom: '4px' }}>Sin combos</div>
                     <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '16px' }}>Crea paquetes de platos con descuento</div>
-                    <button onClick={() => setMostrarFormCombo(true)} className="btn-primary" style={{ padding: '10px 20px', fontSize: '13px' }}>+ Crear combo</button>
+                    <button onClick={() => { setMostrarFormCombo(true); setIntentoCombo(false); setTouchedCombo({}) }} className="btn-primary" style={{ padding: '10px 20px', fontSize: '13px' }}>+ Crear combo</button>
                   </div>
                 ) : (
                   <>
                     {!mostrarFormCombo && (
-                      <button onClick={() => setMostrarFormCombo(true)} className="btn-primary" style={{ padding: '8px 14px', fontSize: '13px', marginBottom: '14px' }}>+ Crear combo</button>
+                      <button onClick={() => { setMostrarFormCombo(true); setIntentoCombo(false); setTouchedCombo({}) }} className="btn-primary" style={{ padding: '8px 14px', fontSize: '13px', marginBottom: '14px' }}>+ Crear combo</button>
                     )}
                   </>
                 )}
 
-                {mostrarFormCombo && (
+                {mostrarFormCombo && (() => {
+                  const errores = validarCombo(nuevoCombo)
+                  const valido = Object.keys(errores).length === 0
+                  return (
                   <div className="card" style={{ padding: '14px', marginBottom: '14px' }}>
                     <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '10px' }}>Nuevo combo</div>
                     <input className="input" placeholder="Nombre del combo (ej: Combo paisa)" value={nuevoCombo.nombre}
-                      onChange={(e) => setNuevoCombo({ ...nuevoCombo, nombre: e.target.value })} style={{ marginBottom: '8px' }} />
+                      onChange={(e) => setNuevoCombo({ ...nuevoCombo, nombre: e.target.value })}
+                      onBlur={() => setTouchedCombo(prev => ({ ...prev, nombre: true }))}
+                      style={{
+                        marginBottom: intentoCombo && touchedCombo.nombre && errores.nombre ? '4px' : '8px',
+                        borderColor: intentoCombo && touchedCombo.nombre && errores.nombre ? 'var(--color-danger)' : undefined,
+                      }} />
+                    {intentoCombo && touchedCombo.nombre && errores.nombre && (
+                      <div style={{ fontSize: '11px', color: 'var(--color-danger)', marginBottom: '8px' }}>
+                        {errores.nombre}
+                      </div>
+                    )}
                     <input className="input" placeholder="Descripción (opcional)" value={nuevoCombo.descripcion || ''}
-                      onChange={(e) => setNuevoCombo({ ...nuevoCombo, descripcion: e.target.value })} style={{ marginBottom: '8px' }} />  
+                      onChange={(e) => setNuevoCombo({ ...nuevoCombo, descripcion: e.target.value })} style={{ marginBottom: '8px' }} />
                     <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Selecciona los platos:</div>
                     <div style={{ maxHeight: '160px', overflowY: 'auto', marginBottom: '8px' }}>
                       {categorias.flatMap(c => c.platos).map(p => (
@@ -1199,6 +1235,7 @@ export default function MiMenuPage() {
                             ? nuevoCombo.platoIds.filter(id => id !== p.id)
                             : [...nuevoCombo.platoIds, p.id]
                           setNuevoCombo({ ...nuevoCombo, platoIds: sel })
+                          setTouchedCombo(prev => ({ ...prev, platos: true }))
                         }} style={{
                           padding: '8px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                           borderBottom: '1px solid var(--border-light)', cursor: 'pointer',
@@ -1215,8 +1252,23 @@ export default function MiMenuPage() {
                         </div>
                       ))}
                     </div>
+                    {intentoCombo && touchedCombo.platos && errores.platos && (
+                      <div style={{ fontSize: '11px', color: 'var(--color-danger)', marginBottom: '8px' }}>
+                        {errores.platos}
+                      </div>
+                    )}
                     <input className="input" type="number" placeholder="Precio del combo" value={nuevoCombo.precio}
-                      onChange={(e) => setNuevoCombo({ ...nuevoCombo, precio: e.target.value })} style={{ marginBottom: '8px' }} />
+                      onChange={(e) => setNuevoCombo({ ...nuevoCombo, precio: e.target.value })}
+                      onBlur={() => setTouchedCombo(prev => ({ ...prev, precio: true }))}
+                      style={{
+                        marginBottom: intentoCombo && touchedCombo.precio && errores.precio ? '4px' : '8px',
+                        borderColor: intentoCombo && touchedCombo.precio && errores.precio ? 'var(--color-danger)' : undefined,
+                      }} />
+                    {intentoCombo && touchedCombo.precio && errores.precio && (
+                      <div style={{ fontSize: '11px', color: 'var(--color-danger)', marginBottom: '8px' }}>
+                        {errores.precio}
+                      </div>
+                    )}
                     {nuevoCombo.platoIds.length > 0 && nuevoCombo.precio && (
                       <div style={{ fontSize: '12px', color: 'var(--color-green)', marginBottom: '8px' }}>
                         Ahorro: ${(precioIndividualCombo - parseInt(nuevoCombo.precio || '0')).toLocaleString('es-CO')} ({Math.round(((precioIndividualCombo - parseInt(nuevoCombo.precio || '0')) / precioIndividualCombo) * 100)}% descuento)
@@ -1233,11 +1285,18 @@ export default function MiMenuPage() {
                       )
                     })()}
                     <div style={{ display: 'flex', gap: '8px' }}>
-                      <button onClick={agregarCombo} className="btn-primary" style={{ flex: 1, padding: '10px', fontSize: '13px' }}>Crear</button>
-                      <button onClick={() => setMostrarFormCombo(false)} className="btn-outline" style={{ flex: 1, padding: '10px', fontSize: '13px' }}>Cancelar</button>
+                      <button onClick={agregarCombo} disabled={guardandoCombo || guardadoCombo} className="btn-primary"
+                        style={{
+                          flex: 1, padding: '10px', fontSize: '13px',
+                          opacity: valido ? 1 : 0.5,
+                          cursor: valido ? 'pointer' : 'default',
+                          ...(valido ? {} : { transform: 'none', boxShadow: 'none' }),
+                        }}>{guardandoCombo ? 'Guardando...' : guardadoCombo ? '✓ Guardado' : 'Crear'}</button>
+                      <button onClick={() => { setMostrarFormCombo(false); setIntentoCombo(false); setTouchedCombo({}); setNuevoCombo({ nombre: '', descripcion: '', platoIds: [], precio: '' }) }} className="btn-outline" style={{ flex: 1, padding: '10px', fontSize: '13px' }}>Cancelar</button>
                     </div>
                   </div>
-                )}
+                  )
+                })()}
 
                 {combos.map((combo) => (
                   <div key={combo.id} className="card" style={{ padding: '14px', marginBottom: '8px' }}>
