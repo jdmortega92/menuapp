@@ -796,7 +796,7 @@ export default function MiMenuPage() {
                     </div>
                   )}
                   <div style={{ display: 'flex', gap: '8px' }}>
-                    <button onClick={agregarCategoria} disabled={!valido || guardandoCat || guardadoCat} className="btn-primary"
+                    <button onClick={agregarCategoria} disabled={guardandoCat || guardadoCat} className="btn-primary"
                       style={{
                         flex: 1, padding: '10px', fontSize: '13px',
                         opacity: valido ? 1 : 0.5,
@@ -838,7 +838,7 @@ export default function MiMenuPage() {
                           flex: 1,
                           borderColor: intentoRename && touchedRename.nombre && errores.nombre ? 'var(--color-danger)' : undefined,
                         }} />
-                      <button onClick={() => renombrarCategoria(cat.id)} disabled={!valido || guardandoRename || guardadoRename} className="btn-primary"
+                      <button onClick={() => renombrarCategoria(cat.id)} disabled={guardandoRename || guardadoRename} className="btn-primary"
                         style={{
                           padding: '8px 14px', fontSize: '12px',
                           opacity: valido ? 1 : 0.5,
@@ -959,7 +959,7 @@ export default function MiMenuPage() {
                       📷 Podrás agregar foto después de crear el plato
                     </div>
                     <div style={{ display: 'flex', gap: '8px' }}>
-                      <button onClick={() => agregarPlato(cat.id)} disabled={!valido || guardandoPlato || guardadoPlato}
+                      <button onClick={() => agregarPlato(cat.id)} disabled={guardandoPlato || guardadoPlato}
                         className="btn-primary"
                         style={{
                           flex: 1, padding: '10px', fontSize: '13px',
@@ -1108,7 +1108,7 @@ export default function MiMenuPage() {
                         </div>}
                         <div style={{ display: 'flex', gap: '8px' }}>
                           <button onClick={() => guardarEdicionPlato(cat.id, plato.id)}
-                            disabled={!valido || guardandoEditPlato || guardadoEditPlato}
+                            disabled={guardandoEditPlato || guardadoEditPlato}
                             className="btn-primary"
                             style={{
                               flex: 1, padding: '10px', fontSize: '13px',
