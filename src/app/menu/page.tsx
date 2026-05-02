@@ -76,6 +76,9 @@ export default function MiMenuPage() {
   const [guardadoPromo, setGuardadoPromo] = useState(false)
   const [platoDiaConfig, setPlatoDiaConfig] = useState({ platoId: '', precioEspecial: '', horaInicio: '11:00', horaFin: '15:00' })
   const [guardandoPlatoDia, setGuardandoPlatoDia] = useState(false)
+  const [guardadoPlatoDia, setGuardadoPlatoDia] = useState(false)
+  const [intentoPlatoDia, setIntentoPlatoDia] = useState(false)
+  const [touchedPlatoDia, setTouchedPlatoDia] = useState<Record<string, boolean>>({})
   const [platoDiaActivo, setPlatoDiaActivo] = useState(false)
   const [sorprendemeCatsMenu, setSorprendemeCatsMenu] = useState<string[]>([])
   const [platoGanadorConfig, setPlatoGanadorConfig] = useState({ platoId: '', titulo: 'Recomendado del chef', descripcion: '' })
@@ -164,8 +167,18 @@ export default function MiMenuPage() {
     await supabase.from('config_restaurante').update({ sorprendeme_categorias: nuevas }).eq('restaurante_id', rest.id)
   }
   
+  function validarPlatoDia(state: { platoId: string; precioEspecial: string }): Record<string, string> {
+    const e: Record<string, string> = {}
+    if (!state.platoId) e.platoId = 'Selecciona un plato'
+    const v = parseInt(state.precioEspecial)
+    if (!state.precioEspecial || isNaN(v) || v <= 0) e.precioEspecial = 'El precio especial debe ser mayor a 0'
+    return e
+  }
   async function guardarPlatoDia() {
-    if (!platoDiaConfig.platoId || !platoDiaConfig.precioEspecial || !rest?.id) return
+    setIntentoPlatoDia(true)
+    setTouchedPlatoDia({ platoId: true, precioEspecial: true })
+    const errores = validarPlatoDia(platoDiaConfig)
+    if (Object.keys(errores).length > 0 || !rest?.id) return
     setGuardandoPlatoDia(true)
     const supabase = createClient()
     const fechaColombia = new Date(new Date().getTime() - 5 * 60 * 60 * 1000).toISOString().split('T')[0]
@@ -186,6 +199,8 @@ export default function MiMenuPage() {
 
     setPlatoDiaActivo(true)
     setGuardandoPlatoDia(false)
+    setGuardadoPlatoDia(true)
+    setTimeout(() => setGuardadoPlatoDia(false), 1200)
   }
 
   async function guardarPlatoGanador() {
@@ -1552,19 +1567,34 @@ export default function MiMenuPage() {
             )}
 
             {/* === PLATO DEL DÍA === */}
-            {subTab === 'plato-dia' && (
+            {subTab === 'plato-dia' && (() => {
+              const errores = validarPlatoDia(platoDiaConfig)
+              const valido = Object.keys(errores).length === 0
+              return (
               <div style={{ padding: '14px 20px' }}>
                 <div className="card" style={{ padding: '14px', marginBottom: '14px' }}>
                   <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '10px' }}>Configurar plato del día</div>
                   <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px' }}>Selecciona un plato:</div>
                   <select className="input" value={platoDiaConfig.platoId}
-                    onChange={(e) => setPlatoDiaConfig({ ...platoDiaConfig, platoId: e.target.value })}
-                    style={{ appearance: 'none', marginBottom: '8px' }}>
+                    onChange={(e) => {
+                      setPlatoDiaConfig({ ...platoDiaConfig, platoId: e.target.value })
+                      setTouchedPlatoDia(prev => ({ ...prev, platoId: true }))
+                    }}
+                    style={{
+                      appearance: 'none',
+                      marginBottom: intentoPlatoDia && touchedPlatoDia.platoId && errores.platoId ? '4px' : '8px',
+                      borderColor: intentoPlatoDia && touchedPlatoDia.platoId && errores.platoId ? 'var(--color-danger)' : undefined,
+                    }}>
                     <option value="">Seleccionar plato</option>
                     {categorias.flatMap(c => c.platos).map(p => (
                       <option key={p.id} value={p.id}>{p.nombre} — ${p.precio.toLocaleString('es-CO')}{(() => { const h = getHorarioPlato(p.id); return h ? ` (⏰ ${h.hora_inicio}–${h.hora_fin})` : '' })()}</option>
                     ))}
                   </select>
+                  {intentoPlatoDia && touchedPlatoDia.platoId && errores.platoId && (
+                    <div style={{ fontSize: '11px', color: 'var(--color-danger)', marginBottom: '8px' }}>
+                      {errores.platoId}
+                    </div>
+                  )}
                   {platoDiaConfig.platoId && (() => {
                     const h = getHorarioPlato(platoDiaConfig.platoId)
                     if (!h) return null
@@ -1575,7 +1605,17 @@ export default function MiMenuPage() {
                     )
                   })()}
                   <input className="input" type="number" placeholder="Precio especial" value={platoDiaConfig.precioEspecial}
-                    onChange={(e) => setPlatoDiaConfig({ ...platoDiaConfig, precioEspecial: e.target.value })} style={{ marginBottom: '8px' }} />
+                    onChange={(e) => setPlatoDiaConfig({ ...platoDiaConfig, precioEspecial: e.target.value })}
+                    onBlur={() => setTouchedPlatoDia(prev => ({ ...prev, precioEspecial: true }))}
+                    style={{
+                      marginBottom: intentoPlatoDia && touchedPlatoDia.precioEspecial && errores.precioEspecial ? '4px' : '8px',
+                      borderColor: intentoPlatoDia && touchedPlatoDia.precioEspecial && errores.precioEspecial ? 'var(--color-danger)' : undefined,
+                    }} />
+                  {intentoPlatoDia && touchedPlatoDia.precioEspecial && errores.precioEspecial && (
+                    <div style={{ fontSize: '11px', color: 'var(--color-danger)', marginBottom: '8px' }}>
+                      {errores.precioEspecial}
+                    </div>
+                  )}
                   <div style={{ marginBottom: '12px' }}>
                     <label className="label">Horario del plato del día</label>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
@@ -1618,8 +1658,14 @@ export default function MiMenuPage() {
                     </div>
                   )}
 
-                  <button onClick={guardarPlatoDia} className="btn-primary" style={{ width: '100%', padding: '12px', fontSize: '13px' }}>
-                    {guardandoPlatoDia ? 'Guardando...' : platoDiaActivo ? 'Actualizar plato del día' : 'Guardar plato del día'}
+                  <button onClick={guardarPlatoDia} disabled={guardandoPlatoDia || guardadoPlatoDia} className="btn-primary"
+                    style={{
+                      width: '100%', padding: '12px', fontSize: '13px',
+                      opacity: valido ? 1 : 0.5,
+                      cursor: valido ? 'pointer' : 'default',
+                      ...(valido ? {} : { transform: 'none', boxShadow: 'none' }),
+                    }}>
+                    {guardandoPlatoDia ? 'Guardando...' : guardadoPlatoDia ? '✓ Guardado' : platoDiaActivo ? 'Actualizar plato del día' : 'Guardar plato del día'}
                   </button>
                   {platoDiaActivo && (
                     <button onClick={desactivarPlatoDia} className="btn-outline" style={{ width: '100%', padding: '12px', fontSize: '13px', marginTop: '8px', color: 'var(--color-danger)' }}>
@@ -1628,7 +1674,8 @@ export default function MiMenuPage() {
                   )}
                 </div>
               </div>
-            )}
+              )
+            })()}
 
             {/* === PLATO GANADOR === */}
             {subTab === 'plato-ganador' && (
