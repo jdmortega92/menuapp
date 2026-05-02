@@ -343,6 +343,16 @@ These were resolved in a working session before this document existed. Mentioned
 
 ## Items
 
+### BL.4 🟢 Plato del día / Plato ganador: warn when precio especial >= precio original
+- **Found**: 2026-04-30 during B.1.e investigation.
+- **Symptom**: Owner can configure a "special price" higher than or equal to the original plato price. While there are legitimate edge cases (premium feature dishes, etc.), in 99% of cases this is a configuration mistake.
+- **Acceptance**:
+  - Soft warning (non-blocking, yellow/amber background) shown below the precioEspecial input when state.precioEspecial >= selected plato's original precio.
+  - Warning text: "El precio especial es igual o mayor al precio original. ¿Es correcto?"
+  - Does NOT prevent saving. User can dismiss visually by adjusting the price or proceeding.
+- **Where**: src/app/menu/page.tsx — plato del día form, plato ganador form (same logic, both forms).
+- **Priority**: 🟢 nice-to-have UX guard. Plan to bundle with batch G alongside BL.3.
+
 ### BL.3 🟢 Promo form: show final-price preview per plato
 - **Found**: 2026-04-30 during B.1.d testing.
 - **Symptom**: When configuring a promo with valor (descuento or precio_especial), the user has to do mental math to figure out what the final price will be. Promos with multiple platos selected at very different price points (e.g., $5.000 and $50.000) can produce surprising results — owner may unintentionally configure a promo where one plato becomes effectively free or another costs more than original.
