@@ -322,6 +322,70 @@ These were resolved in a working session before this document existed. Mentioned
 
 ---
 
+## 💰 STRATEGIC DECISIONS
+
+### STRATEGIC.1 💰 Pricing structure for launch (decision pending validation)
+
+**Status**: Decision pending — to validate with 3-5 Popayán pilot restaurants before launch.
+
+**Current state (in code)**:
+- Plan gratis: $0
+- Plan básico: $15.000 COP/mes (per UI references)
+- Plan pro: $29.000 COP/mes (per UI references)
+
+**Proposed change**:
+- Plan gratis: $0
+- Plan básico: $19.000 COP/mes (+$4.000)
+- Plan pro: $39.000 COP/mes (+$10.000)
+
+**Rationale**:
+- Current $15k/$29k jump is too narrow ($14k difference) — Pro doesn't capture enough value premium.
+- $19k/$39k has 2.05x ratio — psychologically clearer that Pro is "the big plan".
+- $39k stays under $50k psychological threshold (above which Colombian small business owners perceive as "expensive").
+- $49k+ may be sustainable later with proven case studies, not at launch.
+
+**Action items before launch**:
+1. Validate prices with 3-5 pilot restaurants in Popayán.
+2. Update price references in `src/app/menu/page.tsx` (currently shows "Ver Plan Pro — $29.000/mes").
+3. Update future landing page with final prices.
+4. Consider launch promo: "Primeros 50 restaurantes en Popayán: Pro gratis 3 meses".
+
+**Decision deadline**: Before starting marketing/landing page (F6 in roadmap).
+
+---
+
+### STRATEGIC.2 📸 Allow up to 5 photos on free plan (DECISION TAKEN)
+
+**Status**: Decision taken — implement before launch as part of free plan refinement.
+
+**Current state**: Free plan has no photo upload (gated by `esBasico` flag in src/app/menu/page.tsx).
+
+**Decision**: Free plan allows up to 5 photo uploads total (global limit, not per category).
+
+**Rationale**:
+- Without photos, free plan feels "cold" — restaurant owners don't experience the visual emotional moment that drives investment in the product.
+- 5 photos lets owners showcase their star dishes (the "wow moment") while creating organic upgrade pressure: as they add more dishes without photos, the visual contrast makes the limitation obvious.
+- Conversion to Básico becomes self-evident: "si pago $19k puedo poner fotos a TODOS mis platos."
+
+**Implementation notes**:
+- Counter logic: count uploaded photos for the restaurant. When count >= 5 AND plan === 'gratis', disable upload + show upgrade prompt.
+- Edge case 1: User downgrades from Básico to Gratis with 20+ photos. Default proposal: keep photos visible (don't punish downgrade), but block new uploads until count drops below 5.
+- Edge case 2: User deletes a photo to free up a slot — should be allowed without restriction.
+- UI: when limit reached, show prominent message: "Has alcanzado el límite de 5 fotos en plan gratis. Actualiza a Básico para fotos ilimitadas." with link to upgrade.
+
+**Where**: src/app/menu/page.tsx — modify the `esBasico` photo upload gate.
+
+**Acceptance criteria**:
+- Free plan user can upload up to 5 photos across all dishes.
+- 6th photo upload attempt blocked with clear upgrade message.
+- Downgrade behavior is consistent and predictable (keep visible, block new uploads).
+
+**Priority**: 🟡 important — should be done before launch to optimize conversion funnel.
+
+**Effort estimate**: 2-3 hours.
+
+---
+
 # 📋 BACKLOG
 
 > Bugs and ideas found during testing. Add new items at the top using the template below. When promoting an item to a real batch, move it up and delete it from here.
