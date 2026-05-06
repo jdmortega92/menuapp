@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase-browser'
 import Modal from '@/components/ui/Modal'
 import { formato12h } from '@/lib/time'
 import { isCurrentlyVisible } from '@/lib/visibility'
+import { useRestauranteBySlug } from '@/hooks/data/useRestauranteBySlug'
 
 // Helper: formatea precios de forma segura (evita crashes si viene null/undefined)
 function formatoPrecio(valor: number | null | undefined): string {
@@ -35,7 +36,7 @@ export default function MenuPublicoPage() {
   const [calEnviada, setCalEnviada] = useState(false)
   const [mostrarTodasResenas, setMostrarTodasResenas] = useState(false)
 
-  const [restaurante, setRestaurante] = useState<any>(null)
+  const { data: restaurante, isLoading: cargandoRest } = useRestauranteBySlug(slug)
   const [config, setConfig] = useState<any>(null)
   const [categorias, setCategorias] = useState<any[]>([])
   const [platoDia, setPlatoDia] = useState<any>(null)
@@ -51,17 +52,12 @@ export default function MenuPublicoPage() {
   const [platoGanador, setPlatoGanador] = useState<any>(null)
 
   useEffect(() => {
+    if (cargandoRest) return
+    if (!restaurante) { setCargando(false); return }
+    const rest = restaurante
+
     async function cargar() {
       const supabase = createClient()
-
-      // Buscar restaurante por slug
-      const { data: rest } = await supabase
-        .from('restaurantes')
-        .select('*')
-        .eq('slug', slug)
-        .single()
-
-      if (!rest) { setCargando(false); return }
 
       // Registrar visita al menú (fecha Colombia UTC-5)
       const fechaColombia = new Date(new Date().getTime() - 5 * 60 * 60 * 1000).toISOString().split('T')[0]
@@ -71,7 +67,7 @@ export default function MenuPublicoPage() {
         mesa: qrMesa || null,
         fecha: fechaColombia,
       })
-      
+
 
       // Horarios
       const { data: horariosData } = await supabase
@@ -82,7 +78,6 @@ export default function MenuPublicoPage() {
       if (horariosData && horariosData.length > 0) {
         setHorariosRest(horariosData)
       }
-      setRestaurante(rest)
 
       // Config
       const { data: conf } = await supabase
@@ -222,7 +217,7 @@ export default function MenuPublicoPage() {
       setCargando(false)
     }
     cargar()
-  }, [slug])
+  }, [restaurante?.id, cargandoRest])
   useEffect(() => {
     if (!platoDetalle || !restaurante) return
     setResenasReales([])
@@ -247,7 +242,7 @@ export default function MenuPublicoPage() {
         if (data) setResenasReales(data)
         else setResenasReales([])
       })
-  }, [platoDetalle, restaurante])
+  }, [platoDetalle, restaurante?.id])
 
   const color = restaurante?.color_principal || '#E85D24'
   const planRest = restaurante?.plan || 'gratis'
