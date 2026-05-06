@@ -84,6 +84,9 @@ export default function MiMenuPage() {
   const [platoGanadorConfig, setPlatoGanadorConfig] = useState({ platoId: '', titulo: 'Recomendado del chef', descripcion: '' })
   const [platoGanadorActivo, setPlatoGanadorActivo] = useState(false)
   const [guardandoGanador, setGuardandoGanador] = useState(false)
+  const [guardadoGanador, setGuardadoGanador] = useState(false)
+  const [intentoGanador, setIntentoGanador] = useState(false)
+  const [touchedGanador, setTouchedGanador] = useState<Record<string, boolean>>({})
   const [horarioCategoria, setHorarioCategoria] = useState<string | null>(null)
   const [guardandoHorarioCat, setGuardandoHorarioCat] = useState(false)
   const [guardadoHorarioCat, setGuardadoHorarioCat] = useState(false)
@@ -203,8 +206,16 @@ export default function MiMenuPage() {
     setTimeout(() => setGuardadoPlatoDia(false), 1200)
   }
 
+  function validarPlatoGanador(state: { platoId: string }): Record<string, string> {
+    const e: Record<string, string> = {}
+    if (!state.platoId) e.platoId = 'Selecciona un plato'
+    return e
+  }
   async function guardarPlatoGanador() {
-    if (!platoGanadorConfig.platoId || !platoGanadorConfig.titulo || !rest?.id) return
+    setIntentoGanador(true)
+    setTouchedGanador({ platoId: true, titulo: true })
+    const errores = validarPlatoGanador(platoGanadorConfig)
+    if (Object.keys(errores).length > 0 || !rest?.id) return
     setGuardandoGanador(true)
     const supabase = createClient()
 
@@ -220,6 +231,8 @@ export default function MiMenuPage() {
 
     setPlatoGanadorActivo(true)
     setGuardandoGanador(false)
+    setGuardadoGanador(true)
+    setTimeout(() => setGuardadoGanador(false), 1200)
   }
 
   async function desactivarPlatoGanador() {
@@ -1678,7 +1691,10 @@ export default function MiMenuPage() {
             })()}
 
             {/* === PLATO GANADOR === */}
-            {subTab === 'plato-ganador' && (
+            {subTab === 'plato-ganador' && (() => {
+              const errores = validarPlatoGanador(platoGanadorConfig)
+              const valido = Object.keys(errores).length === 0
+              return (
               <div style={{ padding: '14px 20px' }}>
                 <div className="card" style={{ padding: '14px', marginBottom: '14px' }}>
                   <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '4px' }}>Plato ganador</div>
@@ -1688,7 +1704,10 @@ export default function MiMenuPage() {
 
                   <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Título del reconocimiento:</div>
                   <select className="input" value={platoGanadorConfig.titulo}
-                    onChange={(e) => setPlatoGanadorConfig({ ...platoGanadorConfig, titulo: e.target.value })}
+                    onChange={(e) => {
+                      setPlatoGanadorConfig({ ...platoGanadorConfig, titulo: e.target.value })
+                      setTouchedGanador(prev => ({ ...prev, titulo: true }))
+                    }}
                     style={{ appearance: 'none', marginBottom: '10px' }}>
                     <option value="Recomendado del chef">Recomendado del chef</option>
                     <option value="Favorito de los clientes">Favorito de los clientes</option>
@@ -1699,13 +1718,25 @@ export default function MiMenuPage() {
 
                   <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Selecciona el plato:</div>
                   <select className="input" value={platoGanadorConfig.platoId}
-                    onChange={(e) => setPlatoGanadorConfig({ ...platoGanadorConfig, platoId: e.target.value })}
-                    style={{ appearance: 'none', marginBottom: '10px' }}>
+                    onChange={(e) => {
+                      setPlatoGanadorConfig({ ...platoGanadorConfig, platoId: e.target.value })
+                      setTouchedGanador(prev => ({ ...prev, platoId: true }))
+                    }}
+                    style={{
+                      appearance: 'none',
+                      marginBottom: intentoGanador && touchedGanador.platoId && errores.platoId ? '4px' : '10px',
+                      borderColor: intentoGanador && touchedGanador.platoId && errores.platoId ? 'var(--color-danger)' : undefined,
+                    }}>
                     <option value="">Seleccionar plato</option>
                     {categorias.flatMap(c => c.platos).map(p => (
                       <option key={p.id} value={p.id}>{p.nombre} — ${p.precio.toLocaleString('es-CO')}</option>
                     ))}
                   </select>
+                  {intentoGanador && touchedGanador.platoId && errores.platoId && (
+                    <div style={{ fontSize: '11px', color: 'var(--color-danger)', marginBottom: '10px' }}>
+                      {errores.platoId}
+                    </div>
+                  )}
                   {platoGanadorConfig.platoId && (() => {
                     const h = getHorarioPlato(platoGanadorConfig.platoId)
                     if (!h) return null
@@ -1748,8 +1779,14 @@ export default function MiMenuPage() {
                     </div>
                   )}
 
-                  <button onClick={guardarPlatoGanador} className="btn-primary" style={{ width: '100%', padding: '12px', fontSize: '13px' }}>
-                    {guardandoGanador ? 'Guardando...' : platoGanadorActivo ? 'Actualizar plato ganador' : 'Guardar plato ganador'}
+                  <button onClick={guardarPlatoGanador} disabled={guardandoGanador || guardadoGanador} className="btn-primary"
+                    style={{
+                      width: '100%', padding: '12px', fontSize: '13px',
+                      opacity: valido ? 1 : 0.5,
+                      cursor: valido ? 'pointer' : 'default',
+                      ...(valido ? {} : { transform: 'none', boxShadow: 'none' }),
+                    }}>
+                    {guardandoGanador ? 'Guardando...' : guardadoGanador ? '✓ Guardado' : platoGanadorActivo ? 'Actualizar plato ganador' : 'Guardar plato ganador'}
                   </button>
                   {platoGanadorActivo && (
                     <button onClick={desactivarPlatoGanador} className="btn-outline" style={{ width: '100%', padding: '12px', fontSize: '13px', marginTop: '8px', color: 'var(--color-danger)' }}>
@@ -1758,7 +1795,8 @@ export default function MiMenuPage() {
                   )}
                 </div>
               </div>
-            )}
+              )
+            })()}
 
             </>
             )}
