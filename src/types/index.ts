@@ -86,6 +86,10 @@ export interface Combo {
   precio_individual: number
   activo: boolean
   created_at: string
+  // ───── New fields (optional, default null in DB) ─────
+  dias?: DiaSemana[]
+  horario_inicio?: string
+  horario_fin?: string
 }
 
 export interface ComboPlato {
