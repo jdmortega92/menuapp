@@ -407,6 +407,21 @@ These were resolved in a working session before this document existed. Mentioned
 
 ## Items
 
+### BL.5 🟡 Categoria type drift: horario_inicio vs hora_inicio
+- **Found**: 2026-05-06 during H.1.b commit 2.
+- **Symptom**: src/types/index.ts:60-61 declares Categoria.horario_inicio
+  and Categoria.horario_fin, but the DB and all consuming code use
+  hora_inicio / hora_fin. The mismatch is invisible because the public
+  menu's useEffect read Supabase data as any[].
+- **Where**: src/types/index.ts (Categoria interface), all reads of
+  cat.hora_inicio / cat.hora_fin in src/app/[slug]/page.tsx and
+  src/app/menu/page.tsx (likely).
+- **Acceptance criteria**: pick one name (DB is source of truth → 
+  hora_inicio), update the type, remove the (cat: any) workaround in
+  page.tsx useMemo.
+- **Priority**: 🟡 high — silent type lie, will bite in any future
+  refactor that trusts the type.
+
 ### BL.4 🟢 Plato del día / Plato ganador: warn when precio especial >= precio original
 - **Found**: 2026-04-30 during B.1.e investigation.
 - **Symptom**: Owner can configure a "special price" higher than or equal to the original plato price. While there are legitimate edge cases (premium feature dishes, etc.), in 99% of cases this is a configuration mistake.
@@ -442,7 +457,7 @@ These were resolved in a working session before this document existed. Mentioned
   - Remove the `requiereBasico` plan-gate entry that references it.
 - **Priority**: 🟡 high — visual cleanup once no production users have surprise dependencies on the legacy semantics.
 
-### BL.1 🟢 Visibility windows don't auto-refresh
+### BL.1 🟢 Visibility windows don't auto-refresh — CLOSED 2026-05-06
 - **Found**: 2026-04-28
 - **Symptom**: All time-based visibility (plato del día, categories, promos) is computed only at page load. A visitor with the menu open across a boundary sees stale state.
 - **Where**: `src/app/[slug]/page.tsx` — `horaActual` is computed once at render, not reactive.
