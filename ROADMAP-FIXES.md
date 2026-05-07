@@ -167,7 +167,16 @@ completa-perfil, and plato del día config. Full keyboard + ARIA support.
 
 ---
 
-## Batch E — Edit existing combos and promos (Issue #9)
+## Batch E — Edit combos & promos ✅ CLOSED
+
+**Status**: Closed 2026-05-06.
+- E.1 (edit combos) and E.2 (edit promos) implemented in-place using
+  the existing create form prefilled.
+- Bonus: combos gained optional days/hours restrictions (like promos).
+- Bonus: plato ganador's 2 native selects migrated to Select component.
+- Bonus: search added to plato lists in combo and promo forms when
+  >= 10 platos.
+- Bonus: Lucide edit SVG replaces emoji ✏; auto-scroll on Edit.
 
 **Goal**: Owners can edit combos and promos they've already created.
 
