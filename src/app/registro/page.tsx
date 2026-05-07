@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase-browser'
 import PasswordInput from '@/components/ui/PasswordInput'
 import { isPasswordValid, getPasswordError } from '@/lib/passwordValidation'
 import PhoneInput from '@/components/ui/PhoneInput'
+import Select from '@/components/ui/Select'
 
 function RegistroContent() {
   const router = useRouter()
@@ -249,26 +250,16 @@ function RegistroContent() {
 
               {/* Tipo de negocio */}
               <div style={{ marginBottom: '14px' }}>
-                <label className="label">Tipo de negocio *</label>
-                <select
+                <label className="label" id="tipo-negocio-label">Tipo de negocio *</label>
+                <Select
                   className="input"
                   value={tipo}
-                  onChange={(e) => setTipo(e.target.value)}
+                  onChange={setTipo}
+                  options={tiposNegocio.map(t => ({ value: t.valor, label: t.label }))}
+                  placeholder="Selecciona"
                   required
-                  style={{
-                    color: tipo ? 'var(--text-primary)' : 'var(--text-tertiary)',
-                    appearance: 'none',
-                  }}
-                >
-                  <option value="" disabled>
-                    Selecciona
-                  </option>
-                  {tiposNegocio.map((t) => (
-                    <option key={t.valor} value={t.valor}>
-                      {t.label}
-                    </option>
-                  ))}
-                </select>
+                  ariaLabelledBy="tipo-negocio-label"
+                />
               </div>
 
               {/* Ciudad */}
@@ -341,12 +332,16 @@ function RegistroContent() {
                   </div>
                   {/* Tipo */}
                   <div style={{ marginBottom: '14px' }}>
-                    <label className="label">Tipo de negocio *</label>
-                    <select className="input" value={tipo} onChange={(e) => setTipo(e.target.value)} required
-                      style={{ color: tipo ? 'var(--text-primary)' : 'var(--text-tertiary)', appearance: 'none' }}>
-                      <option value="" disabled>Selecciona</option>
-                      {tiposNegocio.map((t) => <option key={t.valor} value={t.valor}>{t.label}</option>)}
-                    </select>
+                    <label className="label" id="tipo-negocio-label">Tipo de negocio *</label>
+                    <Select
+                      className="input"
+                      value={tipo}
+                      onChange={setTipo}
+                      options={tiposNegocio.map(t => ({ value: t.valor, label: t.label }))}
+                      placeholder="Selecciona"
+                      required
+                      ariaLabelledBy="tipo-negocio-label"
+                    />
                   </div>
                   {/* Ciudad */}
                   <div style={{ marginBottom: '14px' }}>

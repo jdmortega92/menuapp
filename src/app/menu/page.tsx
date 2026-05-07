@@ -9,6 +9,7 @@ import TimePicker from '@/components/ui/TimePicker'
 import Modal from '@/components/ui/Modal'
 import BottomNav from '@/components/BottomNav'
 import TimeRangeHelper from '@/components/ui/TimeRangeHelper'
+import Select from '@/components/ui/Select'
 import { formato12h } from '@/lib/time'
 
 interface Plato {
@@ -1588,26 +1589,47 @@ export default function MiMenuPage() {
                 <div className="card" style={{ padding: '14px', marginBottom: '14px' }}>
                   <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '10px' }}>Configurar plato del día</div>
                   <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px' }}>Selecciona un plato:</div>
-                  <select className="input" value={platoDiaConfig.platoId}
-                    onChange={(e) => {
-                      setPlatoDiaConfig({ ...platoDiaConfig, platoId: e.target.value })
-                      setTouchedPlatoDia(prev => ({ ...prev, platoId: true }))
-                    }}
-                    style={{
-                      appearance: 'none',
-                      marginBottom: intentoPlatoDia && touchedPlatoDia.platoId && errores.platoId ? '4px' : '8px',
-                      borderColor: intentoPlatoDia && touchedPlatoDia.platoId && errores.platoId ? 'var(--color-danger)' : undefined,
-                    }}>
-                    <option value="">Seleccionar plato</option>
-                    {categorias.flatMap(c => c.platos).map(p => (
-                      <option key={p.id} value={p.id}>{p.nombre} — ${p.precio.toLocaleString('es-CO')}{(() => { const h = getHorarioPlato(p.id); return h ? ` (⏰ ${h.hora_inicio}–${h.hora_fin})` : '' })()}</option>
-                    ))}
-                  </select>
-                  {intentoPlatoDia && touchedPlatoDia.platoId && errores.platoId && (
-                    <div style={{ fontSize: '11px', color: 'var(--color-danger)', marginBottom: '8px' }}>
-                      {errores.platoId}
-                    </div>
-                  )}
+                  {(() => {
+                    const platoDiaErrorVisible = !!(intentoPlatoDia && touchedPlatoDia.platoId && errores.platoId)
+                    const platoDiaOptions = categorias.flatMap(c => c.platos).map(p => {
+                      const h = getHorarioPlato(p.id)
+                      const precioStr = `$${p.precio.toLocaleString('es-CO')}`
+                      const scheduleStr = h ? ` (⏰ ${h.hora_inicio}–${h.hora_fin})` : ''
+                      return {
+                        value: p.id,
+                        label: (
+                          <span>
+                            {p.nombre} <span style={{ color: 'var(--text-tertiary)' }}>— {precioStr}{scheduleStr}</span>
+                          </span>
+                        ),
+                        searchText: `${p.nombre} ${precioStr}${scheduleStr}`.toLowerCase(),
+                      }
+                    })
+                    return (
+                      <>
+                        <div style={{ marginBottom: platoDiaErrorVisible ? '4px' : '8px' }}>
+                          <Select
+                            className="input"
+                            value={platoDiaConfig.platoId}
+                            onChange={(v) => {
+                              setPlatoDiaConfig({ ...platoDiaConfig, platoId: v })
+                              setTouchedPlatoDia(prev => ({ ...prev, platoId: true }))
+                            }}
+                            options={platoDiaOptions}
+                            placeholder="Seleccionar plato"
+                            required
+                            error={platoDiaErrorVisible}
+                            ariaDescribedBy={platoDiaErrorVisible ? 'plato-dia-error' : undefined}
+                          />
+                        </div>
+                        {platoDiaErrorVisible && (
+                          <div id="plato-dia-error" style={{ fontSize: '11px', color: 'var(--color-danger)', marginBottom: '8px' }}>
+                            {errores.platoId}
+                          </div>
+                        )}
+                      </>
+                    )
+                  })()}
                   {platoDiaConfig.platoId && (() => {
                     const h = getHorarioPlato(platoDiaConfig.platoId)
                     if (!h) return null
