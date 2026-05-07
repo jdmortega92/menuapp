@@ -23,6 +23,14 @@ function formatoPrecio(valor: number | null | undefined): string {
   return (valor ?? 0).toLocaleString('es-CO')
 }
 
+function formatDiasFull(dias: string[]): string {
+  const map: Record<string, string> = {
+    lun: 'Lunes', mar: 'Martes', mie: 'Miércoles', jue: 'Jueves',
+    vie: 'Viernes', sab: 'Sábado', dom: 'Domingo',
+  }
+  return dias.map(d => map[d] || d).join(', ')
+}
+
 export default function MenuPublicoPage() {
   const params = useParams()
   const searchParams = useSearchParams()
@@ -171,6 +179,20 @@ export default function MenuPublicoPage() {
   const combosVisibles = combosPublico.filter((combo: any) => {
     // Excluir combos sin precio válido
     if (combo.precio === null || combo.precio === undefined) return false
+
+    // Restricciones propias del combo (solo si están configuradas)
+    const hasDias = combo.dias && combo.dias.length > 0
+    const hasHorario = combo.horario_inicio && combo.horario_fin
+    if (hasDias || hasHorario) {
+      const visible = isCurrentlyVisible({
+        dias: hasDias ? combo.dias : null,
+        horaInicio: hasHorario ? combo.horario_inicio : null,
+        horaFin: hasHorario ? combo.horario_fin : null,
+        ahora,
+      })
+      if (!visible) return false
+    }
+
     const platosDelCombo = categorias.flatMap((c: any) => c.platos).filter((p: any) => combo.platos?.includes(p.nombre))
     return platosDelCombo.every((p: any) => platosVisiblesIds.has(p.id))
   })
@@ -1110,6 +1132,17 @@ export default function MenuPublicoPage() {
                 }}>
                   {combo.platos.join(' + ')}
                 </div>
+                {((combo.dias && combo.dias.length > 0) || (combo.horario_inicio && combo.horario_fin)) && (
+                  <div style={{
+                    fontSize: '11px',
+                    color: 'var(--theme-text-subtle)',
+                    marginTop: '4px',
+                  }}>
+                    {combo.dias && combo.dias.length > 0 && formatDiasFull(combo.dias)}
+                    {combo.dias && combo.dias.length > 0 && combo.horario_inicio && combo.horario_fin && ' · '}
+                    {combo.horario_inicio && combo.horario_fin && `${formato12h(combo.horario_inicio)}–${formato12h(combo.horario_fin)}`}
+                  </div>
+                )}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                     <span style={{ fontSize: '15px', fontWeight: 500, color: color }}>${combo.precio.toLocaleString('es-CO')}</span>
