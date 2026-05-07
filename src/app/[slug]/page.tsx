@@ -1,12 +1,22 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
+import { mutate } from 'swr'
 import { createClient } from '@/lib/supabase-browser'
 import Modal from '@/components/ui/Modal'
 import { formato12h } from '@/lib/time'
 import { isCurrentlyVisible } from '@/lib/visibility'
 import { useRestauranteBySlug } from '@/hooks/data/useRestauranteBySlug'
+import { useCategoriasYPlatos } from '@/hooks/data/useCategoriasYPlatos'
+import { useCalificacionesAggregate } from '@/hooks/data/useCalificacionesAggregate'
+import { usePlatoDelDia } from '@/hooks/data/usePlatoDelDia'
+import { useCombos } from '@/hooks/data/useCombos'
+import { usePromos } from '@/hooks/data/usePromos'
+import { usePlatoGanador } from '@/hooks/data/usePlatoGanador'
+import { useConfigRestaurante } from '@/hooks/data/useConfigRestaurante'
+import { useHorarios } from '@/hooks/data/useHorarios'
+import { useTick } from '@/hooks/useTick'
 
 // Helper: formatea precios de forma segura (evita crashes si viene null/undefined)
 function formatoPrecio(valor: number | null | undefined): string {
@@ -37,187 +47,69 @@ export default function MenuPublicoPage() {
   const [mostrarTodasResenas, setMostrarTodasResenas] = useState(false)
 
   const { data: restaurante, isLoading: cargandoRest } = useRestauranteBySlug(slug)
-  const [config, setConfig] = useState<any>(null)
-  const [categorias, setCategorias] = useState<any[]>([])
-  const [platoDia, setPlatoDia] = useState<any>(null)
-  const [cargando, setCargando] = useState(true)
-  const [horariosRest, setHorariosRest] = useState<any[]>([])
-  const [combosPublico, setCombosPublico] = useState<any[]>([])
-  const [promosPublico, setPromosPublico] = useState<any[]>([])
+  const restId = restaurante?.id ?? null
+
+  const { data: cyp, isLoading: l1 } = useCategoriasYPlatos(restId)
+  const { data: calif, isLoading: l2 } = useCalificacionesAggregate(restId)
+  const { data: platoDiaRaw, isLoading: l3 } = usePlatoDelDia(restId)
+  const { data: combosRaw, isLoading: l4 } = useCombos(restId)
+  const { data: promosRaw, isLoading: l5 } = usePromos(restId)
+  const { data: platoGanador, isLoading: l6 } = usePlatoGanador(restId)
+  const { data: config, isLoading: l7 } = useConfigRestaurante(restId)
+  const { data: horariosData, isLoading: l8 } = useHorarios(restId)
+
+  const cargando = cargandoRest || (!!restId && (l1 || l2 || l3 || l4 || l5 || l6 || l7 || l8))
+
+  useTick(60_000)
+
+  const horariosRest = horariosData ?? []
+  const combosPublico = combosRaw ?? []
+  const promosPublico = promosRaw ?? []
+  const platoDia = platoDiaRaw ?? null
+
+  const categorias = useMemo(() => {
+    if (!cyp) return []
+    const { categorias: cats, platos } = cyp
+    return cats.map((cat: any) => ({
+      id: cat.id,
+      nombre: cat.nombre,
+      hora_inicio: cat.hora_inicio || null,
+      hora_fin: cat.hora_fin || null,
+      platos: platos
+        .filter((p) => p.categoria_id === cat.id)
+        .map((p) => {
+          const stats = calif?.[p.id]
+          return {
+            id: p.id,
+            nombre: p.nombre,
+            precio: p.precio,
+            descripcion: p.descripcion || '',
+            disponible: p.disponible,
+            foto_url: p.foto_url || null,
+            estrellas: stats?.promedio ?? 0,
+            resenas: stats?.count ?? 0,
+          }
+        }),
+    }))
+  }, [cyp, calif])
+
   const [mostrarPromos, setMostrarPromos] = useState(false)
   const [promoDetalle, setPromoDetalle] = useState<any>(null)
   const [promoSeleccion, setPromoSeleccion] = useState<string[]>([])
   const [mostrarCombos, setMostrarCombos] = useState(false)
   const [comboDetalle, setComboDetalle] = useState<any>(null)
-  const [platoGanador, setPlatoGanador] = useState<any>(null)
 
   useEffect(() => {
-    if (cargandoRest) return
-    if (!restaurante) { setCargando(false); return }
-    const rest = restaurante
-
-    async function cargar() {
-      const supabase = createClient()
-
-      // Registrar visita al menú (fecha Colombia UTC-5)
-      const fechaColombia = new Date(new Date().getTime() - 5 * 60 * 60 * 1000).toISOString().split('T')[0]
-      const { error: visitaErr } = await supabase.from('visitas_menu').insert({
-        restaurante_id: rest.id,
-        origen: esQR ? 'qr' : 'enlace',
-        mesa: qrMesa || null,
-        fecha: fechaColombia,
-      })
-
-
-      // Horarios
-      const { data: horariosData } = await supabase
-        .from('horarios')
-        .select('*')
-        .eq('restaurante_id', rest.id)
-
-      if (horariosData && horariosData.length > 0) {
-        setHorariosRest(horariosData)
-      }
-
-      // Config
-      const { data: conf } = await supabase
-        .from('config_restaurante')
-        .select('*')
-        .eq('restaurante_id', rest.id)
-        .maybeSingle()
-
-      if (conf) setConfig(conf)
-
-
-      // Categorías y platos
-      const { data: cats } = await supabase
-        .from('categorias')
-        .select('*')
-        .eq('restaurante_id', rest.id)
-        .order('orden', { ascending: true })
-
-      const { data: platos } = await supabase
-        .from('platos')
-        .select('*')
-        .eq('restaurante_id', rest.id)
-        .order('orden', { ascending: true })
-
-      // Cargar calificaciones para calcular promedio y conteo por plato
-      const { data: calificacionesData } = await supabase
-        .from('calificaciones')
-        .select('plato_id, estrellas')
-        .eq('restaurante_id', rest.id)
-
-      // Agrupar por plato: total de estrellas y conteo de reseñas
-      const statsPorPlato: Record<string, { total: number; count: number }> = {}
-      if (calificacionesData) {
-        calificacionesData.forEach((c: any) => {
-          if (!statsPorPlato[c.plato_id]) {
-            statsPorPlato[c.plato_id] = { total: 0, count: 0 }
-          }
-          statsPorPlato[c.plato_id].total += c.estrellas
-          statsPorPlato[c.plato_id].count += 1
-        })
-      }
-
-      if (cats && platos) {
-        setCategorias(cats.map(cat => ({
-          id: cat.id, nombre: cat.nombre, hora_inicio: cat.hora_inicio || null, hora_fin: cat.hora_fin || null,
-          platos: platos
-            .filter((p: any) => p.categoria_id === cat.id)
-            .map((p: any) => {
-              const stats = statsPorPlato[p.id]
-              return {
-                id: p.id, nombre: p.nombre, precio: p.precio,
-                descripcion: p.descripcion || '', disponible: p.disponible,
-                foto_url: p.foto_url || null,
-                estrellas: stats ? Number((stats.total / stats.count).toFixed(1)) : 0,
-                resenas: stats?.count || 0,
-              }
-            }),
-        })))
-      }
-
-      // Plato del día
-      const { data: pd } = await supabase
-        .from('plato_del_dia')
-        .select('*, platos(*)')
-        .eq('restaurante_id', rest.id)
-        .eq('activo', true)
-        .maybeSingle()
-
-      if (pd?.platos) {
-        const normalizar = (t: string | null | undefined) => t ? t.slice(0, 5) : null
-        setPlatoDia({
-          id: pd.platos.id, nombre: pd.platos.nombre,
-          precio: pd.platos.precio, precioEspecial: pd.precio_especial,
-          descripcion: pd.platos.descripcion,
-          horaInicio: normalizar(pd.horario_inicio),
-          horaFin: normalizar(pd.horario_fin),
-        })
-      }
-      // Combos
-      const { data: combosData } = await supabase
-        .from('combos')
-        .select('*, combo_platos(plato_id, platos(nombre, precio))')
-        .eq('restaurante_id', rest.id)
-        .eq('activo', true)
-
-      if (combosData) {
-        setCombosPublico(combosData.map((c: any) => ({
-          id: c.id,
-          nombre: c.nombre,
-          descripcion: c.descripcion,
-          precio: c.precio,
-          precioIndividual: c.precio_individual,
-          platos: c.combo_platos?.map((cp: any) => cp.platos?.nombre || 'Plato') || [],
-          platosIds: c.combo_platos?.map((cp: any) => cp.plato_id) || [],
-        })))
-      }
-
-      // Promos
-      const { data: promosData } = await supabase
-        .from('promos')
-        .select('*, promo_platos(plato_id, platos(nombre))')
-        .eq('restaurante_id', rest.id)
-        .eq('activo', true)
-
-      if (promosData) {
-        setPromosPublico(promosData.map((p: any) => ({
-          id: p.id,
-          nombre: p.nombre,
-          tipo: p.tipo,
-          valor: p.valor,
-          dias: p.dias || [],
-          platos: p.promo_platos?.map((pp: any) => pp.platos?.nombre || 'Plato') || [],
-          platosIds: p.promo_platos?.map((pp: any) => pp.plato_id) || [],
-        })))
-      }
-
-      // Plato ganador
-      const { data: pgData } = await supabase
-        .from('plato_ganador')
-        .select('*, platos(*)')
-        .eq('restaurante_id', rest.id)
-        .eq('activo', true)
-        .maybeSingle()
-
-      if (pgData?.platos) {
-        setPlatoGanador({
-          id: pgData.platos.id,
-          nombre: pgData.platos.nombre,
-          precio: pgData.platos.precio,
-          descripcion: pgData.platos.descripcion,
-          foto_url: pgData.platos.foto_url,
-          titulo: pgData.titulo,
-          descripcionEspecial: pgData.descripcion,
-        })
-      }
-
-      setCargando(false)
-    }
-    cargar()
-  }, [restaurante?.id, cargandoRest])
+    if (!restaurante) return
+    const supabase = createClient()
+    const fechaColombia = new Date(new Date().getTime() - 5 * 60 * 60 * 1000).toISOString().split('T')[0]
+    supabase.from('visitas_menu').insert({
+      restaurante_id: restaurante.id,
+      origen: esQR ? 'qr' : 'enlace',
+      mesa: qrMesa || null,
+      fecha: fechaColombia,
+    }).then(() => {})
+  }, [restaurante?.id])
   useEffect(() => {
     if (!platoDetalle || !restaurante) return
     setResenasReales([])
@@ -2050,6 +1942,8 @@ export default function MenuPublicoPage() {
             if (nuevaResena) {
               setResenasReales(prev => [nuevaResena, ...prev].slice(0, 5))
             }
+
+            mutate(['calificaciones-aggregate', restaurante.id])
 
             setCalEnviada(true)
             setTimeout(() => { setPlatoCalificar(null); setCalEnviada(false) }, 2000)
