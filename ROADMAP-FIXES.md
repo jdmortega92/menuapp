@@ -120,7 +120,12 @@ These were resolved in a working session before this document existed. Mentioned
 
 ---
 
-## Batch C — Promo display & cleanup (remaining parts of Issue #5)
+## Batch C — Promo display & cleanup ✅ CLOSED
+
+**Status**: Resolved as a side effect of H.1.b (SWR migration).
+SWR's revalidateOnFocus + 5s deduping means deletes/edits propagate to
+the public menu within seconds of the next focus event. No additional
+fix required. Closed 2026-05-06.
 
 **Goal**: Promo lifecycle in the public menu is consistent with what the owner configured.
 
@@ -136,7 +141,11 @@ These were resolved in a working session before this document existed. Mentioned
 
 ---
 
-## Batch D — Native dropdown UX (Issues #10, #11)
+## Batch D — Native dropdown UX ✅ CLOSED
+
+**Status**: Resolved 2026-05-06. New Select component at
+src/components/ui/Select.tsx replaces native selects in registro,
+completa-perfil, and plato del día config. Full keyboard + ARIA support.
 
 **Goal**: Replace native `<select>` elements that break the design system with a custom select component.
 
