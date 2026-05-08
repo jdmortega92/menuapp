@@ -2,7 +2,7 @@
 
 > **Audience**: Claude Code (Opus) working on the MenuApp codebase.
 > **Owner**: Julian.
-> **Last updated**: 2026-04-28.
+> **Last updated**: 2026-05-08.
 > **Stack**: Next.js 16 (App Router) + TypeScript + Tailwind + Supabase + Vercel.
 
 ---
@@ -92,11 +92,13 @@ These were resolved in a working session before this document existed. Mentioned
 
 ---
 
-## Batch B — Form validation (Issue #7)
+## Batch B — Form validation (Issue #7) ✅ CLOSED
 
-**Goal**: Combos, promos, plato del día, and platos in categories must not allow creation/update with empty required fields.
+**Status**: Closed. Implemented across 6 sub-batches (B.1.a–B.1.e + B.2).
+All forms (combo, promo, plato del día, plato in category) now validate
+required fields with red border + error message + disabled submit button.
 
-### B.1 🔴 Required field validation across creation forms
+### B.1 ✅ Required field validation across creation forms
 - **Affected forms**:
   - Combo creation/edit
   - Promo creation/edit
@@ -110,13 +112,12 @@ These were resolved in a working session before this document existed. Mentioned
 - **Acceptance criteria**:
   - Submit with empty required field → red error appears, no API call made.
   - Submit with all required fields filled → succeeds.
-- **Implementation hint**: Look at existing form patterns in the codebase first. If there's no shared validation hook yet, propose one (e.g., `useFormValidation`) but discuss with Julian before building it.
 
-### B.2 🟡 Type-specific validation for promos
+### B.2 ✅ Type-specific validation for promos
 - "Descuento" type → `valor` is required and must be `1–100`.
 - "Precio especial" type → `valor` is required and must be `> 0`.
 - "Dos por uno" type → no `valor` needed.
-- Should be reflected in the UI: hide/show the value input dynamically based on selected type.
+- Reflected in the UI: hide/show the value input dynamically based on selected type.
 
 ---
 
@@ -249,9 +250,15 @@ completa-perfil, and plato del día config. Full keyboard + ARIA support.
 
 ---
 
-## Batch H — Performance & data layer
+## Batch H — SWR migration
 
-### H.1 🟡 Add a query cache layer (SWR or React Query)
+### H.1 🟡 Add a query cache layer (SWR or React Query) — IN PROGRESS
+
+**Status**:
+- ✅ H.1.a: useRestauranteBySlug (closed 2026-05-04)
+- ✅ H.1.b: 8 hooks for public menu data + useTick (closed 2026-05-06)
+- ⏳ H.1.c: Dashboard SWR migration (pending)
+
 - **Why**: Currently every page does its own `supabase.from(...).select()` in `useEffect`. No caching, no deduplication, no automatic revalidation. Navigating between dashboard tabs re-fetches everything.
 - **Recommendation**: **SWR** (lighter, simpler, by Vercel — pairs naturally with Next.js).
   - Alternative: TanStack Query (React Query) if Julian prefers more features.
@@ -425,20 +432,46 @@ completa-perfil, and plato del día config. Full keyboard + ARIA support.
 
 ## Items
 
-### BL.5 🟡 Categoria type drift: horario_inicio vs hora_inicio
+### BL.7 🟢 Public menu cache feels stale to owners testing changes
+- **Found**: 2026-05-08.
+- **Symptom**: Owners creating combos/promos in /menu and watching the
+  public menu in another tab perceive a 30-60s delay before changes
+  appear (SWR revalidate-on-focus + 5s deduping).
+- **Not a bug** — SWR is working as designed. But owners testing their
+  own menu may not understand why.
+- **Possible fixes** (not urgent):
+  - Add "Open public menu" button that opens a fresh tab on each click
+  - Add a one-time tooltip "Refresh the public menu to see changes"
+  - Reduce dedupingInterval (trade-off: more Supabase requests)
+- **Priority**: 🟢 low — only affects owners during initial setup/testing.
+
+### BL.6 ✅ Combo/promo half-created visibility (race fix) — CLOSED
+- **Found**: 2026-05-08 during user testing.
+- **Closed**: 2026-05-08.
+- **Symptom**: When creating or editing a combo/promo with platos in
+  /menu, the public menu (SWR-cached in another tab) could fetch the
+  parent row between the parent INSERT and the junction-table INSERT,
+  showing "INCLUYE 0 PLATOS" for ~5s until the next revalidation.
+- **Fix**: Activo-flip pattern in agregarCombo, agregarPromo,
+  actualizarCombo, actualizarPromo (src/app/menu/page.tsx):
+  1. INSERT parent with activo: false (invisible to useCombos/usePromos
+     fetchers, which filter .eq('activo', true))
+  2. INSERT junction rows (with rollback on failure)
+  3. UPDATE parent SET activo: true (or wasActive on update path)
+- **Where**: src/app/menu/page.tsx (4 handlers).
+
+### BL.5 ✅ Categoria type drift (horario vs hora) — CLOSED
 - **Found**: 2026-05-06 during H.1.b commit 2.
-- **Symptom**: src/types/index.ts:60-61 declares Categoria.horario_inicio
+- **Closed**: 2026-05-08.
+- **Symptom**: src/types/index.ts:60-61 declared Categoria.horario_inicio
   and Categoria.horario_fin, but the DB and all consuming code use
-  hora_inicio / hora_fin. The mismatch is invisible because the public
+  hora_inicio / hora_fin. The mismatch was invisible because the public
   menu's useEffect read Supabase data as any[].
 - **Where**: src/types/index.ts (Categoria interface), all reads of
   cat.hora_inicio / cat.hora_fin in src/app/[slug]/page.tsx and
-  src/app/menu/page.tsx (likely).
-- **Acceptance criteria**: pick one name (DB is source of truth → 
-  hora_inicio), update the type, remove the (cat: any) workaround in
-  page.tsx useMemo.
-- **Priority**: 🟡 high — silent type lie, will bite in any future
-  refactor that trusts the type.
+  src/app/menu/page.tsx.
+- **Fix**: Renamed Categoria fields in types to match DB; removed 11
+  any-casts that existed solely to bypass the drift.
 
 ### BL.4 🟢 Plato del día / Plato ganador: warn when precio especial >= precio original
 - **Found**: 2026-04-30 during B.1.e investigation.
@@ -464,23 +497,18 @@ completa-perfil, and plato del día config. Full keyboard + ARIA support.
 - **Where**: src/app/menu/page.tsx — promo form.
 - **Priority**: 🟢 nice-to-have UX polish. Plan to bundle with batch G (visual polish).
 
-### BL.2 🟡 Remove menu_por_horario_activo from schema and UI
+### BL.2 ✅ menu_por_horario_activo dead toggle — CLOSED
 - **Found**: 2026-04-29 during A.2.
-- **Status**: UI removal DONE 2026-04-29 (toggle no longer in config page). Remaining work below.
-- **Symptom**: The field still exists in `config_restaurante` (DB), the TypeScript types (`src/types/index.ts:205`), and the config form state (`src/app/config/page.tsx:38, 106, 354`). Pre-launch, no users depend on it — clean it up.
-- **Steps**:
-  - Migration: drop column `menu_por_horario_activo` from `config_restaurante`.
-  - Remove the field from `src/types/index.ts`.
-  - Remove from `toggles` form state default + DB-load mapping in `config/page.tsx`.
-  - Remove the `requiereBasico` plan-gate entry that references it.
-- **Priority**: 🟡 high — visual cleanup once no production users have surprise dependencies on the legacy semantics.
+- **Closed**: 2026-05-08.
+- **Symptom**: The field still existed in `config_restaurante` (DB), the TypeScript types (`src/types/index.ts:205`), and the config form state (`src/app/config/page.tsx:38, 106, 354`).
+- **Fix**: Removed from types, config form state, hydration, and plan-gate. DB column to be dropped 1–2 days later after production stability check.
 
-### BL.1 🟢 Visibility windows don't auto-refresh — CLOSED 2026-05-06
+### BL.1 ✅ Visibility windows don't auto-refresh — CLOSED
 - **Found**: 2026-04-28
-- **Symptom**: All time-based visibility (plato del día, categories, promos) is computed only at page load. A visitor with the menu open across a boundary sees stale state.
-- **Where**: `src/app/[slug]/page.tsx` — `horaActual` is computed once at render, not reactive.
-- **Acceptance criteria**: re-evaluate every 60s OR refresh on focus.
-- **Priority**: 🟢 low (edge case).
+- **Closed**: 2026-05-06 in H.1.b commit 2 (useTick(60_000) wired in [slug]/page.tsx).
+- **Symptom**: All time-based visibility (plato del día, categories, promos) was computed only at page load. A visitor with the menu open across a boundary saw stale state.
+- **Where**: `src/app/[slug]/page.tsx` — `horaActual` was computed once at render, not reactive.
+- **Fix**: useTick(60_000) hook forces re-render every minute, recomputing `ahora` and downstream visibility.
 
 ---
 
