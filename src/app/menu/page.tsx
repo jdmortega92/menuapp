@@ -292,21 +292,41 @@ export default function MiMenuPage() {
     setGuardandoPromo(true)
     const supabase = createClient()
 
+    // Step 1: insert with activo: false so public menu can't see it yet
     const { data: promoData, error } = await supabase.from('promos').insert({
       restaurante_id: rest.id,
       nombre: nuevaPromo.nombre,
       tipo: nuevaPromo.tipo,
       valor: nuevaPromo.valor ? parseInt(nuevaPromo.valor) : null,
       dias: nuevaPromo.dias,
-      activo: true,
+      activo: false,
     }).select().single()
 
     if (error || !promoData) { setGuardandoPromo(false); alert('Error al crear promo'); return }
 
-    // Insertar platos de la promo
-    await supabase.from('promo_platos').insert(
-      nuevaPromo.platoIds.map(platoId => ({ promo_id: promoData.id, plato_id: platoId }))
-    )
+    // Step 2: insert junction rows
+    if (nuevaPromo.platoIds.length > 0) {
+      const { error: ppError } = await supabase.from('promo_platos').insert(
+        nuevaPromo.platoIds.map(platoId => ({ promo_id: promoData.id, plato_id: platoId }))
+      )
+      if (ppError) {
+        await supabase.from('promos').delete().eq('id', promoData.id)
+        setGuardandoPromo(false)
+        alert('Error al asociar platos a la promo')
+        return
+      }
+    }
+
+    // Step 3: activate the promo so the public menu picks it up complete
+    const { error: actError } = await supabase.from('promos')
+      .update({ activo: true })
+      .eq('id', promoData.id)
+
+    if (actError) {
+      setGuardandoPromo(false)
+      alert('Error al activar la promo')
+      return
+    }
 
     const platosNombres = nuevaPromo.platoIds.map(id => categorias.flatMap(c => c.platos).find(p => p.id === id)?.nombre || '')
     setPromos([...promos, {
@@ -334,20 +354,43 @@ export default function MiMenuPage() {
     setGuardandoPromo(true)
     const supabase = createClient()
 
+    const wasActive = promos.find(p => p.id === editandoPromoId)?.activo ?? true
+
+    // Step 1: update fields and deactivate so public menu can't see partial state
     const { error } = await supabase.from('promos').update({
       nombre: nuevaPromo.nombre,
       tipo: nuevaPromo.tipo,
       valor: nuevaPromo.valor ? parseInt(nuevaPromo.valor) : null,
       dias: nuevaPromo.dias,
+      activo: false,
     }).eq('id', editandoPromoId)
 
     if (error) { setGuardandoPromo(false); alert('Error al actualizar promo'); return }
 
+    // Step 2: delete old junction rows
     await supabase.from('promo_platos').delete().eq('promo_id', editandoPromoId)
+
+    // Step 3: insert new junction rows
     if (nuevaPromo.platoIds.length > 0) {
-      await supabase.from('promo_platos').insert(
+      const { error: ppError } = await supabase.from('promo_platos').insert(
         nuevaPromo.platoIds.map(platoId => ({ promo_id: editandoPromoId, plato_id: platoId }))
       )
+      if (ppError) {
+        setGuardandoPromo(false)
+        alert('Error al asociar platos a la promo. La promo quedó desactivada.')
+        return
+      }
+    }
+
+    // Step 4: restore original active state
+    const { error: actError } = await supabase.from('promos')
+      .update({ activo: wasActive })
+      .eq('id', editandoPromoId)
+
+    if (actError) {
+      setGuardandoPromo(false)
+      alert('Error al reactivar la promo. Puedes activarla manualmente desde la lista.')
+      return
     }
 
     const platosNombres = nuevaPromo.platoIds.map(id => categorias.flatMap(c => c.platos).find(p => p.id === id)?.nombre || '')
@@ -359,6 +402,7 @@ export default function MiMenuPage() {
       dias: nuevaPromo.dias,
       platos: platosNombres,
       descripcion: nuevaPromo.descripcion,
+      activo: wasActive,
     } : p))
     setGuardandoPromo(false)
     setGuardadoPromo(true)
@@ -612,13 +656,14 @@ export default function MiMenuPage() {
     setGuardandoCombo(true)
     const supabase = createClient()
 
+    // Step 1: insert with activo: false so public menu can't see it yet
     const { data: comboData, error } = await supabase.from('combos').insert({
       restaurante_id: rest.id,
       nombre: nuevoCombo.nombre,
       descripcion: nuevoCombo.descripcion || null,
       precio: parseInt(nuevoCombo.precio),
       precio_individual: precioIndividualCombo,
-      activo: true,
+      activo: false,
       dias: nuevoCombo.dias.length > 0 ? nuevoCombo.dias : null,
       horario_inicio: nuevoCombo.horaInicio || null,
       horario_fin: nuevoCombo.horaFin || null,
@@ -626,10 +671,29 @@ export default function MiMenuPage() {
 
     if (error || !comboData) { setGuardandoCombo(false); alert('Error al crear combo'); return }
 
-    // Insertar platos del combo
-    await supabase.from('combo_platos').insert(
-      nuevoCombo.platoIds.map(platoId => ({ combo_id: comboData.id, plato_id: platoId }))
-    )
+    // Step 2: insert junction rows
+    if (nuevoCombo.platoIds.length > 0) {
+      const { error: cpError } = await supabase.from('combo_platos').insert(
+        nuevoCombo.platoIds.map(platoId => ({ combo_id: comboData.id, plato_id: platoId }))
+      )
+      if (cpError) {
+        await supabase.from('combos').delete().eq('id', comboData.id)
+        setGuardandoCombo(false)
+        alert('Error al asociar platos al combo')
+        return
+      }
+    }
+
+    // Step 3: activate the combo so the public menu picks it up complete
+    const { error: actError } = await supabase.from('combos')
+      .update({ activo: true })
+      .eq('id', comboData.id)
+
+    if (actError) {
+      setGuardandoCombo(false)
+      alert('Error al activar el combo')
+      return
+    }
 
     const platosNombres = nuevoCombo.platoIds.map(id => categorias.flatMap(c => c.platos).find(p => p.id === id)?.nombre || '')
     setCombos([...combos, {
@@ -660,6 +724,9 @@ export default function MiMenuPage() {
     setGuardandoCombo(true)
     const supabase = createClient()
 
+    const wasActive = combos.find(c => c.id === editandoComboId)?.activo ?? true
+
+    // Step 1: update fields and deactivate so public menu can't see partial state
     const { error } = await supabase.from('combos').update({
       nombre: nuevoCombo.nombre,
       descripcion: nuevoCombo.descripcion || null,
@@ -668,15 +735,35 @@ export default function MiMenuPage() {
       dias: nuevoCombo.dias.length > 0 ? nuevoCombo.dias : null,
       horario_inicio: nuevoCombo.horaInicio || null,
       horario_fin: nuevoCombo.horaFin || null,
+      activo: false,
     }).eq('id', editandoComboId)
 
     if (error) { setGuardandoCombo(false); alert('Error al actualizar combo'); return }
 
+    // Step 2: delete old junction rows
     await supabase.from('combo_platos').delete().eq('combo_id', editandoComboId)
+
+    // Step 3: insert new junction rows
     if (nuevoCombo.platoIds.length > 0) {
-      await supabase.from('combo_platos').insert(
+      const { error: cpError } = await supabase.from('combo_platos').insert(
         nuevoCombo.platoIds.map(platoId => ({ combo_id: editandoComboId, plato_id: platoId }))
       )
+      if (cpError) {
+        setGuardandoCombo(false)
+        alert('Error al asociar platos al combo. El combo quedó desactivado.')
+        return
+      }
+    }
+
+    // Step 4: restore original active state
+    const { error: actError } = await supabase.from('combos')
+      .update({ activo: wasActive })
+      .eq('id', editandoComboId)
+
+    if (actError) {
+      setGuardandoCombo(false)
+      alert('Error al reactivar el combo. Puedes activarlo manualmente desde la lista.')
+      return
     }
 
     const platosNombres = nuevoCombo.platoIds.map(id => categorias.flatMap(c => c.platos).find(p => p.id === id)?.nombre || '')
@@ -691,6 +778,7 @@ export default function MiMenuPage() {
       dias: nuevoCombo.dias,
       horario_inicio: nuevoCombo.horaInicio || null,
       horario_fin: nuevoCombo.horaFin || null,
+      activo: wasActive,
     } : c))
     setGuardandoCombo(false)
     setGuardadoCombo(true)
@@ -1078,9 +1166,9 @@ export default function MiMenuPage() {
                       </div>
                       <span style={{ fontSize: '14px', fontWeight: 500 }}>{cat.nombre}</span>
                       <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', background: 'var(--bg-tertiary)', padding: '2px 6px', borderRadius: '4px' }}>{cat.platos.length}</span>
-                      {(cat as any).hora_inicio && (cat as any).hora_fin && (
+                      {cat.hora_inicio && cat.hora_fin && (
                         <span style={{ fontSize: '10px', color: 'var(--color-info)', background: 'var(--color-info-light)', padding: '2px 6px', borderRadius: '4px' }}>
-                          {formato12h((cat as any).hora_inicio)}–{formato12h((cat as any).hora_fin)}
+                          {formato12h(cat.hora_inicio)}–{formato12h(cat.hora_fin)}
                         </span>
                       )}
                     </div>
