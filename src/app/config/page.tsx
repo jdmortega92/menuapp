@@ -35,7 +35,6 @@ export default function ConfigPage() {
     plato_ganador_activo: false,
     calificaciones_activo: true,
     sorprendeme_activo: true,
-    menu_por_horario_activo: false,
   })
   const [email, setEmail] = useState('')
   const [cargandoConfig, setCargandoConfig] = useState(true)
@@ -103,7 +102,6 @@ export default function ConfigPage() {
           plato_ganador_activo: conf.plato_ganador_activo ?? false,
           calificaciones_activo: conf.calificaciones_activo ?? true,
           sorprendeme_activo: conf.sorprendeme_activo ?? true,
-          menu_por_horario_activo: conf.menu_por_horario_activo ?? false,
         })
       }
       // Cargar logo y banner
@@ -351,8 +349,6 @@ export default function ConfigPage() {
   async function handleToggle(key: keyof typeof toggles) {
     const requierePro = ['combos_activo', 'promos_activo', 'plato_dia_activo', 'plato_ganador_activo'].includes(key)
     if (requierePro && !esPro) return
-    const requiereBasico = ['menu_por_horario_activo'].includes(key)
-    if (requiereBasico && !esBasico) return
 
     const nuevoValor = !toggles[key]
     setToggles({ ...toggles, [key]: nuevoValor })

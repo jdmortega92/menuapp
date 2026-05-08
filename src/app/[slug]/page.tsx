@@ -78,7 +78,7 @@ export default function MenuPublicoPage() {
   const categorias = useMemo(() => {
     if (!cyp) return []
     const { categorias: cats, platos } = cyp
-    return cats.map((cat: any) => ({
+    return cats.map((cat) => ({
       id: cat.id,
       nombre: cat.nombre,
       hora_inicio: cat.hora_inicio || null,
@@ -168,12 +168,12 @@ export default function MenuPublicoPage() {
 
   // Las categorías con horario configurado siempre respetan su ventana,
   // independientemente del antiguo toggle global.
-  const categoriasPorHorario = categorias.filter((cat: any) =>
+  const categoriasPorHorario = categorias.filter((cat) =>
     isCurrentlyVisible({ horaInicio: cat.hora_inicio, horaFin: cat.hora_fin, ahora })
   )
-  
+
   // IDs de platos visibles por horario
-  const platosVisiblesIds = new Set(categoriasPorHorario.flatMap((c: any) => c.platos.map((p: any) => p.id)))
+  const platosVisiblesIds = new Set(categoriasPorHorario.flatMap((c) => c.platos.map((p) => p.id)))
 
   // Filtrar combos: solo mostrar si TODOS sus platos son visibles
   const combosVisibles = combosPublico.filter((combo: any) => {
@@ -225,7 +225,7 @@ export default function MenuPublicoPage() {
   })()
   
   const categoriasFiltradas = busqueda.trim()
-    ? categoriasPorHorario.map((cat: any) => ({ ...cat, platos: cat.platos.filter((p: any) => p.nombre.toLowerCase().includes(busqueda.toLowerCase()) || p.descripcion?.toLowerCase().includes(busqueda.toLowerCase())) })).filter((cat: any) => cat.platos.length > 0)
+    ? categoriasPorHorario.map((cat) => ({ ...cat, platos: cat.platos.filter((p) => p.nombre.toLowerCase().includes(busqueda.toLowerCase()) || p.descripcion?.toLowerCase().includes(busqueda.toLowerCase())) })).filter((cat) => cat.platos.length > 0)
     : categoriasPorHorario
 
   function agregarAlPedido(platoId: string) {

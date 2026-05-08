@@ -57,8 +57,8 @@ export interface Categoria {
   restaurante_id: string
   nombre: string
   orden: number
-  horario_inicio?: string
-  horario_fin?: string
+  hora_inicio?: string
+  hora_fin?: string
   visible: boolean
   created_at: string
 }
@@ -206,7 +206,6 @@ export interface ConfigRestaurante {
   plato_ganador_activo: boolean
   calificaciones_activo: boolean
   sorprendeme_activo: boolean
-  menu_por_horario_activo: boolean
 }
 
 export interface Referido {
