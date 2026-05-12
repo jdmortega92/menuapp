@@ -2,7 +2,7 @@
 
 > **Audience**: Claude Code (Opus) working on the MenuApp codebase.
 > **Owner**: Julian.
-> **Last updated**: 2026-05-10.
+> **Last updated**: 2026-05-12.
 > **Stack**: Next.js 16 (App Router) + TypeScript + Tailwind + Supabase + Vercel.
 
 ---
@@ -437,7 +437,9 @@ completa-perfil, and plato del día config. Full keyboard + ARIA support.
 
 ## Items
 
-### BL.8 🟡 Plato configurado como ganador Y plato del día simultáneamente
+### BL.8 ✅ Plato configurado como ganador Y plato del día simultáneamente — CLOSED
+- **Closed**: 2026-05-12.
+- **Fix applied**: Option A — validate in /menu form to prevent selecting the same plato for both slots. Validation extends validarPlatoDia and validarPlatoGanador to receive the other form's active state as a second argument; collision produces a red-bordered Select with explicit error message and disables the Guardar button. Pre-existing collisions (configured before this fix) are also surfaced immediately on render.
 - **Found**: 2026-05-10 during Batch G smoke test.
 - **Symptom**: When the same plato is selected for both "plato ganador"
   (recomendado del chef) and "plato del día":

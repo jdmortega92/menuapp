@@ -188,17 +188,28 @@ export default function MiMenuPage() {
     await supabase.from('config_restaurante').update({ sorprendeme_categorias: nuevas }).eq('restaurante_id', rest.id)
   }
   
-  function validarPlatoDia(state: { platoId: string; precioEspecial: string }): Record<string, string> {
+  function validarPlatoDia(
+    state: { platoId: string; precioEspecial: string },
+    otherActive?: { activo: boolean; platoId: string }
+  ): Record<string, string> {
     const e: Record<string, string> = {}
     if (!state.platoId) e.platoId = 'Selecciona un plato'
     const v = parseInt(state.precioEspecial)
     if (!state.precioEspecial || isNaN(v) || v <= 0) e.precioEspecial = 'El precio especial debe ser mayor a 0'
+
+    if (state.platoId && otherActive?.activo && otherActive.platoId === state.platoId) {
+      e.platoId = 'Este plato ya está configurado como plato ganador. Selecciona otro o desactiva el plato ganador primero.'
+    }
+
     return e
   }
   async function guardarPlatoDia() {
     setIntentoPlatoDia(true)
     setTouchedPlatoDia({ platoId: true, precioEspecial: true })
-    const errores = validarPlatoDia(platoDiaConfig)
+    const errores = validarPlatoDia(platoDiaConfig, {
+      activo: platoGanadorActivo,
+      platoId: platoGanadorConfig.platoId,
+    })
     if (Object.keys(errores).length > 0 || !rest?.id) return
     setGuardandoPlatoDia(true)
     const supabase = createClient()
@@ -224,15 +235,26 @@ export default function MiMenuPage() {
     setTimeout(() => setGuardadoPlatoDia(false), 1200)
   }
 
-  function validarPlatoGanador(state: { platoId: string }): Record<string, string> {
+  function validarPlatoGanador(
+    state: { platoId: string },
+    otherActive?: { activo: boolean; platoId: string }
+  ): Record<string, string> {
     const e: Record<string, string> = {}
     if (!state.platoId) e.platoId = 'Selecciona un plato'
+
+    if (state.platoId && otherActive?.activo && otherActive.platoId === state.platoId) {
+      e.platoId = 'Este plato ya está configurado como plato del día. Selecciona otro o desactiva el plato del día primero.'
+    }
+
     return e
   }
   async function guardarPlatoGanador() {
     setIntentoGanador(true)
     setTouchedGanador({ platoId: true, titulo: true })
-    const errores = validarPlatoGanador(platoGanadorConfig)
+    const errores = validarPlatoGanador(platoGanadorConfig, {
+      activo: platoDiaActivo,
+      platoId: platoDiaConfig.platoId,
+    })
     if (Object.keys(errores).length > 0 || !rest?.id) return
     setGuardandoGanador(true)
     const supabase = createClient()
@@ -1997,7 +2019,10 @@ export default function MiMenuPage() {
 
             {/* === PLATO DEL DÍA === */}
             {subTab === 'plato-dia' && (() => {
-              const errores = validarPlatoDia(platoDiaConfig)
+              const errores = validarPlatoDia(platoDiaConfig, {
+                activo: platoGanadorActivo,
+                platoId: platoGanadorConfig.platoId,
+              })
               const valido = Object.keys(errores).length === 0
               return (
               <div style={{ padding: '14px 20px' }}>
@@ -2005,7 +2030,10 @@ export default function MiMenuPage() {
                   <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '10px' }}>Configurar plato del día</div>
                   <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px' }}>Selecciona un plato:</div>
                   {(() => {
-                    const platoDiaErrorVisible = !!(intentoPlatoDia && touchedPlatoDia.platoId && errores.platoId)
+                    const platoDiaErrorVisible = !!(
+                      (intentoPlatoDia && touchedPlatoDia.platoId && errores.platoId) ||
+                      (platoDiaConfig.platoId && platoGanadorActivo && platoGanadorConfig.platoId === platoDiaConfig.platoId)
+                    )
                     const platoDiaOptions = categorias.flatMap(c => c.platos).map(p => {
                       const h = getHorarioPlato(p.id)
                       const precioStr = `$${p.precio.toLocaleString('es-CO')}`
@@ -2157,7 +2185,10 @@ export default function MiMenuPage() {
 
             {/* === PLATO GANADOR === */}
             {subTab === 'plato-ganador' && (() => {
-              const errores = validarPlatoGanador(platoGanadorConfig)
+              const errores = validarPlatoGanador(platoGanadorConfig, {
+                activo: platoDiaActivo,
+                platoId: platoDiaConfig.platoId,
+              })
               const valido = Object.keys(errores).length === 0
               const tituloOptions = [
                 { value: 'Recomendado del chef', label: 'Recomendado del chef' },
@@ -2171,7 +2202,10 @@ export default function MiMenuPage() {
                 label: <span>{p.nombre} <span style={{ color: 'var(--text-tertiary)' }}>— ${p.precio.toLocaleString('es-CO')}</span></span>,
                 searchText: `${p.nombre} ${p.precio}`.toLowerCase(),
               }))
-              const platoGanadorErrorVisible = !!(intentoGanador && touchedGanador.platoId && errores.platoId)
+              const platoGanadorErrorVisible = !!(
+                (intentoGanador && touchedGanador.platoId && errores.platoId) ||
+                (platoGanadorConfig.platoId && platoDiaActivo && platoDiaConfig.platoId === platoGanadorConfig.platoId)
+              )
               return (
               <div style={{ padding: '14px 20px' }}>
                 <div className="card" style={{ padding: '14px', marginBottom: '14px' }}>
