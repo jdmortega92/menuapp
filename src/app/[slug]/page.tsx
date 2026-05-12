@@ -1767,7 +1767,22 @@ export default function MenuPublicoPage() {
           }}>
             <div style={{ color: 'var(--theme-bg)' }}>
               <div style={{ fontSize: '14px', fontWeight: 500 }}>{totalProductos} producto{totalProductos > 1 ? 's' : ''}</div>
-              <div style={{ fontSize: '10px', opacity: 0.6 }}>{itemsPedido.map(i => `${i.cantidad} ${i.plato.nombre}`).join(' + ')}</div>
+              <div style={{
+                fontSize: '10px',
+                opacity: 0.6,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                maxWidth: '200px',
+              }}>
+                {(() => {
+                  const items = itemsPedido.map(i => `${i.cantidad} ${i.plato.nombre}`)
+                  if (items.length <= 2) return items.join(' + ')
+                  const visibles = items.slice(0, 2).join(' + ')
+                  const restantes = items.length - 2
+                  return `${visibles} · y ${restantes} más`
+                })()}
+              </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <span style={{ color: 'var(--theme-bg)', fontWeight: 500 }}>${totalPedido.toLocaleString('es-CO')}</span>

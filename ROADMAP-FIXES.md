@@ -2,7 +2,7 @@
 
 > **Audience**: Claude Code (Opus) working on the MenuApp codebase.
 > **Owner**: Julian.
-> **Last updated**: 2026-05-08.
+> **Last updated**: 2026-05-10.
 > **Stack**: Next.js 16 (App Router) + TypeScript + Tailwind + Supabase + Vercel.
 
 ---
@@ -211,7 +211,12 @@ completa-perfil, and plato del día config. Full keyboard + ARIA support.
 
 # ✨ IMPROVEMENTS
 
-## Batch G — Visual polish (Issues #1, #2)
+## Batch G — Visual polish (Issues #1, #2) ✅ CLOSED
+
+**Status**: Closed 2026-05-10.
+- G.1: Logo upload thumbnail in /config now circular.
+- G.2: Order bar shows first 2 items + "y N más" when items > 2, with ellipsis fallback for long names.
+- G.3: No changes needed — already covered. (TimeRangeHelper present in plato del día, categorías, horarios restaurante, combos. Promos do not have horario fields — only `dias` — so the helper is not applicable there.)
 
 ### G.1 🟢 Logo on Config tab should be circular
 - **Where**: Config tab → "Logo del negocio" preview.
@@ -432,6 +437,31 @@ completa-perfil, and plato del día config. Full keyboard + ARIA support.
 
 ## Items
 
+### BL.8 🟡 Plato configurado como ganador Y plato del día simultáneamente
+- **Found**: 2026-05-10 during Batch G smoke test.
+- **Symptom**: When the same plato is selected for both "plato ganador"
+  (recomendado del chef) and "plato del día":
+  - The public menu shows TWO cards for the same plato: one as
+    "Recomendado del chef" at full price, another as "Plato del día"
+    with discounted price.
+  - Opening the detail modal from EITHER card shows the "Plato del día"
+    badge and discounted price, because the modal derives its state from
+    `platoDia.id === plato.id` regardless of which card was clicked.
+  - Adding to cart from the ganador card adds at full price; adding
+    from the plato del día card adds at discounted price. Same plato_id,
+    two different precioUnitario values, depending on the entry point.
+- **Where**: src/app/[slug]/page.tsx
+  - Card de plato ganador rendering (~line where `platoGanadorVisible` is checked)
+  - Card de plato del día rendering (~line where `platoDiaVisible` is checked)
+  - Detail modal's `esPlatoDelDia` derivation (~line 1545)
+- **Possible fixes** (decide UX first):
+  - A: Validate in /menu form — prevent selecting the same plato for both slots.
+  - B: In public menu, hide the ganador card if its plato is also the plato del día.
+  - C: Make the ganador card respect the discounted price when they coincide.
+  - D: Merge into a single hybrid card.
+- **Priority**: 🟡 high — confusing for end customers (sees same plato at
+  two prices). Affects trust. Bug is preexisting, not introduced by Batch G.
+
 ### BL.7 🟢 Public menu cache feels stale to owners testing changes
 - **Found**: 2026-05-08.
 - **Symptom**: Owners creating combos/promos in /menu and watching the
@@ -473,7 +503,8 @@ completa-perfil, and plato del día config. Full keyboard + ARIA support.
 - **Fix**: Renamed Categoria fields in types to match DB; removed 11
   any-casts that existed solely to bypass the drift.
 
-### BL.4 🟢 Plato del día / Plato ganador: warn when precio especial >= precio original
+### BL.4 ✅ Plato del día / Plato ganador: warn when precio especial >= precio original — CLOSED
+- **Closed**: 2026-05-10. Implemented in Plato del día form only — Plato ganador form has no `precioEspecial` field (state shape: `{ platoId, titulo, descripcion }`), so the original-price comparison does not apply there.
 - **Found**: 2026-04-30 during B.1.e investigation.
 - **Symptom**: Owner can configure a "special price" higher than or equal to the original plato price. While there are legitimate edge cases (premium feature dishes, etc.), in 99% of cases this is a configuration mistake.
 - **Acceptance**:
@@ -483,7 +514,8 @@ completa-perfil, and plato del día config. Full keyboard + ARIA support.
 - **Where**: src/app/menu/page.tsx — plato del día form, plato ganador form (same logic, both forms).
 - **Priority**: 🟢 nice-to-have UX guard. Plan to bundle with batch G alongside BL.3.
 
-### BL.3 🟢 Promo form: show final-price preview per plato
+### BL.3 ✅ Promo form: show final-price preview per plato — CLOSED
+- **Closed**: 2026-05-10.
 - **Found**: 2026-04-30 during B.1.d testing.
 - **Symptom**: When configuring a promo with valor (descuento or precio_especial), the user has to do mental math to figure out what the final price will be. Promos with multiple platos selected at very different price points (e.g., $5.000 and $50.000) can produce surprising results — owner may unintentionally configure a promo where one plato becomes effectively free or another costs more than original.
 - **Acceptance**:

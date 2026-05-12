@@ -1838,6 +1838,84 @@ export default function MiMenuPage() {
                         {errores.dias}
                       </div>
                     )}
+                    {(() => {
+                      const tipoSet = !!nuevaPromo.tipo
+                      const valorSet = nuevaPromo.tipo === 'dos_por_uno' || (nuevaPromo.valor && parseInt(nuevaPromo.valor) > 0)
+                      const hasPlatos = nuevaPromo.platoIds.length > 0
+
+                      if (!tipoSet || !valorSet || !hasPlatos) return null
+
+                      const todosPlatos = categorias.flatMap(c => c.platos)
+                      const platosSeleccionados = nuevaPromo.platoIds
+                        .map(id => todosPlatos.find(p => p.id === id))
+                        .filter(Boolean) as typeof todosPlatos
+
+                      return (
+                        <div style={{
+                          background: 'var(--color-green-light)',
+                          padding: '12px',
+                          borderRadius: '8px',
+                          marginBottom: '12px',
+                        }}>
+                          <div style={{ fontSize: '11px', fontWeight: 500, color: 'var(--color-green)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                            Vista previa
+                          </div>
+                          {nuevaPromo.tipo === 'dos_por_uno' ? (
+                            <div style={{ fontSize: '12px', color: 'var(--text-primary)' }}>
+                              Compra 2 lleva 1 gratis (ahorro 50% en el segundo)
+                            </div>
+                          ) : (
+                            platosSeleccionados.map(plato => {
+                              const original = plato.precio
+                              let final = 0
+                              let detalle = ''
+
+                              if (nuevaPromo.tipo === 'descuento') {
+                                const valorNum = parseInt(nuevaPromo.valor)
+                                final = Math.round(original * (1 - valorNum / 100))
+                                detalle = `-${valorNum}%`
+                              } else if (nuevaPromo.tipo === 'precio_especial') {
+                                final = parseInt(nuevaPromo.valor)
+                                const ahorro = original - final
+                                detalle = ahorro > 0
+                                  ? `ahorro $${ahorro.toLocaleString('es-CO')}`
+                                  : ahorro < 0
+                                    ? `+$${Math.abs(ahorro).toLocaleString('es-CO')}`
+                                    : 'sin cambio'
+                              }
+
+                              return (
+                                <div key={plato.id} style={{
+                                  fontSize: '12px',
+                                  color: 'var(--text-primary)',
+                                  padding: '4px 0',
+                                  display: 'flex',
+                                  justifyContent: 'space-between',
+                                  alignItems: 'center',
+                                  gap: '8px',
+                                }}>
+                                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {plato.nombre}:
+                                  </span>
+                                  <span style={{ flexShrink: 0 }}>
+                                    <span style={{ textDecoration: 'line-through', color: 'var(--text-tertiary)', fontSize: '11px' }}>
+                                      ${original.toLocaleString('es-CO')}
+                                    </span>
+                                    {' → '}
+                                    <span style={{ fontWeight: 500 }}>
+                                      ${final.toLocaleString('es-CO')}
+                                    </span>
+                                    <span style={{ fontSize: '11px', color: 'var(--color-green)', marginLeft: '4px' }}>
+                                      ({detalle})
+                                    </span>
+                                  </span>
+                                </div>
+                              )
+                            })
+                          )}
+                        </div>
+                      )
+                    })()}
                     {nuevaPromo.platoIds.length > 0 && (() => {
                       const platosConHorario = nuevaPromo.platoIds.map(id => ({ id, horario: getHorarioPlato(id) })).filter(p => p.horario)
                       if (platosConHorario.length === 0) return null
@@ -1988,6 +2066,34 @@ export default function MiMenuPage() {
                       {errores.precioEspecial}
                     </div>
                   )}
+                  {(() => {
+                    const platoSeleccionado = categorias
+                      .flatMap(c => c.platos)
+                      .find(p => p.id === platoDiaConfig.platoId)
+
+                    if (!platoSeleccionado) return null
+
+                    const precioEspNum = parseInt(platoDiaConfig.precioEspecial || '0')
+                    if (precioEspNum <= 0) return null
+
+                    if (precioEspNum >= platoSeleccionado.precio) {
+                      return (
+                        <div style={{
+                          background: 'var(--color-warning-light)',
+                          border: '1px solid var(--color-warning)',
+                          padding: '8px 12px',
+                          borderRadius: '6px',
+                          fontSize: '11px',
+                          color: 'var(--color-warning)',
+                          marginTop: '6px',
+                          marginBottom: '8px',
+                        }}>
+                          ⚠️ El precio especial es igual o mayor al precio original (${platoSeleccionado.precio.toLocaleString('es-CO')}). ¿Es correcto?
+                        </div>
+                      )
+                    }
+                    return null
+                  })()}
                   <div style={{ marginBottom: '12px' }}>
                     <label className="label">Horario del plato del día</label>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>

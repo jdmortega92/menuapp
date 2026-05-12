@@ -756,7 +756,7 @@ export default function ConfigPage() {
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginTop: '6px' }}>
                   <label style={{ cursor: 'pointer' }}>
                     <div style={{
-                      width: '56px', height: '56px', borderRadius: '12px',
+                      width: '56px', height: '56px', borderRadius: '50%',
                       border: logoUrl ? 'none' : '1px dashed var(--border-medium)',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       overflow: 'hidden',
