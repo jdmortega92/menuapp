@@ -2,13 +2,13 @@
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase-browser'
-import type { Usuario, Restaurante, Plan, ConfigRestaurante } from '@/types'
+import type { Usuario, Plan, ConfigRestaurante } from '@/types'
+import { useRestauranteByUserId } from './data/useRestauranteByUserId'
 
 // ── useAuth: estado del usuario ──
 export function useAuth() {
   const [usuario, setUsuario] = useState<Usuario | null>(null)
-  const [restaurante, setRestaurante] = useState<Restaurante | null>(null)
-  const [cargando, setCargando] = useState(true)
+  const [sessionCargando, setSessionCargando] = useState(true)
 
   useEffect(() => {
     const supabase = createClient()
@@ -29,19 +29,9 @@ export function useAuth() {
           nombre: user.user_metadata?.nombre || '',
           created_at: user.created_at,
         })
-
-        const { data: rest } = await supabase
-          .from('restaurantes')
-          .select('*')
-          .eq('usuario_id', user.id)
-          .single()
-
-        if (!isMounted) return // Verificar de nuevo después del await async
-
-        if (rest) setRestaurante(rest)
       }
 
-      if (isMounted) setCargando(false)
+      if (isMounted) setSessionCargando(false)
     }
 
     obtenerSesion()
@@ -59,7 +49,6 @@ export function useAuth() {
           })
         } else {
           setUsuario(null)
-          setRestaurante(null)
         }
       }
     )
@@ -70,7 +59,11 @@ export function useAuth() {
     }
   }, [])
 
-  return { usuario, restaurante, cargando }
+  const { data: restaurante, isLoading: restauranteCargando } = useRestauranteByUserId(usuario?.id ?? null)
+
+  const cargando = sessionCargando || (!!usuario && restauranteCargando)
+
+  return { usuario, restaurante: restaurante ?? null, cargando }
 }
 
 // ── usePlan: verificar funciones por plan ──

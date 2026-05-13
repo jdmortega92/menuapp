@@ -262,7 +262,10 @@ completa-perfil, and plato del día config. Full keyboard + ARIA support.
 **Status**:
 - ✅ H.1.a: useRestauranteBySlug (closed 2026-05-04)
 - ✅ H.1.b: 8 hooks for public menu data + useTick (closed 2026-05-06)
-- ⏳ H.1.c: Dashboard SWR migration (pending)
+- ⏳ H.1.c: Dashboard SWR migration (in progress)
+  - ✅ H.1.c.1: useAuth → SWR via useRestauranteByUserId (closed 2026-05-12)
+  - ⏳ H.1.c.2: /menu, /config migration + parametrize public hooks (pending)
+  - ⏳ H.1.c.3: /dashboard, /referidos, /qr, /suscripcion mutate() (pending)
 
 - **Why**: Currently every page does its own `supabase.from(...).select()` in `useEffect`. No caching, no deduplication, no automatic revalidation. Navigating between dashboard tabs re-fetches everything.
 - **Recommendation**: **SWR** (lighter, simpler, by Vercel — pairs naturally with Next.js).
