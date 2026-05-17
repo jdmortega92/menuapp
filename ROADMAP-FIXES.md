@@ -442,6 +442,32 @@ completa-perfil, and plato del día config. Full keyboard + ARIA support.
 
 ## Items
 
+### BL.12 ✅ Input lag in /menu form inputs — CLOSED
+- **Closed**: 2026-05-13.
+- **Found**: 2026-05-13 during smoke test after H.1.c.2.a deploy.
+- **Symptom**: Typing in form inputs (new category, new plato,
+  combo name, promo name, plato del día precio especial, etc.)
+  felt noticeably laggy. Search inputs were fluid.
+- **Root cause**: Every keystroke re-rendered the full /menu
+  component (2500 lines, 67 useStates). Inside the re-render,
+  several expensive computations ran inline without memoization:
+  - getHorarioPlato did O(categorias) linear scan per call.
+    Form selector lists called it once per plato → O(totalPlatos²)
+    per keystroke.
+  - platoDiaOptions and platoGanadorOptions rebuilt the full plato
+    list from scratch on every render.
+  - precioIndividualCombo did flatMap + find inline per render.
+  - categorias.flatMap(c => c.platos) appeared in ~10+ places,
+    each O(totalPlatos).
+- **Fix**: Level 1 — Precomputed horariosPorPlato Map via useMemo,
+  making getHorarioPlato O(1). Level 2 — Memoized todosPlatos,
+  precioIndividualCombo, platoDiaOptions, platoGanadorOptions via
+  useMemo. Replaced ~10 inline categorias.flatMap usages with
+  todosPlatos. Did NOT extract forms to separate components (left
+  as deferred deuda técnica, would be ~2h refactor for marginal
+  additional gain).
+- **Where**: src/app/menu/page.tsx.
+
 ### BL.11 ✅ Plato ganador modal incorrectly applies plato del día discount — CLOSED
 - **Closed**: 2026-05-13.
 - **Found**: 2026-05-10 during Batch G smoke test (documented in

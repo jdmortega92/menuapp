@@ -135,18 +135,8 @@ export default function MiMenuPage() {
   const [horarioCatInicio, setHorarioCatInicio] = useState('')
   const [horarioCatFin, setHorarioCatFin] = useState('')
 
-  // Helper: obtener horario de la categoría de un plato
-  function getHorarioPlato(platoId: string): { hora_inicio: string; hora_fin: string } | null {
-    for (const cat of categorias) {
-      if (cat.platos.some(p => p.id === platoId)) {
-        if (cat.hora_inicio && cat.hora_fin) {
-          return { hora_inicio: cat.hora_inicio, hora_fin: cat.hora_fin }
-        }
-        return null
-      }
-    }
-    return null
-  }
+  // getHorarioPlato + horariosPorPlato + todosPlatos viven más abajo,
+  // tras la declaración de `categorias` (useMemo) — ver BL.12.
 
   // Helper: detectar qué se afecta al poner horario a una categoría
   function detectarAfectados(catId: string): string[] {
@@ -164,7 +154,7 @@ export default function MiMenuPage() {
 
     // Promos
     promos.forEach(promo => {
-      const promoPlatos = categorias.flatMap(c => c.platos).filter(p => promo.platos?.includes(p.nombre))
+      const promoPlatos = todosPlatos.filter(p => promo.platos?.includes(p.nombre))
       if (promoPlatos.some(p => platosIds.includes(p.id))) {
         afectados.push(`Promo "${promo.nombre}" — solo visible en este horario`)
       }
@@ -586,6 +576,52 @@ export default function MiMenuPage() {
     }))
   }, [promosSwr, catsAndPlatos])
 
+  // ── Lookups derivados (BL.12) ──
+  // horariosPorPlato evita la búsqueda lineal de getHorarioPlato; lo vuelve O(1).
+  // todosPlatos centraliza el flatMap repetido en formularios de combo/promo/plato-día/ganador.
+  const horariosPorPlato = useMemo(() => {
+    const map = new Map<string, { hora_inicio: string; hora_fin: string }>()
+    for (const cat of categorias) {
+      if (cat.hora_inicio && cat.hora_fin) {
+        for (const p of cat.platos) {
+          map.set(p.id, { hora_inicio: cat.hora_inicio, hora_fin: cat.hora_fin })
+        }
+      }
+    }
+    return map
+  }, [categorias])
+
+  const todosPlatos = useMemo(() => categorias.flatMap(c => c.platos), [categorias])
+
+  function getHorarioPlato(platoId: string): { hora_inicio: string; hora_fin: string } | null {
+    return horariosPorPlato.get(platoId) ?? null
+  }
+
+  const platoDiaOptions = useMemo(() => {
+    return todosPlatos.map(p => {
+      const h = horariosPorPlato.get(p.id) ?? null
+      const precioStr = `$${p.precio.toLocaleString('es-CO')}`
+      const scheduleStr = h ? ` (⏰ ${h.hora_inicio}–${h.hora_fin})` : ''
+      return {
+        value: p.id,
+        label: (
+          <span>
+            {p.nombre} <span style={{ color: 'var(--text-tertiary)' }}>— {precioStr}{scheduleStr}</span>
+          </span>
+        ),
+        searchText: `${p.nombre} ${precioStr}${scheduleStr}`.toLowerCase(),
+      }
+    })
+  }, [todosPlatos, horariosPorPlato])
+
+  const platoGanadorOptions = useMemo(() => {
+    return todosPlatos.map(p => ({
+      value: p.id,
+      label: <span>{p.nombre} <span style={{ color: 'var(--text-tertiary)' }}>— ${p.precio.toLocaleString('es-CO')}</span></span>,
+      searchText: `${p.nombre} ${p.precio}`.toLowerCase(),
+    }))
+  }, [todosPlatos])
+
   // ── Seed MIXED states from SWR ──
   useEffect(() => {
     if (platoDiaSwr !== undefined) {
@@ -630,10 +666,12 @@ export default function MiMenuPage() {
       router.push('/login')
     }
   }, [cargandoAuth, usuario, router])
-  const precioIndividualCombo = nuevoCombo.platoIds.reduce((sum, id) => {
-    const plato = categorias.flatMap(c => c.platos).find(p => p.id === id)
-    return sum + (plato?.precio || 0)
-  }, 0)
+  const precioIndividualCombo = useMemo(() => {
+    return nuevoCombo.platoIds.reduce((sum, id) => {
+      const plato = todosPlatos.find(p => p.id === id)
+      return sum + (plato?.precio || 0)
+    }, 0)
+  }, [nuevoCombo.platoIds, todosPlatos])
   function validarCombo(state: { nombre: string; precio: string; platoIds: string[] }): Record<string, string> {
     const e: Record<string, string> = {}
     if (!state.nombre.trim()) e.nombre = 'El nombre es obligatorio'
@@ -1486,7 +1524,6 @@ export default function MiMenuPage() {
                 {mostrarFormCombo && (() => {
                   const errores = validarCombo(nuevoCombo)
                   const valido = Object.keys(errores).length === 0
-                  const todosPlatos = categorias.flatMap(c => c.platos)
                   const totalPlatosCombo = todosPlatos.length
                   const platosFiltradosCombo = busquedaPlatosCombo.trim()
                     ? todosPlatos.filter(p => p.nombre.toLowerCase().includes(busquedaPlatosCombo.toLowerCase()))
@@ -1702,11 +1739,10 @@ export default function MiMenuPage() {
                 {mostrarFormPromo && (() => {
                   const errores = validarPromo(nuevaPromo)
                   const valido = Object.keys(errores).length === 0
-                  const todosPlatosPromo = categorias.flatMap(c => c.platos)
-                  const totalPlatosPromo = todosPlatosPromo.length
+                  const totalPlatosPromo = todosPlatos.length
                   const platosFiltradosPromo = busquedaPlatosPromo.trim()
-                    ? todosPlatosPromo.filter(p => p.nombre.toLowerCase().includes(busquedaPlatosPromo.toLowerCase()))
-                    : todosPlatosPromo
+                    ? todosPlatos.filter(p => p.nombre.toLowerCase().includes(busquedaPlatosPromo.toLowerCase()))
+                    : todosPlatos
                   return (
                   <div className="card" style={{ padding: '14px', marginBottom: '14px' }}>
                     <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '10px' }}>{editandoPromoId ? 'Editar promoción' : 'Nueva promoción'}</div>
@@ -1844,7 +1880,6 @@ export default function MiMenuPage() {
 
                       if (!tipoSet || !valorSet || !hasPlatos) return null
 
-                      const todosPlatos = categorias.flatMap(c => c.platos)
                       const platosSeleccionados = nuevaPromo.platoIds
                         .map(id => todosPlatos.find(p => p.id === id))
                         .filter(Boolean) as typeof todosPlatos
@@ -2011,20 +2046,6 @@ export default function MiMenuPage() {
                       (intentoPlatoDia && touchedPlatoDia.platoId && errores.platoId) ||
                       (platoDiaConfig.platoId && platoGanadorActivo && platoGanadorConfig.platoId === platoDiaConfig.platoId)
                     )
-                    const platoDiaOptions = categorias.flatMap(c => c.platos).map(p => {
-                      const h = getHorarioPlato(p.id)
-                      const precioStr = `$${p.precio.toLocaleString('es-CO')}`
-                      const scheduleStr = h ? ` (⏰ ${h.hora_inicio}–${h.hora_fin})` : ''
-                      return {
-                        value: p.id,
-                        label: (
-                          <span>
-                            {p.nombre} <span style={{ color: 'var(--text-tertiary)' }}>— {precioStr}{scheduleStr}</span>
-                          </span>
-                        ),
-                        searchText: `${p.nombre} ${precioStr}${scheduleStr}`.toLowerCase(),
-                      }
-                    })
                     return (
                       <>
                         <div style={{ marginBottom: platoDiaErrorVisible ? '4px' : '8px' }}>
@@ -2125,11 +2146,11 @@ export default function MiMenuPage() {
                     }}>
                       <div style={{ fontSize: '11px', fontWeight: 500, color: 'var(--color-accent)', marginBottom: '4px' }}>Vista previa</div>
                       <div style={{ fontSize: '14px', fontWeight: 500 }}>
-                        {categorias.flatMap(c => c.platos).find(p => p.id === platoDiaConfig.platoId)?.nombre}
+                        {todosPlatos.find(p => p.id === platoDiaConfig.platoId)?.nombre}
                       </div>
                       <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px' }}>
                         <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', textDecoration: 'line-through' }}>
-                          ${categorias.flatMap(c => c.platos).find(p => p.id === platoDiaConfig.platoId)?.precio.toLocaleString('es-CO')}
+                          ${todosPlatos.find(p => p.id === platoDiaConfig.platoId)?.precio.toLocaleString('es-CO')}
                         </span>
                         <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--color-accent)' }}>
                           ${parseInt(platoDiaConfig.precioEspecial).toLocaleString('es-CO')}
@@ -2174,11 +2195,6 @@ export default function MiMenuPage() {
                 { value: 'Especialidad de la casa', label: 'Especialidad de la casa' },
                 { value: 'El más pedido', label: 'El más pedido' },
               ]
-              const platoGanadorOptions = categorias.flatMap(c => c.platos).map(p => ({
-                value: p.id,
-                label: <span>{p.nombre} <span style={{ color: 'var(--text-tertiary)' }}>— ${p.precio.toLocaleString('es-CO')}</span></span>,
-                searchText: `${p.nombre} ${p.precio}`.toLowerCase(),
-              }))
               const platoGanadorErrorVisible = !!(
                 (intentoGanador && touchedGanador.platoId && errores.platoId) ||
                 (platoGanadorConfig.platoId && platoDiaActivo && platoDiaConfig.platoId === platoGanadorConfig.platoId)
@@ -2255,7 +2271,7 @@ export default function MiMenuPage() {
                         <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--color-warning)' }}>{platoGanadorConfig.titulo.toUpperCase()}</span>
                       </div>
                       <div style={{ fontSize: '14px', fontWeight: 500 }}>
-                        {categorias.flatMap(c => c.platos).find(p => p.id === platoGanadorConfig.platoId)?.nombre}
+                        {todosPlatos.find(p => p.id === platoGanadorConfig.platoId)?.nombre}
                       </div>
                       {platoGanadorConfig.descripcion && (
                         <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px', fontStyle: 'italic' }}>
@@ -2263,7 +2279,7 @@ export default function MiMenuPage() {
                         </div>
                       )}
                       <div style={{ fontSize: '13px', fontWeight: 500, marginTop: '4px' }}>
-                        ${categorias.flatMap(c => c.platos).find(p => p.id === platoGanadorConfig.platoId)?.precio.toLocaleString('es-CO')}
+                        ${todosPlatos.find(p => p.id === platoGanadorConfig.platoId)?.precio.toLocaleString('es-CO')}
                       </div>
                     </div>
                   )}
