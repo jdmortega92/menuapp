@@ -25,7 +25,7 @@ function invalidateAll(prefix: string) {
   return globalMutate(
     (key) => Array.isArray(key) && key[0] === prefix,
     undefined,
-    { revalidate: true },
+    { revalidate: true, populateCache: false },
   )
 }
 
@@ -54,8 +54,8 @@ export default function MiMenuPage() {
   // ── SWR data hooks ──
   const { data: catsAndPlatos, mutate: mutateCategoriasYPlatos } = useCategoriasYPlatos(rest?.id)
   const { data: platoDiaSwr } = usePlatoDelDia(rest?.id, { includeInactive: true })
-  const { data: combosSwr } = useCombos(rest?.id, { includeInactive: true })
-  const { data: promosSwr } = usePromos(rest?.id, { includeInactive: true })
+  const { data: combosSwr, mutate: mutateCombos } = useCombos(rest?.id, { includeInactive: true })
+  const { data: promosSwr, mutate: mutatePromos } = usePromos(rest?.id, { includeInactive: true })
   const { data: configSwr, mutate: mutateConfig } = useConfigRestaurante(rest?.id)
   const { data: platoGanadorSwr } = usePlatoGanador(rest?.id, { includeInactive: true })
 
@@ -446,8 +446,24 @@ export default function MiMenuPage() {
   async function togglePromo(id: string) {
     const promo = promos.find(p => p.id === id)
     if (!promo) return
+
+    const newActivo = !promo.activo
+    await mutatePromos(
+      (current: any) => current?.map((p: any) =>
+        p.id === id ? { ...p, activo: newActivo } : p
+      ),
+      { revalidate: false }
+    )
+
     const supabase = createClient()
-    await supabase.from('promos').update({ activo: !promo.activo }).eq('id', id)
+    const { error } = await supabase.from('promos').update({ activo: newActivo }).eq('id', id)
+
+    if (error) {
+      console.error('Error toggling promo:', error)
+      await invalidateAll('promos')
+      return
+    }
+
     await invalidateAll('promos')
   }
   async function eliminarPromo(id: string) {
@@ -806,8 +822,24 @@ export default function MiMenuPage() {
   async function toggleCombo(id: string) {
     const combo = combos.find(c => c.id === id)
     if (!combo) return
+
+    const newActivo = !combo.activo
+    await mutateCombos(
+      (current: any) => current?.map((c: any) =>
+        c.id === id ? { ...c, activo: newActivo } : c
+      ),
+      { revalidate: false }
+    )
+
     const supabase = createClient()
-    await supabase.from('combos').update({ activo: !combo.activo }).eq('id', id)
+    const { error } = await supabase.from('combos').update({ activo: newActivo }).eq('id', id)
+
+    if (error) {
+      console.error('Error toggling combo:', error)
+      await invalidateAll('combos')
+      return
+    }
+
     await invalidateAll('combos')
   }
   async function eliminarCombo(id: string) {
@@ -961,8 +993,28 @@ export default function MiMenuPage() {
     const cat = categorias.find(c => c.id === categoriaId)
     const plato = cat?.platos.find(p => p.id === platoId)
     if (!plato) return
+
+    const newDisponible = !plato.disponible
+
+    await mutateCategoriasYPlatos(
+      (current: any) => current ? {
+        ...current,
+        platos: current.platos.map((p: any) =>
+          p.id === platoId ? { ...p, disponible: newDisponible } : p
+        ),
+      } : current,
+      { revalidate: false }
+    )
+
     const supabase = createClient()
-    await supabase.from('platos').update({ disponible: !plato.disponible }).eq('id', platoId)
+    const { error } = await supabase.from('platos').update({ disponible: newDisponible }).eq('id', platoId)
+
+    if (error) {
+      console.error('Error toggling plato disponible:', error)
+      await mutateCategoriasYPlatos()
+      return
+    }
+
     await mutateCategoriasYPlatos()
   }
   async function eliminarPlato(categoriaId: string, platoId: string) {
@@ -1506,7 +1558,7 @@ export default function MiMenuPage() {
             {/* === COMBOS === */}
             {subTab === 'combos' && (
               <div style={{ padding: '14px 20px' }}>
-                {combos.length === 0 && !mostrarFormCombo ? (
+                {combosSwr !== undefined && combos.length === 0 && !mostrarFormCombo ? (
                   <div style={{ textAlign: 'center', padding: '30px 0' }}>
                     <div style={{ fontSize: '32px', marginBottom: '8px' }}>🍱</div>
                     <div style={{ fontSize: '14px', fontWeight: 500, marginBottom: '4px' }}>Sin combos</div>
@@ -1721,7 +1773,7 @@ export default function MiMenuPage() {
             {/* === PROMOS === */}
             {subTab === 'promos' && (
               <div style={{ padding: '14px 20px' }}>
-                {promos.length === 0 && !mostrarFormPromo ? (
+                {promosSwr !== undefined && promos.length === 0 && !mostrarFormPromo ? (
                   <div style={{ textAlign: 'center', padding: '30px 0' }}>
                     <div style={{ fontSize: '32px', marginBottom: '8px' }}>🏷️</div>
                     <div style={{ fontSize: '14px', fontWeight: 500, marginBottom: '4px' }}>Sin promociones</div>

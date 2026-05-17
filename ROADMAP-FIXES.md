@@ -442,6 +442,78 @@ completa-perfil, and plato del día config. Full keyboard + ARIA support.
 
 ## Items
 
+### BL.14 ✅ Toggle flicker in /menu (combos, promos, agotar plato) — CLOSED
+- **Closed**: 2026-05-13.
+- **Found**: 2026-05-13 during smoke test after H.1.c.2.a.
+- **Symptom**: Clicking toggle switches for combos, promos, or the
+  "Agotar" button on plato cards showed a brief visual flicker:
+  the UI didn't update immediately, and during the revalidation
+  window (~200-400ms) intermediate cache states could briefly
+  render empty data.
+- **Root cause**: After H.1.c.2.a, toggle handlers performed the
+  DB UPDATE, then called invalidateAll(prefix) which forces a full
+  re-fetch from DB. During the network round-trip, the SWR cache
+  transitioned through intermediate states.
+- **Fix**: Optimistic updates pattern. Each toggle now:
+  1. Mutates the admin-variant SWR cache immediately with the new
+     state (revalidate: false).
+  2. Awaits the DB UPDATE.
+  3. On success, invalidateAll to revalidate both admin and public
+     variants.
+  4. On DB error, calls invalidateAll to revert to DB truth.
+  Same pattern as BL.9 reorder, proven reliable.
+- **Where**: src/app/menu/page.tsx — toggleCombo, togglePromo,
+  toggleDisponible.
+- **Follow-up (2026-05-17)**: Initial optimistic update fix worked
+  for the toggle state itself, but residual flicker remained because
+  invalidateAll's revalidation passes the SWR cache through an
+  undefined state briefly. The combos/promos JSX treated
+  `combos.length === 0` as "empty state" even during revalidation.
+  Updated the conditions to also require combosSwr !== undefined /
+  promosSwr !== undefined before showing the empty state. Loading
+  state now falls through to the populated branch (which renders
+  empty gracefully).
+- **Follow-up #2 (2026-05-17)**: The previous follow-up surfaced a
+  deeper bug: clicking a toggle now showed a brief BLANK SCREEN
+  instead of "Sin combos". Root cause: invalidateAll was defined as
+  `globalMutate(matcher, undefined, { revalidate: true })`. The
+  undefined second arg synchronously WRITES undefined into the
+  cache before the refetch resolves, causing combosSwr to flicker
+  through undefined for the ~200-400ms fetch window. The combos
+  useMemo (`if (!combosSwr) return []`) returned [], and
+  combos.map([]) rendered nothing, leaving a blank list.
+  Fix: added `populateCache: false` to the invalidateAll mutate
+  options. SWR now revalidates without clearing the existing cache,
+  so subscribers see the stale (still-correct) data during the
+  refetch. This one-line change benefits ALL ~22 callers of
+  invalidateAll, not just the toggle handlers — any prior latent
+  flicker in those flows is also eliminated.
+
+### BL.13 🟡 Extract /menu form sections to separate memoized components — DEFERRED
+- **Found**: 2026-05-13 during BL.12 fix (input lag remediation).
+- **Symptom**: Even after BL.12's memoization fix (Level 1+2), some
+  residual input lag may remain in form inputs because /menu is a
+  monolithic 2500-line component holding 67 useStates. Every form
+  keystroke still re-renders the full categoria × plato list and the
+  unmemoized inline JSX of the open form section.
+- **Proposed fix (Level 3)**: Extract each form into its own React
+  component wrapped in React.memo:
+  - <ComboForm />, <PromoForm />, <PlatoDelDiaForm />, <PlatoGanadorForm />,
+    <CategoriaForm />, <PlatoForm />.
+  - Each form receives only the props it needs (todosPlatos,
+    horariosPorPlato, save/cancel handlers as stable useCallback refs).
+  - The parent /menu component would no longer re-render the form on
+    every keystroke; only the form component itself.
+- **Estimated effort**: ~1.5-2 hours of refactor + extensive smoke
+  test. High risk of subtle regressions (BL.3, BL.4, BL.8 validations;
+  BL.9 reorder; BL.10 persistence).
+- **Priority**: 🟡 medium — depends on whether residual lag is
+  user-visible. Consider bundling with F2 (refactor [slug]/page.tsx)
+  since both pages share similar monolithic patterns.
+- **Status**: DEFERRED. Awaiting decision in a future session.
+- **Where**: src/app/menu/page.tsx — form sections under tabActiva ===
+  'combos' subtabs.
+
 ### BL.12 ✅ Input lag in /menu form inputs — CLOSED
 - **Closed**: 2026-05-13.
 - **Found**: 2026-05-13 during smoke test after H.1.c.2.a deploy.
