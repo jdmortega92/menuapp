@@ -1,6 +1,6 @@
 'use client'
 
-import useSWR from 'swr'
+import useSWR, { SWRResponse } from 'swr'
 import { createClient } from '@/lib/supabase-browser'
 import type { DiaSemana } from '@/types'
 
@@ -18,7 +18,21 @@ export interface ComboPublico {
   horario_fin: string | null
 }
 
-async function fetchCombos(restauranteId: string): Promise<ComboPublico[]> {
+export interface ComboAdmin {
+  id: string
+  restaurante_id: string
+  nombre: string
+  descripcion: string | null
+  precio: number
+  precio_individual: number
+  activo: boolean
+  dias: DiaSemana[] | null
+  horario_inicio: string | null
+  horario_fin: string | null
+  combo_platos: { plato_id: string; platos?: { nombre: string; precio: number } | null }[]
+}
+
+async function fetchCombosPublic(restauranteId: string): Promise<ComboPublico[]> {
   const supabase = createClient()
   const { data } = await supabase
     .from('combos')
@@ -41,13 +55,39 @@ async function fetchCombos(restauranteId: string): Promise<ComboPublico[]> {
   }))
 }
 
-export function useCombos(restauranteId: string | null | undefined) {
-  return useSWR(
-    restauranteId ? ['combos', restauranteId] : null,
-    () => fetchCombos(restauranteId!),
+async function fetchCombosAdmin(restauranteId: string): Promise<ComboAdmin[]> {
+  const supabase = createClient()
+  const { data } = await supabase
+    .from('combos')
+    .select('*, combo_platos(plato_id, platos(nombre, precio))')
+    .eq('restaurante_id', restauranteId)
+  return (data ?? []) as ComboAdmin[]
+}
+
+interface UseCombosFn {
+  (restauranteId: string | null | undefined): SWRResponse<ComboPublico[], any>
+  (
+    restauranteId: string | null | undefined,
+    options: { includeInactive: true },
+  ): SWRResponse<ComboAdmin[], any>
+}
+
+const useCombosImpl = (
+  restauranteId: string | null | undefined,
+  options?: { includeInactive?: boolean },
+) => {
+  const includeInactive = !!options?.includeInactive
+  return useSWR<ComboPublico[] | ComboAdmin[]>(
+    restauranteId ? ['combos', restauranteId, { includeInactive }] : null,
+    async () =>
+      includeInactive
+        ? fetchCombosAdmin(restauranteId!)
+        : fetchCombosPublic(restauranteId!),
     {
       revalidateOnFocus: true,
       dedupingInterval: 5000,
-    }
+    },
   )
 }
+
+export const useCombos: UseCombosFn = useCombosImpl as UseCombosFn

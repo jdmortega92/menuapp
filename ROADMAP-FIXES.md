@@ -2,7 +2,7 @@
 
 > **Audience**: Claude Code (Opus) working on the MenuApp codebase.
 > **Owner**: Julian.
-> **Last updated**: 2026-05-12.
+> **Last updated**: 2026-05-13.
 > **Stack**: Next.js 16 (App Router) + TypeScript + Tailwind + Supabase + Vercel.
 
 ---
@@ -264,7 +264,9 @@ completa-perfil, and plato del día config. Full keyboard + ARIA support.
 - ✅ H.1.b: 8 hooks for public menu data + useTick (closed 2026-05-06)
 - ⏳ H.1.c: Dashboard SWR migration (in progress)
   - ✅ H.1.c.1: useAuth → SWR via useRestauranteByUserId (closed 2026-05-12)
-  - ⏳ H.1.c.2: /menu, /config migration + parametrize public hooks (pending)
+  - ⏳ H.1.c.2: /menu + /config migration + parametrize public hooks (in progress)
+    - ✅ H.1.c.2.a: parametrize 4 hooks (usePromos, usePlatoDelDia, usePlatoGanador, useCombos) + migrate /menu + BL.9 reorder fix (closed 2026-05-13)
+    - ⏳ H.1.c.2.b: migrate /config (pending)
   - ⏳ H.1.c.3: /dashboard, /referidos, /qr, /suscripcion mutate() (pending)
 
 - **Why**: Currently every page does its own `supabase.from(...).select()` in `useEffect`. No caching, no deduplication, no automatic revalidation. Navigating between dashboard tabs re-fetches everything.
@@ -439,6 +441,42 @@ completa-perfil, and plato del día config. Full keyboard + ARIA support.
 ```
 
 ## Items
+
+### BL.10 ✅ Plato del día / ganador persistence broken after H.1.c.2.a — CLOSED
+- **Closed**: 2026-05-13. Bundled with H.1.c.2.a commit.
+- **Found**: 2026-05-13 via browser-automation smoke test.
+- **Symptom**: After saving plato del día or plato ganador, the form
+  appeared to save (INSERT returned 201) but on page reload, the
+  form was empty. Button never changed from "Guardar" to "Actualizar".
+  "Desactivar" button never appeared. No "Guardando..." / "✓ Guardado"
+  visual feedback.
+- **Root cause**: The mutation pattern was UPDATE all rows to
+  activo=false, then INSERT new row with activo=true. This left
+  multiple rows in DB for the same restaurante (1 active + N inactive
+  historical). The admin variant fetcher uses .maybeSingle() which
+  throws when multiple rows exist, causing SWR to return null. The
+  seed useEffect saw null and reset platoDiaActivo to false.
+- **Fix**: Replaced UPDATE+INSERT pattern with DELETE+INSERT.
+  Now exactly 0 or 1 row exists per restaurante in plato_del_dia
+  and plato_ganador tables. maybeSingle never throws. Also added
+  explicit local setPlatoDiaActivo(true) / setPlatoGanadorActivo(true)
+  immediately after successful INSERT to provide instant UI feedback,
+  not waiting for SWR revalidation.
+- **Where**: src/app/menu/page.tsx — guardarPlatoDia,
+  guardarPlatoGanador, desactivarPlatoDia, desactivarPlatoGanador.
+
+### BL.9 ✅ Category/dish reordering doesn't persist — CLOSED
+- **Closed**: 2026-05-13. Implemented alongside H.1.c.2.a.
+- **Found**: 2026-05-13 during H.1.c.2.a investigation.
+- **Symptom**: Before H.1.c.2.a, moverCategoria and moverPlato only
+  reordered local state (no DB write); after a page reload, the
+  original order returned. During H.1.c.2.a these became no-ops
+  entirely because the local state mirror was replaced by SWR.
+- **Fix**: Both functions now perform an optimistic SWR mutate
+  (visual reorder before DB confirms), persist the swap via two
+  parallel UPDATE queries on the `orden` field, then revalidate.
+  On UPDATE error, revalidates to revert to DB truth.
+- **Where**: src/app/menu/page.tsx — moverCategoria and moverPlato.
 
 ### BL.8 ✅ Plato configurado como ganador Y plato del día simultáneamente — CLOSED
 - **Closed**: 2026-05-12.

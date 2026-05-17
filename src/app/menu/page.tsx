@@ -1,8 +1,15 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import { mutate as globalMutate } from 'swr'
 import { useAuth } from '@/hooks'
+import { useCategoriasYPlatos } from '@/hooks/data/useCategoriasYPlatos'
+import { usePlatoDelDia } from '@/hooks/data/usePlatoDelDia'
+import { useCombos } from '@/hooks/data/useCombos'
+import { usePromos } from '@/hooks/data/usePromos'
+import { useConfigRestaurante } from '@/hooks/data/useConfigRestaurante'
+import { usePlatoGanador } from '@/hooks/data/usePlatoGanador'
 import { createClient } from '@/lib/supabase-browser'
 import Cropper from 'react-easy-crop'
 import TimePicker from '@/components/ui/TimePicker'
@@ -13,6 +20,14 @@ import Select from '@/components/ui/Select'
 import DiasSelector from '@/components/ui/DiasSelector'
 import { formato12h } from '@/lib/time'
 import type { DiaSemana } from '@/types'
+
+function invalidateAll(prefix: string) {
+  return globalMutate(
+    (key) => Array.isArray(key) && key[0] === prefix,
+    undefined,
+    { revalidate: true },
+  )
+}
 
 function formatDiasShort(dias: string[]): string {
   const map: Record<string, string> = {
@@ -35,7 +50,16 @@ export default function MiMenuPage() {
   const plan = (rest?.plan || 'gratis') as string
   const esPro = plan === 'pro'
   const esBasico = plan === 'basico' || plan === 'pro'
-  const [cargandoMenu, setCargandoMenu] = useState(true)
+
+  // ── SWR data hooks ──
+  const { data: catsAndPlatos, mutate: mutateCategoriasYPlatos } = useCategoriasYPlatos(rest?.id)
+  const { data: platoDiaSwr } = usePlatoDelDia(rest?.id, { includeInactive: true })
+  const { data: combosSwr } = useCombos(rest?.id, { includeInactive: true })
+  const { data: promosSwr } = usePromos(rest?.id, { includeInactive: true })
+  const { data: configSwr, mutate: mutateConfig } = useConfigRestaurante(rest?.id)
+  const { data: platoGanadorSwr } = usePlatoGanador(rest?.id, { includeInactive: true })
+
+  const cargandoMenu = !catsAndPlatos || !configSwr
   const [tabActiva, setTabActiva] = useState<'platos' | 'combos' | 'sorprendeme'>('platos')
   const [busqueda, setBusqueda] = useState('')
   const [mostrarFormCategoria, setMostrarFormCategoria] = useState(false)
@@ -111,9 +135,6 @@ export default function MiMenuPage() {
   const [horarioCatInicio, setHorarioCatInicio] = useState('')
   const [horarioCatFin, setHorarioCatFin] = useState('')
 
-  const [combos, setCombos] = useState<any[]>([])
-  const [promos, setPromos] = useState<any[]>([])
-
   // Helper: obtener horario de la categoría de un plato
   function getHorarioPlato(platoId: string): { hora_inicio: string; hora_fin: string } | null {
     for (const cat of categorias) {
@@ -172,7 +193,7 @@ export default function MiMenuPage() {
       hora_inicio: horarioCatInicio || null,
       hora_fin: horarioCatFin || null,
     }).eq('id', horarioCategoria)
-    setCategorias(categorias.map(c => c.id === horarioCategoria ? { ...c, hora_inicio: horarioCatInicio || null, hora_fin: horarioCatFin || null } : c))
+    await mutateCategoriasYPlatos()
     setGuardandoHorarioCat(false)
     setGuardadoHorarioCat(true)
     setTimeout(() => {
@@ -186,6 +207,7 @@ export default function MiMenuPage() {
     if (!rest?.id) return
     const supabase = createClient()
     await supabase.from('config_restaurante').update({ sorprendeme_categorias: nuevas }).eq('restaurante_id', rest.id)
+    await mutateConfig()
   }
   
   function validarPlatoDia(
@@ -215,8 +237,10 @@ export default function MiMenuPage() {
     const supabase = createClient()
     const fechaColombia = new Date(new Date().getTime() - 5 * 60 * 60 * 1000).toISOString().split('T')[0]
 
-    // Desactivar cualquier plato del día anterior
-    await supabase.from('plato_del_dia').update({ activo: false }).eq('restaurante_id', rest.id)
+    // Borrar cualquier plato del día anterior (activo o no) para garantizar
+    // exactamente 0 o 1 fila por restaurante — maybeSingle() en el hook
+    // lanza error con múltiples filas y SWR devolvería null silenciosamente.
+    await supabase.from('plato_del_dia').delete().eq('restaurante_id', rest.id)
 
     // Insertar nuevo
     await supabase.from('plato_del_dia').insert({
@@ -230,6 +254,7 @@ export default function MiMenuPage() {
     })
 
     setPlatoDiaActivo(true)
+    await invalidateAll('plato-del-dia')
     setGuardandoPlatoDia(false)
     setGuardadoPlatoDia(true)
     setTimeout(() => setGuardadoPlatoDia(false), 1200)
@@ -259,7 +284,9 @@ export default function MiMenuPage() {
     setGuardandoGanador(true)
     const supabase = createClient()
 
-    await supabase.from('plato_ganador').update({ activo: false }).eq('restaurante_id', rest.id)
+    // Borrar cualquier plato ganador anterior para garantizar exactamente
+    // 0 o 1 fila por restaurante (ver nota en guardarPlatoDia).
+    await supabase.from('plato_ganador').delete().eq('restaurante_id', rest.id)
 
     await supabase.from('plato_ganador').insert({
       restaurante_id: rest.id,
@@ -270,6 +297,7 @@ export default function MiMenuPage() {
     })
 
     setPlatoGanadorActivo(true)
+    await invalidateAll('plato-ganador')
     setGuardandoGanador(false)
     setGuardadoGanador(true)
     setTimeout(() => setGuardadoGanador(false), 1200)
@@ -278,17 +306,19 @@ export default function MiMenuPage() {
   async function desactivarPlatoGanador() {
     if (!rest?.id) return
     const supabase = createClient()
-    await supabase.from('plato_ganador').update({ activo: false }).eq('restaurante_id', rest.id)
+    await supabase.from('plato_ganador').delete().eq('restaurante_id', rest.id)
     setPlatoGanadorActivo(false)
     setPlatoGanadorConfig({ platoId: '', titulo: 'Recomendado del chef', descripcion: '' })
+    await invalidateAll('plato-ganador')
   }
-  
+
   async function desactivarPlatoDia() {
     if (!rest?.id) return
     const supabase = createClient()
-    await supabase.from('plato_del_dia').update({ activo: false }).eq('restaurante_id', rest.id)
+    await supabase.from('plato_del_dia').delete().eq('restaurante_id', rest.id)
     setPlatoDiaActivo(false)
     setPlatoDiaConfig({ platoId: '', precioEspecial: '', horaInicio: '11:00', horaFin: '15:00' })
+    await invalidateAll('plato-del-dia')
   }
 
   function validarPromo(state: { nombre: string; tipo: string; valor: string; dias: string[]; platoIds: string[] }): Record<string, string> {
@@ -350,12 +380,7 @@ export default function MiMenuPage() {
       return
     }
 
-    const platosNombres = nuevaPromo.platoIds.map(id => categorias.flatMap(c => c.platos).find(p => p.id === id)?.nombre || '')
-    setPromos([...promos, {
-      id: promoData.id, nombre: promoData.nombre, tipo: promoData.tipo,
-      valor: promoData.valor?.toString() || '', dias: promoData.dias || [], activo: true,
-      platos: platosNombres, descripcion: nuevaPromo.descripcion,
-    }])
+    await invalidateAll('promos')
     setGuardandoPromo(false)
     setGuardadoPromo(true)
     setTimeout(() => {
@@ -415,17 +440,7 @@ export default function MiMenuPage() {
       return
     }
 
-    const platosNombres = nuevaPromo.platoIds.map(id => categorias.flatMap(c => c.platos).find(p => p.id === id)?.nombre || '')
-    setPromos(promos.map(p => p.id === editandoPromoId ? {
-      ...p,
-      nombre: nuevaPromo.nombre,
-      tipo: nuevaPromo.tipo,
-      valor: nuevaPromo.valor || '',
-      dias: nuevaPromo.dias,
-      platos: platosNombres,
-      descripcion: nuevaPromo.descripcion,
-      activo: wasActive,
-    } : p))
+    await invalidateAll('promos')
     setGuardandoPromo(false)
     setGuardadoPromo(true)
     setTimeout(() => {
@@ -443,13 +458,13 @@ export default function MiMenuPage() {
     if (!promo) return
     const supabase = createClient()
     await supabase.from('promos').update({ activo: !promo.activo }).eq('id', id)
-    setPromos(promos.map(p => p.id === id ? { ...p, activo: !p.activo } : p))
+    await invalidateAll('promos')
   }
   async function eliminarPromo(id: string) {
     const supabase = createClient()
     await supabase.from('promo_platos').delete().eq('promo_id', id)
     await supabase.from('promos').delete().eq('id', id)
-    setPromos(promos.filter(p => p.id !== id))
+    await invalidateAll('promos')
   }
 
   const MAX_DESC = 150
@@ -508,149 +523,106 @@ export default function MiMenuPage() {
 
     await supabase.from('platos').update({ foto_url }).eq('id', cropModal.platoId)
 
-    setCategorias(categorias.map(c => {
-      if (c.id === cropModal.categoriaId) {
-        return { ...c, platos: c.platos.map(p => p.id === cropModal.platoId ? { ...p, foto_url } : p) }
-      }
-      return c
-    }))
+    await mutateCategoriasYPlatos()
     setSubiendoFoto(false)
   }
 
-  const [categorias, setCategorias] = useState<Categoria[]>([])
-  // Cargar categorías y platos de Supabase
-  useEffect(() => {
-    if (!rest?.id) return
-
-    async function cargar() {
-      const supabase = createClient()
-
-      const { data: cats } = await supabase
-        .from('categorias')
-        .select('*')
-        .eq('restaurante_id', rest!.id)
-        .order('orden', { ascending: true })
-
-      const { data: platos } = await supabase
-        .from('platos')
-        .select('*')
-        .eq('restaurante_id', rest!.id)
-        .order('orden', { ascending: true })
-
-      if (cats) {
-        const categoriasConPlatos = cats.map(cat => ({
-          id: cat.id,
-          nombre: cat.nombre,
-          orden: cat.orden,
-          hora_inicio: cat.hora_inicio || null,
-          hora_fin: cat.hora_fin || null,
-          platos: (platos || [])
-            .filter(p => p.categoria_id === cat.id)
-            .map(p => ({
-              id: p.id,
-              nombre: p.nombre,
-              precio: p.precio,
-              descripcion: p.descripcion || '',
-              disponible: p.disponible,
-              foto_url: p.foto_url,
-            })),
-        }))
-        setCategorias(categoriasConPlatos)
-      }
-      // Cargar plato del día
-      const { data: pdData } = await supabase
-        .from('plato_del_dia')
-        .select('*')
-        .eq('restaurante_id', rest!.id)
-        .eq('activo', true)
-        .maybeSingle()
-
-      if (pdData) {
-        setPlatoDiaConfig({
-          platoId: pdData.plato_id || '',
-          precioEspecial: pdData.precio_especial?.toString() || '',
-          horaInicio: pdData.horario_inicio || '11:00',
-          horaFin: pdData.horario_fin || '15:00',
-        })
-        setPlatoDiaActivo(true)
-      }
-      // Cargar combos
-      const { data: combosData } = await supabase
-        .from('combos')
-        .select('*, combo_platos(plato_id)')
-        .eq('restaurante_id', rest!.id)
-
-      if (combosData) {
-        const combosConNombres = combosData.map((c: any) => ({
-          id: c.id,
-          nombre: c.nombre,
-          descripcion: c.descripcion || '',
-          precio: c.precio,
-          precioIndividual: c.precio_individual,
-          activo: c.activo,
-          platosIds: c.combo_platos?.map((cp: any) => cp.plato_id) || [],
-          platos: c.combo_platos?.map((cp: any) => {
-            const plato = (platos || []).find((p: any) => p.id === cp.plato_id)
-            return plato?.nombre || 'Plato'
-          }) || [],
-          dias: c.dias || [],
-          horario_inicio: c.horario_inicio || null,
-          horario_fin: c.horario_fin || null,
-        }))
-        setCombos(combosConNombres)
-      }
-      // Cargar promos
-      const { data: promosData } = await supabase
-        .from('promos')
-        .select('*, promo_platos(plato_id)')
-        .eq('restaurante_id', rest!.id)
-
-      if (promosData) {
-        setPromos(promosData.map((p: any) => ({
+  // ── Derived data (replaces removed read-effect) ──
+  const categorias = useMemo<Categoria[]>(() => {
+    if (!catsAndPlatos) return []
+    return catsAndPlatos.categorias.map((cat: any) => ({
+      id: cat.id,
+      nombre: cat.nombre,
+      orden: cat.orden,
+      hora_inicio: cat.hora_inicio || null,
+      hora_fin: cat.hora_fin || null,
+      platos: catsAndPlatos.platos
+        .filter((p: any) => p.categoria_id === cat.id)
+        .map((p: any) => ({
           id: p.id,
           nombre: p.nombre,
+          precio: p.precio,
           descripcion: p.descripcion || '',
-          tipo: p.tipo,
-          valor: p.valor?.toString() || '',
-          dias: p.dias || [],
-          activo: p.activo,
-          platos: p.promo_platos?.map((pp: any) => {
-            const plato = (platos || []).find((pl: any) => pl.id === pp.plato_id)
-            return plato?.nombre || 'Plato'
-          }) || [],
-        })))
-      }
-    // Cargar config sorpréndeme
-      const { data: confData } = await supabase
-        .from('config_restaurante')
-        .select('sorprendeme_categorias')
-        .eq('restaurante_id', rest!.id)
-        .maybeSingle()
+          disponible: p.disponible,
+          foto_url: p.foto_url,
+        })),
+    }))
+  }, [catsAndPlatos])
 
-      if (confData?.sorprendeme_categorias) {
-        setSorprendemeCatsMenu(confData.sorprendeme_categorias)
-      }
-    // Cargar plato ganador
-      const { data: pgData } = await supabase
-        .from('plato_ganador')
-        .select('*')
-        .eq('restaurante_id', rest!.id)
-        .eq('activo', true)
-        .maybeSingle()
+  const combos = useMemo<any[]>(() => {
+    if (!combosSwr || !catsAndPlatos) return []
+    return combosSwr.map((c: any) => ({
+      id: c.id,
+      nombre: c.nombre,
+      descripcion: c.descripcion || '',
+      precio: c.precio,
+      precioIndividual: c.precio_individual,
+      activo: c.activo,
+      platosIds: c.combo_platos?.map((cp: any) => cp.plato_id) || [],
+      platos: c.combo_platos?.map((cp: any) => {
+        const plato = catsAndPlatos.platos.find((p: any) => p.id === cp.plato_id)
+        return plato?.nombre || 'Plato'
+      }) || [],
+      dias: c.dias || [],
+      horario_inicio: c.horario_inicio || null,
+      horario_fin: c.horario_fin || null,
+    }))
+  }, [combosSwr, catsAndPlatos])
 
-      if (pgData) {
+  const promos = useMemo<any[]>(() => {
+    if (!promosSwr || !catsAndPlatos) return []
+    return promosSwr.map((p: any) => ({
+      id: p.id,
+      nombre: p.nombre,
+      descripcion: p.descripcion || '',
+      tipo: p.tipo,
+      valor: p.valor?.toString() || '',
+      dias: p.dias || [],
+      activo: p.activo,
+      platos: p.promo_platos?.map((pp: any) => {
+        const plato = catsAndPlatos.platos.find((pl: any) => pl.id === pp.plato_id)
+        return plato?.nombre || 'Plato'
+      }) || [],
+    }))
+  }, [promosSwr, catsAndPlatos])
+
+  // ── Seed MIXED states from SWR ──
+  useEffect(() => {
+    if (platoDiaSwr !== undefined) {
+      if (platoDiaSwr && platoDiaSwr.activo) {
+        setPlatoDiaConfig({
+          platoId: platoDiaSwr.plato_id || '',
+          precioEspecial: platoDiaSwr.precio_especial?.toString() || '',
+          horaInicio: platoDiaSwr.horario_inicio || '11:00',
+          horaFin: platoDiaSwr.horario_fin || '15:00',
+        })
+        setPlatoDiaActivo(true)
+      } else {
+        setPlatoDiaActivo(false)
+      }
+    }
+  }, [platoDiaSwr])
+
+  useEffect(() => {
+    if (platoGanadorSwr !== undefined) {
+      if (platoGanadorSwr && platoGanadorSwr.activo) {
         setPlatoGanadorConfig({
-          platoId: pgData.plato_id || '',
-          titulo: pgData.titulo || 'Recomendado del chef',
-          descripcion: pgData.descripcion || '',
+          platoId: platoGanadorSwr.plato_id || '',
+          titulo: platoGanadorSwr.titulo || 'Recomendado del chef',
+          descripcion: platoGanadorSwr.descripcion || '',
         })
         setPlatoGanadorActivo(true)
+      } else {
+        setPlatoGanadorActivo(false)
       }
-      setCargandoMenu(false)
     }
+  }, [platoGanadorSwr])
 
-    cargar()
-  }, [rest?.id])
+  useEffect(() => {
+    if (configSwr?.sorprendeme_categorias) {
+      setSorprendemeCatsMenu(configSwr.sorprendeme_categorias)
+    }
+  }, [configSwr])
 
   // Proteger ruta
   useEffect(() => {
@@ -717,15 +689,7 @@ export default function MiMenuPage() {
       return
     }
 
-    const platosNombres = nuevoCombo.platoIds.map(id => categorias.flatMap(c => c.platos).find(p => p.id === id)?.nombre || '')
-    setCombos([...combos, {
-      id: comboData.id, nombre: comboData.nombre, descripcion: comboData.descripcion || '', platos: platosNombres,
-      precio: comboData.precio, precioIndividual: comboData.precio_individual, activo: true,
-      platosIds: nuevoCombo.platoIds,
-      dias: comboData.dias || [],
-      horario_inicio: comboData.horario_inicio || null,
-      horario_fin: comboData.horario_fin || null,
-    }])
+    await invalidateAll('combos')
     setGuardandoCombo(false)
     setGuardadoCombo(true)
     setTimeout(() => {
@@ -788,20 +752,7 @@ export default function MiMenuPage() {
       return
     }
 
-    const platosNombres = nuevoCombo.platoIds.map(id => categorias.flatMap(c => c.platos).find(p => p.id === id)?.nombre || '')
-    setCombos(combos.map(c => c.id === editandoComboId ? {
-      ...c,
-      nombre: nuevoCombo.nombre,
-      descripcion: nuevoCombo.descripcion,
-      platos: platosNombres,
-      precio: parseInt(nuevoCombo.precio),
-      precioIndividual: precioIndividualCombo,
-      platosIds: nuevoCombo.platoIds,
-      dias: nuevoCombo.dias,
-      horario_inicio: nuevoCombo.horaInicio || null,
-      horario_fin: nuevoCombo.horaFin || null,
-      activo: wasActive,
-    } : c))
+    await invalidateAll('combos')
     setGuardandoCombo(false)
     setGuardadoCombo(true)
     setTimeout(() => {
@@ -819,13 +770,13 @@ export default function MiMenuPage() {
     if (!combo) return
     const supabase = createClient()
     await supabase.from('combos').update({ activo: !combo.activo }).eq('id', id)
-    setCombos(combos.map(c => c.id === id ? { ...c, activo: !c.activo } : c))
+    await invalidateAll('combos')
   }
   async function eliminarCombo(id: string) {
     const supabase = createClient()
     await supabase.from('combo_platos').delete().eq('combo_id', id)
     await supabase.from('combos').delete().eq('id', id)
-    setCombos(combos.filter(c => c.id !== id))
+    await invalidateAll('combos')
   }
 
   // ── Categorías ──
@@ -841,14 +792,14 @@ export default function MiMenuPage() {
     if (Object.keys(errores).length > 0 || !rest?.id) return
     setGuardandoCat(true)
     const supabase = createClient()
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('categorias')
       .insert({ restaurante_id: rest.id, nombre: nuevaCategoria, orden: categorias.length })
       .select()
       .single()
 
     if (data) {
-      setCategorias([...categorias, { id: data.id, nombre: data.nombre, orden: data.orden, platos: [] }])
+      await mutateCategoriasYPlatos()
     }
     setGuardandoCat(false)
     setGuardadoCat(true)
@@ -864,7 +815,7 @@ export default function MiMenuPage() {
     const supabase = createClient()
     await supabase.from('platos').delete().eq('categoria_id', id)
     await supabase.from('categorias').delete().eq('id', id)
-    setCategorias(categorias.filter(c => c.id !== id))
+    await mutateCategoriasYPlatos()
     setMenuCategoria(null)
   }
   async function renombrarCategoria(id: string) {
@@ -875,7 +826,7 @@ export default function MiMenuPage() {
     setGuardandoRename(true)
     const supabase = createClient()
     await supabase.from('categorias').update({ nombre: nombreEditCategoria }).eq('id', id)
-    setCategorias(categorias.map(c => c.id === id ? { ...c, nombre: nombreEditCategoria } : c))
+    await mutateCategoriasYPlatos()
     setGuardandoRename(false)
     setGuardadoRename(true)
     setTimeout(() => {
@@ -886,18 +837,43 @@ export default function MiMenuPage() {
       setTouchedRename({})
     }, 1200)
   }
-  function moverCategoria(id: string, direccion: 'arriba' | 'abajo') {
+  async function moverCategoria(id: string, direccion: 'arriba' | 'abajo') {
     const idx = categorias.findIndex(c => c.id === id)
-    if (direccion === 'arriba' && idx > 0) {
-      const nueva = [...categorias]
-      ;[nueva[idx - 1], nueva[idx]] = [nueva[idx], nueva[idx - 1]]
-      setCategorias(nueva)
+    if (idx === -1) return
+    if (direccion === 'arriba' && idx === 0) return
+    if (direccion === 'abajo' && idx === categorias.length - 1) return
+    if (!catsAndPlatos) return
+
+    const offset = direccion === 'arriba' ? -1 : 1
+    const catA = categorias[idx]
+    const catB = categorias[idx + offset]
+
+    const optimisticData = {
+      categorias: catsAndPlatos.categorias.map(c => {
+        if (c.id === catA.id) return { ...c, orden: catB.orden ?? 0 }
+        if (c.id === catB.id) return { ...c, orden: catA.orden ?? 0 }
+        return c
+      }),
+      platos: catsAndPlatos.platos,
     }
-    if (direccion === 'abajo' && idx < categorias.length - 1) {
-      const nueva = [...categorias]
-      ;[nueva[idx], nueva[idx + 1]] = [nueva[idx + 1], nueva[idx]]
-      setCategorias(nueva)
+    await mutateCategoriasYPlatos(optimisticData, { revalidate: false })
+
+    const supabase = createClient()
+    const ordenA = catA.orden ?? 0
+    const ordenB = catB.orden ?? 0
+
+    const [{ error: errorA }, { error: errorB }] = await Promise.all([
+      supabase.from('categorias').update({ orden: ordenB }).eq('id', catA.id),
+      supabase.from('categorias').update({ orden: ordenA }).eq('id', catB.id),
+    ])
+
+    if (errorA || errorB) {
+      console.error('Error reordering categorías:', errorA || errorB)
+      await mutateCategoriasYPlatos()
+      return
     }
+
+    await mutateCategoriasYPlatos()
   }
 
   // ── Platos ──
@@ -931,15 +907,7 @@ export default function MiMenuPage() {
       .single()
 
     if (data) {
-      setCategorias(categorias.map(c => {
-        if (c.id === categoriaId) {
-          return { ...c, platos: [...c.platos, {
-            id: data.id, nombre: data.nombre, precio: data.precio,
-            descripcion: data.descripcion || '', disponible: data.disponible, foto_url: data.foto_url,
-          }] }
-        }
-        return c
-      }))
+      await mutateCategoriasYPlatos()
     }
     setGuardandoPlato(false)
     setGuardadoPlato(true)
@@ -957,22 +925,12 @@ export default function MiMenuPage() {
     if (!plato) return
     const supabase = createClient()
     await supabase.from('platos').update({ disponible: !plato.disponible }).eq('id', platoId)
-    setCategorias(categorias.map(c => {
-      if (c.id === categoriaId) {
-        return { ...c, platos: c.platos.map(p => p.id === platoId ? { ...p, disponible: !p.disponible } : p) }
-      }
-      return c
-    }))
+    await mutateCategoriasYPlatos()
   }
   async function eliminarPlato(categoriaId: string, platoId: string) {
     const supabase = createClient()
     await supabase.from('platos').delete().eq('id', platoId)
-    setCategorias(categorias.map(c => {
-      if (c.id === categoriaId) {
-        return { ...c, platos: c.platos.filter(p => p.id !== platoId) }
-      }
-      return c
-    }))
+    await mutateCategoriasYPlatos()
     if (platoExpandido === platoId) setPlatoExpandido(null)
   }
   async function guardarEdicionPlato(categoriaId: string, platoId: string) {
@@ -987,14 +945,7 @@ export default function MiMenuPage() {
       precio: parseInt(editPlato.precio),
       descripcion: editPlato.descripcion,
     }).eq('id', platoId)
-    setCategorias(categorias.map(c => {
-      if (c.id === categoriaId) {
-        return { ...c, platos: c.platos.map(p => p.id === platoId ? {
-          ...p, nombre: editPlato.nombre, precio: parseInt(editPlato.precio), descripcion: editPlato.descripcion,
-        } : p) }
-      }
-      return c
-    }))
+    await mutateCategoriasYPlatos()
     setGuardandoEditPlato(false)
     setGuardadoEditPlato(true)
     setTimeout(() => {
@@ -1004,23 +955,49 @@ export default function MiMenuPage() {
       setTouchedEditPlato({})
     }, 1200)
   }
-  function moverPlato(categoriaId: string, platoId: string, direccion: 'arriba' | 'abajo') {
-    setCategorias(categorias.map(cat => {
-      if (cat.id === categoriaId) {
-        const idx = cat.platos.findIndex(p => p.id === platoId)
-        if (direccion === 'arriba' && idx > 0) {
-          const nueva = [...cat.platos]
-          ;[nueva[idx - 1], nueva[idx]] = [nueva[idx], nueva[idx - 1]]
-          return { ...cat, platos: nueva }
-        }
-        if (direccion === 'abajo' && idx < cat.platos.length - 1) {
-          const nueva = [...cat.platos]
-          ;[nueva[idx], nueva[idx + 1]] = [nueva[idx + 1], nueva[idx]]
-          return { ...cat, platos: nueva }
-        }
-      }
-      return cat
-    }))
+  async function moverPlato(categoriaId: string, platoId: string, direccion: 'arriba' | 'abajo') {
+    const cat = categorias.find(c => c.id === categoriaId)
+    if (!cat) return
+    const idx = cat.platos.findIndex(p => p.id === platoId)
+    if (idx === -1) return
+    if (direccion === 'arriba' && idx === 0) return
+    if (direccion === 'abajo' && idx === cat.platos.length - 1) return
+    if (!catsAndPlatos) return
+
+    const offset = direccion === 'arriba' ? -1 : 1
+    const platoA = cat.platos[idx]
+    const platoB = cat.platos[idx + offset]
+
+    const flatPlatoA = catsAndPlatos.platos.find(p => p.id === platoA.id)
+    const flatPlatoB = catsAndPlatos.platos.find(p => p.id === platoB.id)
+    if (!flatPlatoA || !flatPlatoB) return
+
+    const optimisticData = {
+      categorias: catsAndPlatos.categorias,
+      platos: catsAndPlatos.platos.map(p => {
+        if (p.id === flatPlatoA.id) return { ...p, orden: flatPlatoB.orden ?? 0 }
+        if (p.id === flatPlatoB.id) return { ...p, orden: flatPlatoA.orden ?? 0 }
+        return p
+      }),
+    }
+    await mutateCategoriasYPlatos(optimisticData, { revalidate: false })
+
+    const supabase = createClient()
+    const ordenA = flatPlatoA.orden ?? 0
+    const ordenB = flatPlatoB.orden ?? 0
+
+    const [{ error: errorA }, { error: errorB }] = await Promise.all([
+      supabase.from('platos').update({ orden: ordenB }).eq('id', flatPlatoA.id),
+      supabase.from('platos').update({ orden: ordenA }).eq('id', flatPlatoB.id),
+    ])
+
+    if (errorA || errorB) {
+      console.error('Error reordering platos:', errorA || errorB)
+      await mutateCategoriasYPlatos()
+      return
+    }
+
+    await mutateCategoriasYPlatos()
   }
 
   // Filtrar

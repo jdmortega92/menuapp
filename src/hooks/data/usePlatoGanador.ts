@@ -1,6 +1,6 @@
 'use client'
 
-import useSWR from 'swr'
+import useSWR, { SWRResponse } from 'swr'
 import { createClient } from '@/lib/supabase-browser'
 
 export interface PlatoGanadorPublico {
@@ -15,7 +15,16 @@ export interface PlatoGanadorPublico {
   descripcionEspecial: string | null
 }
 
-async function fetchPlatoGanador(restauranteId: string): Promise<PlatoGanadorPublico | null> {
+export interface PlatoGanadorAdmin {
+  id: string
+  restaurante_id: string
+  plato_id: string
+  titulo: string
+  descripcion: string | null
+  activo: boolean
+}
+
+async function fetchPlatoGanadorPublic(restauranteId: string): Promise<PlatoGanadorPublico | null> {
   const supabase = createClient()
   const { data } = await supabase
     .from('plato_ganador')
@@ -37,13 +46,42 @@ async function fetchPlatoGanador(restauranteId: string): Promise<PlatoGanadorPub
   }
 }
 
-export function usePlatoGanador(restauranteId: string | null | undefined) {
-  return useSWR(
-    restauranteId ? ['plato-ganador', restauranteId] : null,
-    () => fetchPlatoGanador(restauranteId!),
+async function fetchPlatoGanadorAdmin(restauranteId: string): Promise<PlatoGanadorAdmin | null> {
+  const supabase = createClient()
+  const { data } = await supabase
+    .from('plato_ganador')
+    .select('*')
+    .eq('restaurante_id', restauranteId)
+    .maybeSingle()
+
+  if (!data) return null
+  return data as PlatoGanadorAdmin
+}
+
+interface UsePlatoGanadorFn {
+  (restauranteId: string | null | undefined): SWRResponse<PlatoGanadorPublico | null, any>
+  (
+    restauranteId: string | null | undefined,
+    options: { includeInactive: true },
+  ): SWRResponse<PlatoGanadorAdmin | null, any>
+}
+
+const usePlatoGanadorImpl = (
+  restauranteId: string | null | undefined,
+  options?: { includeInactive?: boolean },
+) => {
+  const includeInactive = !!options?.includeInactive
+  return useSWR<PlatoGanadorPublico | PlatoGanadorAdmin | null>(
+    restauranteId ? ['plato-ganador', restauranteId, { includeInactive }] : null,
+    async () =>
+      includeInactive
+        ? fetchPlatoGanadorAdmin(restauranteId!)
+        : fetchPlatoGanadorPublic(restauranteId!),
     {
       revalidateOnFocus: true,
       dedupingInterval: 5000,
-    }
+    },
   )
 }
+
+export const usePlatoGanador: UsePlatoGanadorFn = usePlatoGanadorImpl as UsePlatoGanadorFn
