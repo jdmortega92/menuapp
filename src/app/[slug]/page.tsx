@@ -46,7 +46,8 @@ export default function MenuPublicoPage() {
   const [mostrarPedido, setMostrarPedido] = useState(false)
   const [mostrarSorpresa, setMostrarSorpresa] = useState(false)
   const [mostrarMenu, setMostrarMenu] = useState(esQR)
-  const [platoDetalle, setPlatoDetalle] = useState<string | null>(null)
+  type PlatoDetalleModo = 'normal' | 'ganador' | 'platoDia'
+  const [platoDetalle, setPlatoDetalle] = useState<{ id: string; modo: PlatoDetalleModo } | null>(null)
   const [platoCalificar, setPlatoCalificar] = useState<string | null>(null)
   const [calEstrellas, setCalEstrellas] = useState(0)
   const [calTags, setCalTags] = useState<string[]>([])
@@ -126,16 +127,16 @@ export default function MenuPublicoPage() {
     const supabaseVista = createClient()
     const fechaCOL = new Date(new Date().getTime() - 5 * 60 * 60 * 1000).toISOString().split('T')[0]
     supabaseVista.from('vistas_platos').insert({
-      plato_id: platoDetalle,
+      plato_id: platoDetalle.id,
       restaurante_id: restaurante.id,
       fecha: fechaCOL,
     }).then(({ error }: any) => {
-      
+
     })
     const supabase = createClient()
     supabase.from('calificaciones')
       .select('*')
-      .eq('plato_id', platoDetalle)
+      .eq('plato_id', platoDetalle.id)
       .order('created_at', { ascending: false })
       .limit(50)
       .then(({ data }: any) => {
@@ -872,7 +873,7 @@ export default function MenuPublicoPage() {
         {/* Plato ganador */}
         {esProPublico && config?.plato_ganador_activo && platoGanadorVisible && !busqueda.trim() && (
           <div style={{ padding: '0 16px 10px' }}>
-            <div onClick={() => setPlatoDetalle(platoGanador.id)} style={{
+            <div onClick={() => setPlatoDetalle({ id: platoGanador.id, modo: 'ganador' })} style={{
               background: `linear-gradient(135deg, #FFF8E1 0%, #FFF3CD 100%)`,
               border: '1px solid #F2A62330',
               borderRadius: 'var(--theme-radius-card)',
@@ -926,7 +927,7 @@ export default function MenuPublicoPage() {
         {/* Plato del día */}
         {esProPublico && config?.plato_dia_activo && platoDiaVisible && !busqueda.trim() && (
           <div style={{ padding: '0 16px 10px' }}>
-            <div onClick={() => setPlatoDetalle(platoDia.id)} style={{
+            <div onClick={() => setPlatoDetalle({ id: platoDia.id, modo: 'platoDia' })} style={{
               background: `${color}10`,
               border: `1px solid ${color}30`,
               borderRadius: 'var(--theme-radius-card)',
@@ -1026,7 +1027,7 @@ export default function MenuPublicoPage() {
                 <span onClick={() => setMostrarSorpresa(false)} style={{ fontSize: '11px', color: 'var(--theme-text-subtle)', cursor: 'pointer' }}>✕ Cerrar</span>
               </div>
               {sorpresaPlatos.map((plato: any) => (
-                <div key={plato.id} onClick={() => setPlatoDetalle(plato.id)} style={{
+                <div key={plato.id} onClick={() => setPlatoDetalle({ id: plato.id, modo: 'normal' })} style={{
                   background: 'var(--theme-surface)',
                   borderRadius: 'var(--theme-radius-image)',
                   padding: '10px',
@@ -1661,7 +1662,7 @@ export default function MenuPublicoPage() {
                 marginBottom: '8px',
                 opacity: plato.disponible ? 1 : 0.4,
               }}>
-                <div onClick={() => plato.disponible && setPlatoDetalle(plato.id)} style={{
+                <div onClick={() => plato.disponible && setPlatoDetalle({ id: plato.id, modo: 'normal' })} style={{
                   width: '64px',
                   height: '64px',
                   borderRadius: 'var(--theme-radius-image)',
@@ -1681,7 +1682,7 @@ export default function MenuPublicoPage() {
                   ) : plato.nombre.charAt(0)}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div onClick={() => plato.disponible && setPlatoDetalle(plato.id)} style={{ cursor: plato.disponible ? 'pointer' : 'default' }}>
+                  <div onClick={() => plato.disponible && setPlatoDetalle({ id: plato.id, modo: 'normal' })} style={{ cursor: plato.disponible ? 'pointer' : 'default' }}>
                     <div style={{
                       fontSize: '13px',
                       fontWeight: 500,
@@ -2117,7 +2118,7 @@ export default function MenuPublicoPage() {
         })()}
         {/* Modal detalle plato */}
         {platoDetalle && (() => {
-          const plato = todosLosPlatos.find((p: any) => p.id === platoDetalle)
+          const plato = todosLosPlatos.find((p: any) => p.id === platoDetalle?.id)
           if (!plato) return null
           const cantidadActual = pedido[plato.id] || 0
           const cantidadMostrar = cantidadActual || 1
@@ -2195,7 +2196,7 @@ export default function MenuPublicoPage() {
                   {plato.descripcion}
                 </div>
                 {(() => {
-                  const esPlatoDelDia = platoDia && platoDia.id === plato.id && esProPublico && config?.plato_dia_activo && platoDiaVisible
+                  const esPlatoDelDia = platoDia && platoDia.id === plato.id && esProPublico && config?.plato_dia_activo && platoDiaVisible && platoDetalle?.modo !== 'ganador'
                   if (esPlatoDelDia) {
                     return (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
@@ -2390,7 +2391,7 @@ export default function MenuPublicoPage() {
                     }}>+</div>
                   </div>
                   {(() => {
-                    const esPlatoDelDia = platoDia && platoDia.id === plato.id && esProPublico && config?.plato_dia_activo && platoDiaVisible
+                    const esPlatoDelDia = platoDia && platoDia.id === plato.id && esProPublico && config?.plato_dia_activo && platoDiaVisible && platoDetalle?.modo !== 'ganador'
                     const precioParaCalcular = esPlatoDelDia ? platoDia.precioEspecial : plato.precio
                     return (
                       <div onClick={() => {

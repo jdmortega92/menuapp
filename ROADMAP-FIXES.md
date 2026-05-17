@@ -442,6 +442,35 @@ completa-perfil, and plato del día config. Full keyboard + ARIA support.
 
 ## Items
 
+### BL.11 ✅ Plato ganador modal incorrectly applies plato del día discount — CLOSED
+- **Closed**: 2026-05-13.
+- **Found**: 2026-05-10 during Batch G smoke test (documented in
+  sessions before this). Originally flagged as part of BL.8 but
+  only the form-side validation was fixed there. The public menu
+  rendering side remained broken when legacy data has the collision.
+- **Symptom**: When the same plato is configured as both plato
+  ganador and plato del día (only possible with legacy data from
+  before BL.8 was shipped), clicking the "Recomendado del chef"
+  card in the public menu opens the detail modal showing the
+  "Plato del día" badge and discounted price, even though the
+  card displayed full price.
+- **Root cause**: platoDetalle state stored only the plato id, so
+  the modal had no way to know which card opened it. The condition
+  `platoDia.id === plato.id` was always true when the same plato
+  served both roles, causing the modal to render plato del día
+  behavior regardless of card source.
+- **Fix**: Changed platoDetalle to carry source context:
+  `{ id: string; modo: 'normal' | 'ganador' | 'platoDia' }`.
+  All 5 call sites of setPlatoDetalle now pass the appropriate
+  modo. The esPlatoDelDia condition (in modal badge/price and
+  Agregar button logic) now requires modo !== 'ganador', so the
+  ganador card path always renders the regular full-price view.
+  Regular card and plato del día card paths preserve original
+  behavior.
+- **Where**: src/app/[slug]/page.tsx — platoDetalle state, 5
+  setPlatoDetalle call sites, modal lookup, 2 esPlatoDelDia
+  conditions.
+
 ### BL.10 ✅ Plato del día / ganador persistence broken after H.1.c.2.a — CLOSED
 - **Closed**: 2026-05-13. Bundled with H.1.c.2.a commit.
 - **Found**: 2026-05-13 via browser-automation smoke test.
