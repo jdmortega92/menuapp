@@ -39,6 +39,7 @@ async function fetchCombosPublic(restauranteId: string): Promise<ComboPublico[]>
     .select('*, combo_platos(plato_id, platos(nombre, precio))')
     .eq('restaurante_id', restauranteId)
     .eq('activo', true)
+    .order('created_at', { ascending: false })
 
   if (!data) return []
   return (data as any[]).map((c: any) => ({
@@ -61,6 +62,7 @@ async function fetchCombosAdmin(restauranteId: string): Promise<ComboAdmin[]> {
     .from('combos')
     .select('*, combo_platos(plato_id, platos(nombre, precio))')
     .eq('restaurante_id', restauranteId)
+    .order('created_at', { ascending: false })
   return (data ?? []) as ComboAdmin[]
 }
 

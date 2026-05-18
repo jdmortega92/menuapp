@@ -33,6 +33,7 @@ async function fetchPromosPublic(restauranteId: string): Promise<PromoPublica[]>
     .select('*, promo_platos(plato_id, platos(nombre))')
     .eq('restaurante_id', restauranteId)
     .eq('activo', true)
+    .order('created_at', { ascending: false })
 
   if (!data) return []
   return (data as any[]).map((p) => ({
@@ -52,6 +53,7 @@ async function fetchPromosAdmin(restauranteId: string): Promise<PromoAdmin[]> {
     .from('promos')
     .select('*, promo_platos(plato_id, platos(nombre))')
     .eq('restaurante_id', restauranteId)
+    .order('created_at', { ascending: false })
   return (data ?? []) as PromoAdmin[]
 }
 

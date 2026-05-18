@@ -442,6 +442,32 @@ completa-perfil, and plato del día config. Full keyboard + ARIA support.
 
 ## Items
 
+### BL.15 ✅ Combos and promos jump positions after UPDATE — CLOSED
+- **Closed**: 2026-05-17.
+- **Found**: 2026-05-17 during BL.14 smoke test. User noticed that
+  toggling a combo's activo status (e.g. "Día de la madre") caused
+  the row to move to the bottom of the list.
+- **Root cause**: Neither the public nor admin fetchers in
+  useCombos/usePromos specify .order(). Postgres returns rows in
+  implementation-defined sequential-scan order. Under MVCC, any
+  UPDATE writes a new tuple that surfaces last in subsequent scans,
+  making the row appear to "jump" to the bottom. This was a
+  pre-existing latent bug that became noticeable only after BL.14
+  eliminated the flicker that previously masked it. Affects all
+  UPDATE operations (toggle, edit, etc.), not just toggles.
+  Could also produce inconsistent ordering between admin and public
+  views since both rely on Postgres default behavior.
+- **Fix**: Added `.order('created_at', { ascending: false })` to
+  all 4 fetchers (public + admin × combos + promos). Now:
+  - Newest items appear first.
+  - Order is stable: UPDATE doesn't change created_at.
+  - Admin and public ordering consistent (apart from activo filter).
+- **Future**: If owners want manual reordering (drag/drop or arrows),
+  a future BL would add an `orden` column to combos/promos tables
+  (mirroring BL.9 for categorias/platos) and switch the .order() to
+  'orden' ASC.
+- **Where**: src/hooks/data/useCombos.ts, src/hooks/data/usePromos.ts.
+
 ### BL.14 ✅ Toggle flicker in /menu (combos, promos, agotar plato) — CLOSED
 - **Closed**: 2026-05-13.
 - **Found**: 2026-05-13 during smoke test after H.1.c.2.a.
