@@ -776,7 +776,7 @@ export default function ConfigPage() {
                       <input type="file" accept="image/*" style={{ display: 'none' }} disabled={subiendoImagen}
                         onChange={(e) => { const f = e.target.files?.[0]; if (f) seleccionarImagen('logo', f) }} />
                     </label>
-                    <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>Cuadrado · Máximo 10MB · Se ajusta a 400x400</div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>Circular · Máximo 10MB · Se ajusta a 400x400</div>
                   </div>
                 </div>
               </div>
