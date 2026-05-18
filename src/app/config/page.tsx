@@ -1,8 +1,11 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks'
+import { useConfigRestaurante } from '@/hooks/data/useConfigRestaurante'
+import { useHorarios } from '@/hooks/data/useHorarios'
+import { useCategoriasYPlatos } from '@/hooks/data/useCategoriasYPlatos'
 import { createClient } from '@/lib/supabase-browser'
 import Cropper from 'react-easy-crop'
 import TimePicker from '@/components/ui/TimePicker'
@@ -14,10 +17,21 @@ import BottomNav from '@/components/BottomNav'
 
 export default function ConfigPage() {
   const router = useRouter()
-  const { usuario, restaurante: rest, cargando: cargandoAuth } = useAuth()
+  const { usuario, restaurante: rest, cargando: cargandoAuth, mutateRestaurante } = useAuth()
   const plan = (rest?.plan || 'gratis') as string
   const esBasico = plan === 'basico' || plan === 'pro'
   const esPro = plan === 'pro'
+
+  const { data: configData, mutate: mutateConfig } = useConfigRestaurante(rest?.id)
+  const { data: horariosData, mutate: mutateHorarios } = useHorarios(rest?.id)
+  const { data: catsAndPlatosData } = useCategoriasYPlatos(rest?.id)
+
+  const cargandoConfig = !configData || !horariosData || !catsAndPlatosData
+
+  const categoriasDisponibles = useMemo(
+    () => catsAndPlatosData?.categorias.map(c => ({ id: c.id, nombre: c.nombre })) ?? [],
+    [catsAndPlatosData]
+  )
 
   const [nombre, setNombre] = useState('')
   const [tipo, setTipo] = useState('restaurante')
@@ -37,7 +51,6 @@ export default function ConfigPage() {
     sorprendeme_activo: true,
   })
   const [email, setEmail] = useState('')
-  const [cargandoConfig, setCargandoConfig] = useState(true)
   const [horarios, setHorarios] = useState<{ dia: string; hora_apertura: string; hora_cierre: string; cerrado: boolean }[]>([
     { dia: 'Lunes', hora_apertura: '11:00', hora_cierre: '21:00', cerrado: false },
     { dia: 'Martes', hora_apertura: '11:00', hora_cierre: '21:00', cerrado: false },
@@ -58,7 +71,6 @@ export default function ConfigPage() {
   const [guardandoPass, setGuardandoPass] = useState(false)
   const [passGuardada, setPassGuardada] = useState(false)
   const [sorprendemeCats, setSorprendemeCats] = useState<string[]>([])
-  const [categoriasDisponibles, setCategoriasDisponibles] = useState<any[]>([])
   const [logoUrl, setLogoUrl] = useState<string | null>(null)
   const [bannerUrl, setBannerUrl] = useState<string | null>(null)
   const [subiendoImagen, setSubiendoImagen] = useState(false)
@@ -71,79 +83,64 @@ export default function ConfigPage() {
     setCroppedAreaPixels(croppedAreaPixels)
   }, [])
 
-  // Cargar datos reales
+  // Seed form state from restaurante row + email from usuario
   useEffect(() => {
-    if (!rest?.id || !usuario) return
+    if (!rest || !usuario) return
+    setNombre(rest.nombre || '')
+    setTipo(rest.tipo || 'restaurante')
+    setCiudad(rest.ciudad || '')
+    setWhatsapp(rest.whatsapp || '')
+    setDireccion(rest.direccion || '')
+    setDescripcion(rest.descripcion || '')
+    setColorPrincipal(rest.color_principal || '#E85D24')
+    setTema(rest.tema || 'claro')
+    setEmail(usuario.email || '')
+  }, [rest, usuario])
 
-    async function cargar() {
-      const supabase = createClient()
-      setNombre(rest!.nombre || '')
-      setTipo(rest!.tipo || 'restaurante')
-      setCiudad(rest!.ciudad || '')
-      setWhatsapp(rest!.whatsapp || '')
-      setDireccion(rest!.direccion || '')
-      setDescripcion(rest!.descripcion || '')
-      setColorPrincipal(rest!.color_principal || '#E85D24')
-      setTema(rest!.tema || 'claro')
-      setEmail(usuario!.email || '')
+  // Seed form state from config_restaurante
+  useEffect(() => {
+    if (!configData) return
+    setToggles({
+      whatsapp_activo: configData.whatsapp_activo ?? true,
+      combos_activo: configData.combos_activo ?? false,
+      promos_activo: configData.promos_activo ?? false,
+      plato_dia_activo: configData.plato_dia_activo ?? false,
+      plato_ganador_activo: configData.plato_ganador_activo ?? false,
+      calificaciones_activo: configData.calificaciones_activo ?? true,
+      sorprendeme_activo: configData.sorprendeme_activo ?? true,
+    })
+    if (configData.sorprendeme_categorias) setSorprendemeCats(configData.sorprendeme_categorias)
+  }, [configData])
 
-      const { data: conf } = await supabase
-        .from('config_restaurante')
-        .select('*')
-        .eq('restaurante_id', rest!.id)
-        .single()
+  // Seed horarios local state (preserve day-of-week sort)
+  useEffect(() => {
+    if (!horariosData || horariosData.length === 0) return
+    const diasOrden = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
+    const horariosOrdenados = diasOrden.map(dia => {
+      const h = horariosData.find((x) => x.dia === dia)
+      return h ? { dia: h.dia, hora_apertura: h.hora_apertura, hora_cierre: h.hora_cierre, cerrado: h.cerrado }
+               : { dia, hora_apertura: '11:00', hora_cierre: '21:00', cerrado: false }
+    })
+    setHorarios(horariosOrdenados)
+  }, [horariosData])
 
-      if (conf) {
-        setToggles({
-          whatsapp_activo: conf.whatsapp_activo ?? true,
-          combos_activo: conf.combos_activo ?? false,
-          promos_activo: conf.promos_activo ?? false,
-          plato_dia_activo: conf.plato_dia_activo ?? false,
-          plato_ganador_activo: conf.plato_ganador_activo ?? false,
-          calificaciones_activo: conf.calificaciones_activo ?? true,
-          sorprendeme_activo: conf.sorprendeme_activo ?? true,
-        })
-      }
-      // Cargar logo y banner
-      const supabase2 = createClient()
-      const { data: logoCheck } = await supabase2.storage.from('imagenes').list(`${rest!.id}`, { search: 'logo' })
+  // Load logo/banner URLs from storage (cache-busted via ?t=Date.now() at page load)
+  useEffect(() => {
+    if (!rest?.id) return
+    const supabase = createClient()
+    ;(async () => {
+      const { data: logoCheck } = await supabase.storage.from('imagenes').list(`${rest.id}`, { search: 'logo' })
       if (logoCheck && logoCheck.length > 0) {
-        const { data: logoData } = supabase2.storage.from('imagenes').getPublicUrl(`${rest!.id}/logo.jpg`)
+        const { data: logoData } = supabase.storage.from('imagenes').getPublicUrl(`${rest.id}/logo.jpg`)
         setLogoUrl(logoData.publicUrl + '?t=' + Date.now())
       }
-      const { data: bannerCheck } = await supabase2.storage.from('imagenes').list(`${rest!.id}`, { search: 'banner' })
+      const { data: bannerCheck } = await supabase.storage.from('imagenes').list(`${rest.id}`, { search: 'banner' })
       if (bannerCheck && bannerCheck.length > 0) {
-        const { data: bannerData } = supabase2.storage.from('imagenes').getPublicUrl(`${rest!.id}/banner.jpg`)
+        const { data: bannerData } = supabase.storage.from('imagenes').getPublicUrl(`${rest.id}/banner.jpg`)
         setBannerUrl(bannerData.publicUrl + '?t=' + Date.now())
       }
-      // Cargar horarios
-      const { data: horariosData } = await supabase
-        .from('horarios')
-        .select('*')
-        .eq('restaurante_id', rest!.id)
-
-      if (horariosData && horariosData.length > 0) {
-        const diasOrden = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
-        const horariosOrdenados = diasOrden.map(dia => {
-          const h = horariosData.find((x: any) => x.dia === dia)
-          return h ? { dia: h.dia, hora_apertura: h.hora_apertura, hora_cierre: h.hora_cierre, cerrado: h.cerrado } 
-                   : { dia, hora_apertura: '11:00', hora_cierre: '21:00', cerrado: false }
-        })
-        setHorarios(horariosOrdenados)
-      }
-      // Cargar categorías para sorpréndeme
-      const { data: catsData } = await supabase
-        .from('categorias')
-        .select('id, nombre')
-        .eq('restaurante_id', rest!.id)
-        .order('orden', { ascending: true })
-
-      if (catsData) setCategoriasDisponibles(catsData)
-      if (conf?.sorprendeme_categorias) setSorprendemeCats(conf.sorprendeme_categorias)
-      setCargandoConfig(false)
-    }
-    cargar()
-  }, [rest?.id, usuario])
+    })()
+  }, [rest?.id])
 
   // Proteger ruta
   useEffect(() => {
@@ -245,6 +242,7 @@ export default function ConfigPage() {
       await supabase.from('restaurantes').update({ banner_url: url }).eq('id', rest.id)
       setBannerUrl(url)
     }
+    await mutateRestaurante()
 
     setSubiendoImagen(false)
   }
@@ -318,6 +316,7 @@ export default function ConfigPage() {
     if (!rest?.id) return
     const supabase = createClient()
     await supabase.from('config_restaurante').update({ sorprendeme_categorias: nuevas }).eq('restaurante_id', rest.id)
+    await mutateConfig()
   }
   async function guardarHorarios() {
     if (!rest?.id) return
@@ -337,6 +336,7 @@ export default function ConfigPage() {
         cerrado: h.cerrado,
       }))
     )
+    await mutateHorarios()
 
     setGuardandoHorarios(false)
     setGuardadoHorarios(true)
@@ -356,6 +356,7 @@ export default function ConfigPage() {
     if (rest?.id) {
       const supabase = createClient()
       await supabase.from('config_restaurante').update({ [key]: nuevoValor }).eq('restaurante_id', rest.id)
+      await mutateConfig()
     }
   }
 
@@ -372,6 +373,7 @@ export default function ConfigPage() {
       nombre, tipo, ciudad, whatsapp, direccion, descripcion,
       color_principal: colorPrincipal, tema: temaFinal,
     }).eq('id', rest.id)
+    await mutateRestaurante()
 
     // Sincronizar estado local si se degradó
     if (temaFinal !== tema) setTema(temaFinal)

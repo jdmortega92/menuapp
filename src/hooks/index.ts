@@ -59,11 +59,11 @@ export function useAuth() {
     }
   }, [])
 
-  const { data: restaurante, isLoading: restauranteCargando } = useRestauranteByUserId(usuario?.id ?? null)
+  const { data: restaurante, isLoading: restauranteCargando, mutate: mutateRestaurante } = useRestauranteByUserId(usuario?.id ?? null)
 
   const cargando = sessionCargando || (!!usuario && restauranteCargando)
 
-  return { usuario, restaurante: restaurante ?? null, cargando }
+  return { usuario, restaurante: restaurante ?? null, cargando, mutateRestaurante }
 }
 
 // ── usePlan: verificar funciones por plan ──

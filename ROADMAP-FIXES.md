@@ -266,8 +266,8 @@ completa-perfil, and plato del día config. Full keyboard + ARIA support.
   - ✅ H.1.c.1: useAuth → SWR via useRestauranteByUserId (closed 2026-05-12)
   - ⏳ H.1.c.2: /menu + /config migration + parametrize public hooks (in progress)
     - ✅ H.1.c.2.a: parametrize 4 hooks (usePromos, usePlatoDelDia, usePlatoGanador, useCombos) + migrate /menu + BL.9 reorder fix (closed 2026-05-13)
-    - ⏳ H.1.c.2.b: migrate /config (pending)
-  - ⏳ H.1.c.3: /dashboard, /referidos, /qr, /suscripcion mutate() (pending)
+    - ✅ H.1.c.2.b: migrate /config to SWR (closed 2026-05-17)
+  - ⏳ H.1.c.3 / H.1.c.2.c: /dashboard, /referidos, /qr, /suscripcion mutate() (pending)
 
 - **Why**: Currently every page does its own `supabase.from(...).select()` in `useEffect`. No caching, no deduplication, no automatic revalidation. Navigating between dashboard tabs re-fetches everything.
 - **Recommendation**: **SWR** (lighter, simpler, by Vercel — pairs naturally with Next.js).
@@ -280,6 +280,54 @@ completa-perfil, and plato del día config. Full keyboard + ARIA support.
   - Navigating away from a tab and back is instant (no re-fetch unless data is stale).
   - Mutations (create/update/delete) trigger correct cache invalidation.
 - **Out of scope**: Server-side data fetching migration. Keep client-side for now.
+
+### H.1.c.2.b ✅ Migrate /config to SWR — CLOSED
+- **Closed**: 2026-05-17.
+- **Approach**: Same pattern as H.1.c.2.a (/menu). Replaced the big
+  initial-load useEffect (L75-146 in /config/page.tsx) with SWR hooks.
+  Three reads migrated:
+  - config_restaurante → useConfigRestaurante (new consumer)
+  - horarios → useHorarios (new consumer)
+  - categorias → useCategoriasYPlatos (new consumer, reuses /menu cache)
+- **useAuth extension**: Added mutateRestaurante to useAuth's return
+  so /config (and future 2.c pages) can revalidate the restaurante
+  row after profile updates. No existing useAuth consumer needs
+  changes — the existing { usuario, restaurante, cargando } shape is
+  preserved and mutateRestaurante is an additive field.
+- **Mutations**: 5 write paths now call mutate() after the DB UPDATE:
+  - guardarCambios (profile) → mutateRestaurante
+  - handleToggle → mutateConfig
+  - guardarSorprendemeCats → mutateConfig
+  - guardarHorarios (DELETE+INSERT) → mutateHorarios
+  - confirmarRecorte (logo/banner upload) → mutateRestaurante
+- **eliminarCuenta**: NOT touched. The 16-table cascade is out of
+  scope; left as inline supabase calls.
+- **cropModal & storage upload**: NOT touched. The logo/banner crop
+  logic and storage upload calls keep their existing flow; only the
+  trailing `restaurantes.update` is followed by a mutateRestaurante().
+- **Storage list for logo/banner URLs**: preserved as its own
+  useEffect (not migrated to SWR). The URLs use `?t=Date.now()` for
+  cache-busting at page load — that semantic doesn't fit SWR's
+  stable-cache-key model.
+- **Loading gate**: preserved. `cargandoConfig` is now derived from
+  `!configData || !horariosData || !catsAndPlatosData`. Splash still
+  blocks render until all 3 SWR queries resolve, matching pre-migration
+  UX (no flash of empty fields).
+- **State**: 32 form useStates preserved (form input state, not
+  cached data). Removed 2 non-form useStates that became derived:
+  `cargandoConfig` (now derived from SWR) and `categoriasDisponibles`
+  (now derived via useMemo from useCategoriasYPlatos — was dead code
+  in JSX but wiring preserved).
+- **Where**: src/hooks/index.ts (Phase A), src/app/config/page.tsx
+  (Phases B-E).
+- **Benefits**:
+  - Instant loads on revisits (SWR cache deduplication).
+  - Sync between admin /config and public menu: profile, colors, logo,
+    and toggle changes refetch on focus / revisit.
+  - Consistent pattern with /menu.
+  - Foundation laid for 2.c (dashboard, referidos, qr, suscripcion).
+
+Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
 
 ### H.2 🟡 Immediate loading states on navigation
 - **Why**: When navigating between dashboard tabs (Inicio / Menú / QR / Config), there's a perceptible blank state.
