@@ -154,8 +154,7 @@ export default function MiMenuPage() {
 
     // Promos
     promos.forEach(promo => {
-      const promoPlatos = todosPlatos.filter(p => promo.platos?.includes(p.nombre))
-      if (promoPlatos.some(p => platosIds.includes(p.id))) {
+      if (promo.platosIds?.some((id: string) => platosIds.includes(id))) {
         afectados.push(`Promo "${promo.nombre}" — solo visible en este horario`)
       }
     })
@@ -589,6 +588,7 @@ export default function MiMenuPage() {
         const plato = catsAndPlatos.platos.find((pl: any) => pl.id === pp.plato_id)
         return plato?.nombre || 'Plato'
       }) || [],
+      platosIds: p.promo_platos?.map((pp: any) => pp.plato_id) || [],
     }))
   }, [promosSwr, catsAndPlatos])
 
@@ -2049,10 +2049,7 @@ export default function MiMenuPage() {
                           <div style={{ width: '16px', height: '16px', borderRadius: '50%', background: 'white', position: 'absolute', top: '2px', left: promo.activo ? '18px' : '2px', transition: 'left 0.2s' }} />
                         </div>
                         <span onClick={() => {
-                          const platoIds = categorias
-                            .flatMap(c => c.platos)
-                            .filter(p => promo.platos.includes(p.nombre))
-                            .map(p => p.id)
+                          const platoIds = promo.platosIds || []
                           setNuevaPromo({
                             nombre: promo.nombre,
                             descripcion: promo.descripcion || '',

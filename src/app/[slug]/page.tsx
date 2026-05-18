@@ -194,7 +194,7 @@ export default function MenuPublicoPage() {
       if (!visible) return false
     }
 
-    const platosDelCombo = categorias.flatMap((c: any) => c.platos).filter((p: any) => combo.platos?.includes(p.nombre))
+    const platosDelCombo = categorias.flatMap((c: any) => c.platos).filter((p: any) => combo.platosIds?.includes(p.id))
     return platosDelCombo.every((p: any) => platosVisiblesIds.has(p.id))
   })
 
@@ -1442,8 +1442,8 @@ export default function MenuPublicoPage() {
         })()}
         {/* Modal detalle promo */}
         {promoDetalle && (() => {
-          const platosPromo = categorias.flatMap((c: any) => c.platos).filter((p: any) => 
-            promoDetalle.platosIds ? promoDetalle.platosIds.includes(p.id) : promoDetalle.platos?.includes(p.nombre)
+          const platosPromo = categorias.flatMap((c: any) => c.platos).filter((p: any) =>
+            promoDetalle.platosIds.includes(p.id)
           )
 
           function agregarPromoAlPedido() {

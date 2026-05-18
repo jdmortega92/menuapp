@@ -490,6 +490,35 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
 
 ## Items
 
+### BL.17 ✅ Promo/combo name-match anti-pattern — CLOSED
+- **Closed**: 2026-05-17.
+- **Found**: 2026-05-17 during F8 (variantes) investigation. Tech
+  debt that pre-dated current session; F8 would have amplified the
+  bug.
+- **Symptom**: Code in 3 places used plato.nombre as identifier
+  for filtering instead of plato.id. Breaks silently when two
+  platos share the same nombre (e.g., "Pizza Margarita" in two
+  different categorias). Affected:
+  1. Editing a promo (admin /menu): edit form would pre-select the
+     wrong platos.
+  2. detectarAfectados (admin /menu, setting categoria horario):
+     false warnings about unrelated promos.
+  3. combosVisibles (public /[slug]): combo visibility could be
+     incorrectly computed.
+- **Plus 1 dead fallback** in /[slug] L1446 that masked the bug
+  behind defensive code.
+- **Root cause**: The hooks already exposed platosIds and
+  combo.platosIds (canonical ids), but the consuming code was
+  written using the names array for matching. Pre-dates SWR
+  migration.
+- **Fix**: 4 edits in 2 files.
+  - menu/page.tsx: added platosIds field to derived promos useMemo;
+    replaced 2 name-match call sites with id-match.
+  - [slug]/page.tsx: replaced 1 name-match call site in
+    combosVisibles; cleaned up 1 dead fallback.
+- **Where**: src/app/menu/page.tsx (L155-160, L578-593, L2051-2056),
+  src/app/[slug]/page.tsx (L195-200, L1446).
+
 ### BL.15 ✅ Combos and promos jump positions after UPDATE — CLOSED
 - **Closed**: 2026-05-17.
 - **Found**: 2026-05-17 during BL.14 smoke test. User noticed that
