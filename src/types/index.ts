@@ -63,6 +63,16 @@ export interface Categoria {
   created_at: string
 }
 
+export interface Variante {
+  id: string
+  plato_id: string
+  nombre: string
+  precio: number
+  orden: number
+  created_at: string
+  updated_at: string
+}
+
 export interface Plato {
   id: string
   categoria_id: string
@@ -75,6 +85,8 @@ export interface Plato {
   disponible: boolean
   orden: number
   created_at: string
+  updated_at?: string
+  variantes?: Variante[]
 }
 
 export interface Combo {

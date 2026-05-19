@@ -490,6 +490,37 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
 
 ## Items
 
+### F8.1 ✅ Variantes de platos — Sesión 1 (Schema + Types + Hook) — CLOSED
+- **Closed**: 2026-05-19.
+- **Goal**: Foundation for plato variantes feature (e.g. pizza
+  chica/mediana/grande). Level 1 only — excluding variants by price.
+- **Schema applied in Supabase (manual)**:
+  - New table `plato_variantes` (id, plato_id FK, nombre, precio
+    INT, orden, created_at, updated_at).
+  - RLS enabled with 2 policies: "Variantes públicas" (SELECT, true)
+    and "Variantes propias" (ALL, scoped by plato → restaurante →
+    usuario_id).
+  - Trigger for auto-update of updated_at.
+  - Added nullable variante_id columns to combo_platos,
+    plato_del_dia, plato_ganador (each with FK to plato_variantes,
+    ON DELETE CASCADE).
+- **Code changes (~ +15 lines)**:
+  - src/types/index.ts: added Variante interface; extended Plato
+    with variantes?: Variante[] and updated_at?: string (drift fix).
+  - src/hooks/data/useCategoriasYPlatos.ts: select changed to
+    `*, variantes:plato_variantes(*)` with nested ordering by
+    foreign table.
+- **Smoke test passed**: Verified via console log in /menu that
+  each plato object has `variantes: []` field (23 platos, 0 with
+  variantes since none created yet). No errors, no perf impact.
+- **Next sessions**: F8.2 (admin form CREATE plato with variants),
+  F8.3 (admin form EDIT), F8.4 (public cards + modal + cart key),
+  F8.5 (combos × variants), F8.6 (promos × variants), F8.7
+  (plato del día / ganador), F8.8 (polish: WhatsApp + Sorpréndeme).
+- **Investigation report**: see this session's prompts for full
+  context, UX decisions, and risk analysis.
+- **Where**: src/types/index.ts (L66-90), src/hooks/data/useCategoriasYPlatos.ts (L17-20).
+
 ### BL.17 ✅ Promo/combo name-match anti-pattern — CLOSED
 - **Closed**: 2026-05-17.
 - **Found**: 2026-05-17 during F8 (variantes) investigation. Tech

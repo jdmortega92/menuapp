@@ -14,9 +14,10 @@ async function fetchCategoriasYPlatos(restauranteId: string): Promise<{ categori
       .order('orden', { ascending: true }),
     supabase
       .from('platos')
-      .select('*')
+      .select('*, variantes:plato_variantes(*)')
       .eq('restaurante_id', restauranteId)
-      .order('orden', { ascending: true }),
+      .order('orden', { ascending: true })
+      .order('orden', { ascending: true, foreignTable: 'plato_variantes' }),
   ])
   return {
     categorias: (catsRes.data ?? []) as Categoria[],
