@@ -19,7 +19,7 @@ import TimeRangeHelper from '@/components/ui/TimeRangeHelper'
 import Select from '@/components/ui/Select'
 import DiasSelector from '@/components/ui/DiasSelector'
 import { formato12h } from '@/lib/time'
-import type { DiaSemana } from '@/types'
+import type { DiaSemana, Variante } from '@/types'
 
 function invalidateAll(prefix: string) {
   return globalMutate(
@@ -39,6 +39,7 @@ function formatDiasShort(dias: string[]): string {
 
 interface Plato {
   id: string; nombre: string; precio: number; descripcion: string; disponible: boolean; foto_url: string | null
+  variantes?: Variante[]
 }
 interface Categoria {
   id: string; nombre: string; orden: number; platos: Plato[]; hora_inicio?: string | null; hora_fin?: string | null
@@ -69,7 +70,19 @@ export default function MiMenuPage() {
   const [guardandoCat, setGuardandoCat] = useState(false)
   const [guardadoCat, setGuardadoCat] = useState(false)
   const [mostrarFormPlato, setMostrarFormPlato] = useState<string | null>(null)
-  const [nuevoPlato, setNuevoPlato] = useState({ nombre: '', precio: '', descripcion: '' })
+  const [nuevoPlato, setNuevoPlato] = useState<{
+    nombre: string;
+    precio: string;
+    descripcion: string;
+    hasVariantes: boolean;
+    variantes: { nombre: string; precio: string }[];
+  }>({
+    nombre: '',
+    precio: '',
+    descripcion: '',
+    hasVariantes: false,
+    variantes: [],
+  })
   const [intentoPlato, setIntentoPlato] = useState(false)
   const [touchedPlato, setTouchedPlato] = useState<Record<string, boolean>>({})
   const [guardandoPlato, setGuardandoPlato] = useState(false)
@@ -550,6 +563,7 @@ export default function MiMenuPage() {
           descripcion: p.descripcion || '',
           disponible: p.disponible,
           foto_url: p.foto_url,
+          variantes: p.variantes || [],
         })),
     }))
   }, [catsAndPlatos])
@@ -947,45 +961,119 @@ export default function MiMenuPage() {
   }
 
   // ── Platos ──
-  function validarPlato(state: { nombre: string; precio: string }): Record<string, string> {
+  function validarPlato(state: {
+    nombre: string;
+    precio: string;
+    hasVariantes?: boolean;
+    variantes?: { nombre: string; precio: string }[];
+  }): Record<string, string> {
     const e: Record<string, string> = {}
     if (!state.nombre.trim()) e.nombre = 'El nombre es obligatorio'
-    const precioNum = parseInt(state.precio)
-    if (!state.precio || isNaN(precioNum) || precioNum <= 0) e.precio = 'El precio debe ser mayor a 0'
+
+    if (state.hasVariantes) {
+      const variantes = state.variantes || []
+      if (variantes.length < 2) {
+        e.variantes = 'Necesitas al menos 2 variantes'
+      } else {
+        variantes.forEach((v, i) => {
+          if (!v.nombre.trim()) {
+            e[`variante_${i}_nombre`] = 'Nombre obligatorio'
+          }
+          const p = parseInt(v.precio)
+          if (!v.precio || isNaN(p) || p <= 0) {
+            e[`variante_${i}_precio`] = 'Precio inválido'
+          }
+        })
+      }
+    } else {
+      const precioNum = parseInt(state.precio)
+      if (!state.precio || isNaN(precioNum) || precioNum <= 0) {
+        e.precio = 'El precio debe ser mayor a 0'
+      }
+    }
+
     return e
   }
   async function agregarPlato(categoriaId: string) {
     setIntentoPlato(true)
     setTouchedPlato({ nombre: true, precio: true })
+
     const errores = validarPlato(nuevoPlato)
     if (Object.keys(errores).length > 0 || !rest?.id) return
+
     setGuardandoPlato(true)
     const supabase = createClient()
     const cat = categorias.find(c => c.id === categoriaId)
-    const { data, error } = await supabase
+
+    let precioParaInsert: number
+    if (nuevoPlato.hasVariantes) {
+      const precios = nuevoPlato.variantes.map(v => parseInt(v.precio))
+      precioParaInsert = Math.min(...precios)
+    } else {
+      precioParaInsert = parseInt(nuevoPlato.precio)
+    }
+
+    const { data: platoData, error: platoError } = await supabase
       .from('platos')
       .insert({
         restaurante_id: rest.id,
         categoria_id: categoriaId,
-        nombre: nuevoPlato.nombre,
-        precio: parseInt(nuevoPlato.precio),
-        descripcion: nuevoPlato.descripcion,
-        disponible: true,
+        nombre: nuevoPlato.nombre.trim(),
+        precio: precioParaInsert,
+        descripcion: nuevoPlato.descripcion.trim() || null,
+        disponible: !nuevoPlato.hasVariantes,
         orden: cat ? cat.platos.length : 0,
       })
       .select()
       .single()
 
-    if (data) {
-      await mutateCategoriasYPlatos()
+    if (platoError || !platoData) {
+      setGuardandoPlato(false)
+      console.error('Error al crear plato:', platoError)
+      return
     }
-    setGuardandoPlato(false)
+
+    if (nuevoPlato.hasVariantes && nuevoPlato.variantes.length > 0) {
+      const variantesParaInsert = nuevoPlato.variantes.map((v, i) => ({
+        plato_id: platoData.id,
+        nombre: v.nombre.trim(),
+        precio: parseInt(v.precio),
+        orden: i,
+      }))
+
+      const { error: variantesError } = await supabase
+        .from('plato_variantes')
+        .insert(variantesParaInsert)
+
+      if (variantesError) {
+        console.error('Error al insertar variantes, rollback plato:', variantesError)
+        await supabase.from('platos').delete().eq('id', platoData.id)
+        setGuardandoPlato(false)
+        return
+      }
+
+      const { error: activateError } = await supabase
+        .from('platos')
+        .update({ disponible: true })
+        .eq('id', platoData.id)
+
+      if (activateError) {
+        console.error('Error al activar plato:', activateError)
+      }
+    }
+
+    await mutateCategoriasYPlatos()
+
     setGuardadoPlato(true)
+    setGuardandoPlato(false)
     setTimeout(() => {
-      setGuardadoPlato(false)
-      setNuevoPlato({ nombre: '', precio: '', descripcion: '' })
+      setNuevoPlato({
+        nombre: '', precio: '', descripcion: '',
+        hasVariantes: false, variantes: [],
+      })
       setIntentoPlato(false)
       setTouchedPlato({})
+      setGuardadoPlato(false)
       setMostrarFormPlato(null)
     }, 1200)
   }
@@ -1268,7 +1356,7 @@ export default function MiMenuPage() {
                         if (opening) {
                           setIntentoPlato(false)
                           setTouchedPlato({})
-                          setNuevoPlato({ nombre: '', precio: '', descripcion: '' })
+                          setNuevoPlato({ nombre: '', precio: '', descripcion: '', hasVariantes: false, variantes: [] })
                         }
                       }}
                         style={{ fontSize: '12px', color: 'var(--color-info)', cursor: 'pointer' }}>+ Plato</span>
@@ -1323,17 +1411,21 @@ export default function MiMenuPage() {
                         {errores.nombre}
                       </div>
                     )}
-                    <input className="input" type="number" placeholder="Precio (ej: 18000)" value={nuevoPlato.precio}
-                      onChange={(e) => setNuevoPlato({ ...nuevoPlato, precio: e.target.value })}
-                      onBlur={() => setTouchedPlato(prev => ({ ...prev, precio: true }))}
-                      style={{
-                        marginBottom: intentoPlato && touchedPlato.precio && errores.precio ? '4px' : '8px',
-                        borderColor: intentoPlato && touchedPlato.precio && errores.precio ? 'var(--color-danger)' : undefined,
-                      }} />
-                    {intentoPlato && touchedPlato.precio && errores.precio && (
-                      <div style={{ fontSize: '11px', color: 'var(--color-danger)', marginBottom: '8px' }}>
-                        {errores.precio}
-                      </div>
+                    {!nuevoPlato.hasVariantes && (
+                      <>
+                        <input className="input" type="number" placeholder="Precio (ej: 18000)" value={nuevoPlato.precio}
+                          onChange={(e) => setNuevoPlato({ ...nuevoPlato, precio: e.target.value })}
+                          onBlur={() => setTouchedPlato(prev => ({ ...prev, precio: true }))}
+                          style={{
+                            marginBottom: intentoPlato && touchedPlato.precio && errores.precio ? '4px' : '8px',
+                            borderColor: intentoPlato && touchedPlato.precio && errores.precio ? 'var(--color-danger)' : undefined,
+                          }} />
+                        {intentoPlato && touchedPlato.precio && errores.precio && (
+                          <div style={{ fontSize: '11px', color: 'var(--color-danger)', marginBottom: '8px' }}>
+                            {errores.precio}
+                          </div>
+                        )}
+                      </>
                     )}
                     <div style={{ position: 'relative', marginBottom: '10px' }}>
                       <input className="input" placeholder="Descripción (opcional)" value={nuevoPlato.descripcion}
@@ -1344,6 +1436,177 @@ export default function MiMenuPage() {
                         {nuevoPlato.descripcion.length}/{MAX_DESC}
                       </span>
                     </div>
+
+                    {/* Toggle hasVariantes */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px', marginBottom: '8px' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
+                        <input
+                          type="checkbox"
+                          checked={nuevoPlato.hasVariantes}
+                          onChange={(e) => setNuevoPlato({ ...nuevoPlato, hasVariantes: e.target.checked })}
+                        />
+                        <span>Este plato tiene variantes (ej: tamaños, sabores)</span>
+                      </label>
+                    </div>
+
+                    {/* Variantes editor — visible only when hasVariantes */}
+                    {nuevoPlato.hasVariantes && (
+                      <div style={{ marginBottom: '10px', padding: '12px', background: 'var(--bg-tertiary)', borderRadius: '6px' }}>
+                        <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: '8px', color: 'var(--text-primary)' }}>
+                          Variantes
+                        </div>
+
+                        {nuevoPlato.variantes.length === 0 && (
+                          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                            Aún no agregaste variantes
+                          </div>
+                        )}
+
+                        {nuevoPlato.variantes.map((v, i) => (
+                          <div key={i} style={{ display: 'flex', gap: '6px', marginBottom: '8px', alignItems: 'flex-start' }}>
+                            <input
+                              type="text"
+                              placeholder="Ej: Pequeña"
+                              value={v.nombre}
+                              onChange={(e) => {
+                                const nuevas = [...nuevoPlato.variantes]
+                                nuevas[i] = { ...nuevas[i], nombre: e.target.value }
+                                setNuevoPlato({ ...nuevoPlato, variantes: nuevas })
+                              }}
+                              style={{
+                                flex: 1,
+                                padding: '6px 8px',
+                                border: `1px solid ${intentoPlato && errores[`variante_${i}_nombre`] ? 'var(--color-danger)' : 'var(--border-light)'}`,
+                                borderRadius: '4px',
+                                fontSize: '13px',
+                                background: 'var(--bg-secondary)',
+                                color: 'var(--text-primary)',
+                              }}
+                            />
+
+                            <input
+                              type="number"
+                              placeholder="$0"
+                              value={v.precio}
+                              onChange={(e) => {
+                                const nuevas = [...nuevoPlato.variantes]
+                                nuevas[i] = { ...nuevas[i], precio: e.target.value }
+                                setNuevoPlato({ ...nuevoPlato, variantes: nuevas })
+                              }}
+                              style={{
+                                width: '90px',
+                                padding: '6px 8px',
+                                border: `1px solid ${intentoPlato && errores[`variante_${i}_precio`] ? 'var(--color-danger)' : 'var(--border-light)'}`,
+                                borderRadius: '4px',
+                                fontSize: '13px',
+                                background: 'var(--bg-secondary)',
+                                color: 'var(--text-primary)',
+                              }}
+                            />
+
+                            <button
+                              type="button"
+                              disabled={i === 0}
+                              onClick={() => {
+                                if (i === 0) return
+                                const nuevas = [...nuevoPlato.variantes]
+                                ;[nuevas[i - 1], nuevas[i]] = [nuevas[i], nuevas[i - 1]]
+                                setNuevoPlato({ ...nuevoPlato, variantes: nuevas })
+                              }}
+                              style={{
+                                padding: '4px 6px',
+                                background: 'transparent',
+                                border: '1px solid var(--border-light)',
+                                borderRadius: '4px',
+                                cursor: i === 0 ? 'not-allowed' : 'pointer',
+                                opacity: i === 0 ? 0.4 : 1,
+                                fontSize: '11px',
+                                color: 'var(--text-primary)',
+                              }}
+                              aria-label="Mover arriba"
+                            >
+                              ▲
+                            </button>
+
+                            <button
+                              type="button"
+                              disabled={i === nuevoPlato.variantes.length - 1}
+                              onClick={() => {
+                                if (i === nuevoPlato.variantes.length - 1) return
+                                const nuevas = [...nuevoPlato.variantes]
+                                ;[nuevas[i], nuevas[i + 1]] = [nuevas[i + 1], nuevas[i]]
+                                setNuevoPlato({ ...nuevoPlato, variantes: nuevas })
+                              }}
+                              style={{
+                                padding: '4px 6px',
+                                background: 'transparent',
+                                border: '1px solid var(--border-light)',
+                                borderRadius: '4px',
+                                cursor: i === nuevoPlato.variantes.length - 1 ? 'not-allowed' : 'pointer',
+                                opacity: i === nuevoPlato.variantes.length - 1 ? 0.4 : 1,
+                                fontSize: '11px',
+                                color: 'var(--text-primary)',
+                              }}
+                              aria-label="Mover abajo"
+                            >
+                              ▼
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setNuevoPlato({
+                                  ...nuevoPlato,
+                                  variantes: nuevoPlato.variantes.filter((_, idx) => idx !== i),
+                                })
+                              }}
+                              style={{
+                                padding: '4px 8px',
+                                background: 'transparent',
+                                border: '1px solid var(--color-danger)',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                color: 'var(--color-danger)',
+                                fontSize: '12px',
+                              }}
+                              aria-label="Eliminar variante"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))}
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNuevoPlato({
+                              ...nuevoPlato,
+                              variantes: [...nuevoPlato.variantes, { nombre: '', precio: '' }],
+                            })
+                          }}
+                          style={{
+                            marginTop: '4px',
+                            padding: '6px 12px',
+                            background: 'transparent',
+                            border: '1px dashed var(--border-light)',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '13px',
+                            color: 'var(--text-primary)',
+                            width: '100%',
+                          }}
+                        >
+                          + Agregar variante
+                        </button>
+
+                        {intentoPlato && errores.variantes && (
+                          <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--color-danger)' }}>
+                            {errores.variantes}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginBottom: '8px' }}>
                       📷 Podrás agregar foto después de crear el plato
                     </div>
@@ -1360,7 +1623,7 @@ export default function MiMenuPage() {
                         setMostrarFormPlato(null)
                         setIntentoPlato(false)
                         setTouchedPlato({})
-                        setNuevoPlato({ nombre: '', precio: '', descripcion: '' })
+                        setNuevoPlato({ nombre: '', precio: '', descripcion: '', hasVariantes: false, variantes: [] })
                       }} className="btn-outline" style={{ flex: 1, padding: '10px', fontSize: '13px' }}>Cancelar</button>
                     </div>
                   </div>

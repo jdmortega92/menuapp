@@ -490,6 +490,73 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
 
 ## Items
 
+### F8.2 ✅ Variantes de platos — Sesión 2 (Admin form CREATE) — CLOSED
+- **Closed**: 2026-05-19.
+- **Goal**: Extend "crear plato" inline form in /menu admin to
+  support variantes (e.g. Pizza chica/mediana/grande). Builds on
+  F8.1 foundation.
+- **UI added in /menu admin (crear plato inline form)**:
+  - Toggle checkbox "Este plato tiene variantes (ej: tamaños,
+    sabores)" between descripción and submit buttons.
+  - When toggle ON: precio input hidden, variantes editor section
+    appears with gray background.
+  - Variantes editor: rows of [nombre input | precio input | ▲ | ▼
+    | ✕] + "+ Agregar variante" button.
+  - Reorder ▲▼ with disabled state at array boundaries.
+  - Per-row error highlighting (red border) on validation failure.
+  - Variantes-level error message (e.g. "Necesitas al menos 2
+    variantes").
+- **State**: nuevoPlato extended with hasVariantes: boolean and
+  variantes: { nombre: string; precio: string }[].
+- **Validation (validarPlato extended)**:
+  - If hasVariantes: requires min 2 variantes, each with non-empty
+    nombre and precio > 0.
+  - If !hasVariantes: existing precio validation unchanged.
+  - Function signature backwards-compatible with edit flow (F8.3).
+- **Persistence (agregarPlato — 3-step transaction)**:
+  - Step 1: INSERT plato with disponible: !hasVariantes,
+    precio = min(variantes.precio) if hasVariantes else parseInt
+    (precio).
+  - Step 2: If hasVariantes, bulk INSERT plato_variantes with
+    orden = array index. On failure: DELETE plato (rollback).
+  - Step 3: If hasVariantes, UPDATE plato SET disponible = true.
+  - Cache invalidation: mutateCategoriasYPlatos() (covers both
+    plato and variantes embed).
+- **UX decisions implemented**:
+  - Q1: precio hidden when hasVariantes ON, auto-default to
+    min(variantes) at submit.
+  - Q2: Toggle OFF hides UI but keeps variantes array in state;
+    if submitted with toggle OFF, variantes silently discarded.
+  - Q3: Min 2 variantes required.
+  - Q4: Placeholders "Ej: Pequeña" (nombre) and "$0" (precio).
+  - Q5: Reorder ▲▼ enabled during create.
+- **Smoke test passed (10/10)**:
+  1. Create plato sin variantes (regression): ✅
+  2. Create plato con 2 variantes: ✅
+  3. Min 2 variantes validation: ✅
+  4. Toggle ON → OFF → submit (silent discard): ✅
+  5. Toggle ON → OFF → ON (keep state): ✅
+  6. Reorder ▲▼ + boundary disabled: ✅
+  7. Remove ✕: ✅
+  8. Nombre vacío validation: ✅
+  9. Precio inválido validation (0, negativo, alpha, vacío): ✅
+  10. Cascade delete via plato deletion (variantes desaparecen
+      automáticamente): ✅
+- **Line delta**: +291 / -28 = +263 net in src/app/menu/page.tsx.
+- **CSS variables**: used --bg-tertiary, --text-primary,
+  --text-secondary, --border-light, --color-danger (matching the
+  rest of menu/page.tsx; differed from initial prompt spec which
+  referenced --theme-* tokens).
+- **Next sessions**:
+  - F8.3: admin form EDIT plato with variantes (similar UI in
+    expanded edit panel).
+  - F8.4: public cards + modal + cart key composite.
+  - F8.5-F8.8: combos, promos, plato del día/ganador, polish.
+- **Where**: src/app/menu/page.tsx (Plato interface L40-43,
+  nuevoPlato state L73-85, categorias projection L562-567,
+  validarPlato L964-996, agregarPlato L997-1079, form UI
+  L1411-1612).
+
 ### F8.1 ✅ Variantes de platos — Sesión 1 (Schema + Types + Hook) — CLOSED
 - **Closed**: 2026-05-19.
 - **Goal**: Foundation for plato variantes feature (e.g. pizza
