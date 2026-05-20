@@ -95,7 +95,32 @@ export default function MiMenuPage() {
   const [guardandoRename, setGuardandoRename] = useState(false)
   const [guardadoRename, setGuardadoRename] = useState(false)
   const [platoExpandido, setPlatoExpandido] = useState<string | null>(null)
-  const [editPlato, setEditPlato] = useState({ nombre: '', precio: '', descripcion: '' })
+  const [editPlato, setEditPlato] = useState<{
+    nombre: string;
+    precio: string;
+    descripcion: string;
+    hasVariantes: boolean;
+    variantes: { id?: string; nombre: string; precio: string }[];
+  }>({
+    nombre: '',
+    precio: '',
+    descripcion: '',
+    hasVariantes: false,
+    variantes: [],
+  })
+  const [originalVariantes, setOriginalVariantes] = useState<{
+    id: string;
+    nombre: string;
+    precio: number;
+    orden: number;
+  }[]>([])
+  const [cascadeWarning, setCascadeWarning] = useState<{
+    rowsToDelete: { id: string; nombre: string }[];
+    combosCount: number;
+    destacadosCount: number;
+    onConfirm: () => void;
+    onCancel: () => void;
+  } | null>(null)
   const [intentoEditPlato, setIntentoEditPlato] = useState(false)
   const [touchedEditPlato, setTouchedEditPlato] = useState<Record<string, boolean>>({})
   const [guardandoEditPlato, setGuardandoEditPlato] = useState(false)
@@ -1109,21 +1134,165 @@ export default function MiMenuPage() {
     const supabase = createClient()
     await supabase.from('platos').delete().eq('id', platoId)
     await mutateCategoriasYPlatos()
-    if (platoExpandido === platoId) setPlatoExpandido(null)
+    if (platoExpandido === platoId) {
+      setPlatoExpandido(null)
+      setOriginalVariantes([])
+    }
   }
   async function guardarEdicionPlato(categoriaId: string, platoId: string) {
     setIntentoEditPlato(true)
     setTouchedEditPlato({ nombre: true, precio: true })
+
     const errores = validarPlato(editPlato)
     if (Object.keys(errores).length > 0) return
+
+    let precioParaUpdate: number
+    if (editPlato.hasVariantes) {
+      const precios = editPlato.variantes.map(v => parseInt(v.precio))
+      precioParaUpdate = Math.min(...precios)
+    } else {
+      precioParaUpdate = parseInt(editPlato.precio)
+    }
+
+    let rowsToInsert: { id?: string; nombre: string; precio: string; _idx: number }[] = []
+    let rowsToUpdate: { id?: string; nombre: string; precio: string; _idx: number }[] = []
+    let rowsToDelete: { id: string; nombre: string; precio: number; orden: number }[] = []
+
+    if (editPlato.hasVariantes) {
+      const formIds = new Set(
+        editPlato.variantes.filter(v => v.id).map(v => v.id!)
+      )
+
+      rowsToInsert = editPlato.variantes
+        .map((v, idx) => ({ ...v, _idx: idx }))
+        .filter(v => !v.id)
+
+      rowsToDelete = originalVariantes.filter(o => !formIds.has(o.id))
+
+      rowsToUpdate = editPlato.variantes
+        .map((v, idx) => ({ ...v, _idx: idx }))
+        .filter(v => {
+          if (!v.id) return false
+          const orig = originalVariantes.find(o => o.id === v.id)
+          if (!orig) return false
+          const precioInt = parseInt(v.precio)
+          return (
+            v.nombre.trim() !== orig.nombre ||
+            precioInt !== orig.precio ||
+            v._idx !== orig.orden
+          )
+        })
+    } else {
+      // Toggle OFF — delete ALL original variantes regardless of in-memory state
+      rowsToInsert = []
+      rowsToUpdate = []
+      rowsToDelete = [...originalVariantes]
+    }
+
+    if (rowsToDelete.length > 0) {
+      const idsToDelete = rowsToDelete.map(r => r.id)
+      const supabase = createClient()
+      const [combos, dia, ganador] = await Promise.all([
+        supabase.from('combo_platos').select('*', { count: 'exact', head: true }).in('variante_id', idsToDelete),
+        supabase.from('plato_del_dia').select('*', { count: 'exact', head: true }).in('variante_id', idsToDelete),
+        supabase.from('plato_ganador').select('*', { count: 'exact', head: true }).in('variante_id', idsToDelete),
+      ])
+      const combosCount = combos.count || 0
+      const destacadosCount = (dia.count || 0) + (ganador.count || 0)
+      const refCount = combosCount + destacadosCount
+      if (refCount > 0) {
+        setCascadeWarning({
+          rowsToDelete: rowsToDelete.map(r => ({ id: r.id, nombre: r.nombre })),
+          combosCount,
+          destacadosCount,
+          onConfirm: () => {
+            doSavePlatoEdit(platoId, categoriaId, precioParaUpdate, rowsToInsert, rowsToUpdate, rowsToDelete)
+          },
+          onCancel: () => {},
+        })
+        return
+      }
+    }
+
+    await doSavePlatoEdit(platoId, categoriaId, precioParaUpdate, rowsToInsert, rowsToUpdate, rowsToDelete)
+  }
+
+  async function doSavePlatoEdit(
+    platoId: string,
+    categoriaId: string,
+    precioParaUpdate: number,
+    rowsToInsert: { nombre: string; precio: string; _idx: number }[],
+    rowsToUpdate: { id?: string; nombre: string; precio: string; _idx: number }[],
+    rowsToDelete: { id: string; nombre: string; precio: number; orden: number }[],
+  ) {
     setGuardandoEditPlato(true)
     const supabase = createClient()
-    await supabase.from('platos').update({
-      nombre: editPlato.nombre,
-      precio: parseInt(editPlato.precio),
-      descripcion: editPlato.descripcion,
-    }).eq('id', platoId)
+
+    const cat = categorias.find(c => c.id === categoriaId)
+    const platoLocal = cat?.platos.find(p => p.id === platoId)
+    const originalDisponible = platoLocal?.disponible ?? true
+
+    if (editPlato.hasVariantes) {
+      await supabase.from('platos').update({ disponible: false }).eq('id', platoId)
+    }
+
+    const { error: platoErr } = await supabase
+      .from('platos')
+      .update({
+        nombre: editPlato.nombre.trim(),
+        precio: precioParaUpdate,
+        descripcion: editPlato.descripcion.trim() || null,
+      })
+      .eq('id', platoId)
+
+    if (platoErr) {
+      console.error('Error updating plato:', platoErr)
+      setGuardandoEditPlato(false)
+      if (editPlato.hasVariantes && originalDisponible) {
+        await supabase.from('platos').update({ disponible: true }).eq('id', platoId)
+      }
+      return
+    }
+
+    if (rowsToDelete.length > 0) {
+      const { error } = await supabase
+        .from('plato_variantes')
+        .delete()
+        .in('id', rowsToDelete.map(r => r.id))
+      if (error) console.error('Error deleting variantes:', error)
+    }
+
+    for (const v of rowsToUpdate) {
+      const { error } = await supabase
+        .from('plato_variantes')
+        .update({
+          nombre: v.nombre.trim(),
+          precio: parseInt(v.precio),
+          orden: v._idx,
+        })
+        .eq('id', v.id!)
+      if (error) console.error('Error updating variante:', error)
+    }
+
+    if (rowsToInsert.length > 0) {
+      const inserts = rowsToInsert.map(v => ({
+        plato_id: platoId,
+        nombre: v.nombre.trim(),
+        precio: parseInt(v.precio),
+        orden: v._idx,
+      }))
+      const { error } = await supabase
+        .from('plato_variantes')
+        .insert(inserts)
+      if (error) console.error('Error inserting variantes:', error)
+    }
+
+    if (editPlato.hasVariantes && originalDisponible) {
+      await supabase.from('platos').update({ disponible: true }).eq('id', platoId)
+    }
+
     await mutateCategoriasYPlatos()
+
     setGuardandoEditPlato(false)
     setGuardadoEditPlato(true)
     setTimeout(() => {
@@ -1131,6 +1300,7 @@ export default function MiMenuPage() {
       setPlatoExpandido(null)
       setIntentoEditPlato(false)
       setTouchedEditPlato({})
+      setOriginalVariantes([])
     }, 1200)
   }
   async function moverPlato(categoriaId: string, platoId: string, direccion: 'arriba' | 'abajo') {
@@ -1641,9 +1811,27 @@ export default function MiMenuPage() {
                           setPlatoExpandido(null)
                           setIntentoEditPlato(false)
                           setTouchedEditPlato({})
+                          setOriginalVariantes([])
                         } else {
+                          const variantesSorted = (plato.variantes || []).slice().sort((a, b) => a.orden - b.orden)
                           setPlatoExpandido(plato.id)
-                          setEditPlato({ nombre: plato.nombre, precio: plato.precio.toString(), descripcion: plato.descripcion || '' })
+                          setEditPlato({
+                            nombre: plato.nombre,
+                            precio: plato.precio.toString(),
+                            descripcion: plato.descripcion || '',
+                            hasVariantes: variantesSorted.length > 0,
+                            variantes: variantesSorted.map(v => ({
+                              id: v.id,
+                              nombre: v.nombre,
+                              precio: v.precio.toString(),
+                            })),
+                          })
+                          setOriginalVariantes(variantesSorted.map(v => ({
+                            id: v.id,
+                            nombre: v.nombre,
+                            precio: v.precio,
+                            orden: v.orden,
+                          })))
                           setIntentoEditPlato(false)
                           setTouchedEditPlato({})
                         }
@@ -1678,7 +1866,7 @@ export default function MiMenuPage() {
                           </div>
                         </div>
                         <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                          ${plato.precio.toLocaleString('es-CO')}
+                          {plato.variantes && plato.variantes.length > 0 ? 'desde ' : ''}${plato.precio.toLocaleString('es-CO')}
                           {plato.descripcion && <span style={{ marginLeft: '6px', color: 'var(--text-tertiary)' }}>· {plato.descripcion.length > 30 ? plato.descripcion.slice(0, 30) + '...' : plato.descripcion}</span>}
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '5px' }}>
@@ -1712,17 +1900,21 @@ export default function MiMenuPage() {
                             {errores.nombre}
                           </div>
                         )}
-                        <input className="input" type="number" placeholder="Precio" value={editPlato.precio}
-                          onChange={(e) => setEditPlato({ ...editPlato, precio: e.target.value })}
-                          onBlur={() => setTouchedEditPlato(prev => ({ ...prev, precio: true }))}
-                          style={{
-                            marginBottom: intentoEditPlato && touchedEditPlato.precio && errores.precio ? '4px' : '8px',
-                            borderColor: intentoEditPlato && touchedEditPlato.precio && errores.precio ? 'var(--color-danger)' : undefined,
-                          }} />
-                        {intentoEditPlato && touchedEditPlato.precio && errores.precio && (
-                          <div style={{ fontSize: '11px', color: 'var(--color-danger)', marginBottom: '8px' }}>
-                            {errores.precio}
-                          </div>
+                        {!editPlato.hasVariantes && (
+                          <>
+                            <input className="input" type="number" placeholder="Precio" value={editPlato.precio}
+                              onChange={(e) => setEditPlato({ ...editPlato, precio: e.target.value })}
+                              onBlur={() => setTouchedEditPlato(prev => ({ ...prev, precio: true }))}
+                              style={{
+                                marginBottom: intentoEditPlato && touchedEditPlato.precio && errores.precio ? '4px' : '8px',
+                                borderColor: intentoEditPlato && touchedEditPlato.precio && errores.precio ? 'var(--color-danger)' : undefined,
+                              }} />
+                            {intentoEditPlato && touchedEditPlato.precio && errores.precio && (
+                              <div style={{ fontSize: '11px', color: 'var(--color-danger)', marginBottom: '8px' }}>
+                                {errores.precio}
+                              </div>
+                            )}
+                          </>
                         )}
                         <div style={{ position: 'relative', marginBottom: '10px' }}>
                           <input className="input" placeholder="Descripción" value={editPlato.descripcion}
@@ -1733,6 +1925,192 @@ export default function MiMenuPage() {
                             {editPlato.descripcion.length}/{MAX_DESC}
                           </span>
                         </div>
+
+                        {/* Toggle hasVariantes */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px', marginBottom: '8px' }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
+                            <input
+                              type="checkbox"
+                              checked={editPlato.hasVariantes}
+                              onChange={(e) => {
+                                const turningOff = !e.target.checked && editPlato.hasVariantes
+                                if (turningOff && editPlato.variantes.length > 0) {
+                                  const precios = editPlato.variantes
+                                    .map(v => parseInt(v.precio))
+                                    .filter(p => !isNaN(p))
+                                  const minPrecio = precios.length > 0 ? Math.min(...precios).toString() : ''
+                                  setEditPlato({
+                                    ...editPlato,
+                                    hasVariantes: false,
+                                    precio: minPrecio,
+                                  })
+                                } else {
+                                  setEditPlato({ ...editPlato, hasVariantes: e.target.checked })
+                                }
+                              }}
+                            />
+                            <span>Este plato tiene variantes (ej: tamaños, sabores)</span>
+                          </label>
+                        </div>
+
+                        {/* Variantes editor — visible only when hasVariantes */}
+                        {editPlato.hasVariantes && (
+                          <div style={{ marginBottom: '10px', padding: '12px', background: 'var(--bg-tertiary)', borderRadius: '6px' }}>
+                            <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: '8px', color: 'var(--text-primary)' }}>
+                              Variantes
+                            </div>
+
+                            {editPlato.variantes.length === 0 && (
+                              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                                Aún no agregaste variantes
+                              </div>
+                            )}
+
+                            {editPlato.variantes.map((v, i) => (
+                              <div key={v.id ?? `new-${i}`} style={{ display: 'flex', gap: '6px', marginBottom: '8px', alignItems: 'flex-start' }}>
+                                <input
+                                  type="text"
+                                  placeholder="Ej: Pequeña"
+                                  value={v.nombre}
+                                  onChange={(e) => {
+                                    const nuevas = [...editPlato.variantes]
+                                    nuevas[i] = { ...nuevas[i], nombre: e.target.value }
+                                    setEditPlato({ ...editPlato, variantes: nuevas })
+                                  }}
+                                  style={{
+                                    flex: 1,
+                                    padding: '6px 8px',
+                                    border: `1px solid ${intentoEditPlato && errores[`variante_${i}_nombre`] ? 'var(--color-danger)' : 'var(--border-light)'}`,
+                                    borderRadius: '4px',
+                                    fontSize: '13px',
+                                    background: 'var(--bg-secondary)',
+                                    color: 'var(--text-primary)',
+                                  }}
+                                />
+
+                                <input
+                                  type="number"
+                                  placeholder="$0"
+                                  value={v.precio}
+                                  onChange={(e) => {
+                                    const nuevas = [...editPlato.variantes]
+                                    nuevas[i] = { ...nuevas[i], precio: e.target.value }
+                                    setEditPlato({ ...editPlato, variantes: nuevas })
+                                  }}
+                                  style={{
+                                    width: '90px',
+                                    padding: '6px 8px',
+                                    border: `1px solid ${intentoEditPlato && errores[`variante_${i}_precio`] ? 'var(--color-danger)' : 'var(--border-light)'}`,
+                                    borderRadius: '4px',
+                                    fontSize: '13px',
+                                    background: 'var(--bg-secondary)',
+                                    color: 'var(--text-primary)',
+                                  }}
+                                />
+
+                                <button
+                                  type="button"
+                                  disabled={i === 0}
+                                  onClick={() => {
+                                    if (i === 0) return
+                                    const nuevas = [...editPlato.variantes]
+                                    ;[nuevas[i - 1], nuevas[i]] = [nuevas[i], nuevas[i - 1]]
+                                    setEditPlato({ ...editPlato, variantes: nuevas })
+                                  }}
+                                  style={{
+                                    padding: '4px 6px',
+                                    background: 'transparent',
+                                    border: '1px solid var(--border-light)',
+                                    borderRadius: '4px',
+                                    cursor: i === 0 ? 'not-allowed' : 'pointer',
+                                    opacity: i === 0 ? 0.4 : 1,
+                                    fontSize: '11px',
+                                    color: 'var(--text-primary)',
+                                  }}
+                                  aria-label="Mover arriba"
+                                >
+                                  ▲
+                                </button>
+
+                                <button
+                                  type="button"
+                                  disabled={i === editPlato.variantes.length - 1}
+                                  onClick={() => {
+                                    if (i === editPlato.variantes.length - 1) return
+                                    const nuevas = [...editPlato.variantes]
+                                    ;[nuevas[i], nuevas[i + 1]] = [nuevas[i + 1], nuevas[i]]
+                                    setEditPlato({ ...editPlato, variantes: nuevas })
+                                  }}
+                                  style={{
+                                    padding: '4px 6px',
+                                    background: 'transparent',
+                                    border: '1px solid var(--border-light)',
+                                    borderRadius: '4px',
+                                    cursor: i === editPlato.variantes.length - 1 ? 'not-allowed' : 'pointer',
+                                    opacity: i === editPlato.variantes.length - 1 ? 0.4 : 1,
+                                    fontSize: '11px',
+                                    color: 'var(--text-primary)',
+                                  }}
+                                  aria-label="Mover abajo"
+                                >
+                                  ▼
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditPlato({
+                                      ...editPlato,
+                                      variantes: editPlato.variantes.filter((_, idx) => idx !== i),
+                                    })
+                                  }}
+                                  style={{
+                                    padding: '4px 8px',
+                                    background: 'transparent',
+                                    border: '1px solid var(--color-danger)',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer',
+                                    color: 'var(--color-danger)',
+                                    fontSize: '12px',
+                                  }}
+                                  aria-label="Eliminar variante"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            ))}
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditPlato({
+                                  ...editPlato,
+                                  variantes: [...editPlato.variantes, { nombre: '', precio: '' }],
+                                })
+                              }}
+                              style={{
+                                marginTop: '4px',
+                                padding: '6px 12px',
+                                background: 'transparent',
+                                border: '1px dashed var(--border-light)',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                fontSize: '13px',
+                                color: 'var(--text-primary)',
+                                width: '100%',
+                              }}
+                            >
+                              + Agregar variante
+                            </button>
+
+                            {intentoEditPlato && errores.variantes && (
+                              <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--color-danger)' }}>
+                                {errores.variantes}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
                         {/* Foto */}
                         {esBasico && <div style={{ marginBottom: '10px' }}>
                           <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Foto del plato</div>
@@ -1772,6 +2150,7 @@ export default function MiMenuPage() {
                             setPlatoExpandido(null)
                             setIntentoEditPlato(false)
                             setTouchedEditPlato({})
+                            setOriginalVariantes([])
                           }} className="btn-outline" style={{ flex: 1, padding: '10px', fontSize: '13px' }}>Cancelar</button>
                         </div>
                       </div>
@@ -2785,6 +3164,65 @@ export default function MiMenuPage() {
             </Modal>
           )
         })()}
+
+        {/* Modal aviso cascade (al eliminar variantes vinculadas) */}
+        {cascadeWarning && (
+          <Modal
+            isOpen={!!cascadeWarning}
+            onClose={() => {
+              cascadeWarning.onCancel()
+              setCascadeWarning(null)
+            }}
+            title="Vas a quitar variantes vinculadas"
+            maxWidth={460}
+          >
+            <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '12px' }}>
+              {cascadeWarning.rowsToDelete.length === 1
+                ? 'Esta variante tiene referencias activas:'
+                : `Estas ${cascadeWarning.rowsToDelete.length} variantes tienen referencias activas:`}
+            </div>
+
+            <ul style={{ margin: 0, marginBottom: '14px', paddingLeft: '20px', fontSize: '13px', color: 'var(--text-primary)' }}>
+              {cascadeWarning.rowsToDelete.map(r => (
+                <li key={r.id} style={{ marginBottom: '4px' }}>{r.nombre || '(sin nombre)'}</li>
+              ))}
+            </ul>
+
+            <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '10px' }}>
+              Vinculadas a {cascadeWarning.combosCount} {cascadeWarning.combosCount === 1 ? 'combo' : 'combos'} y{' '}
+              {cascadeWarning.destacadosCount} {cascadeWarning.destacadosCount === 1 ? 'destacado' : 'destacados'}.
+            </div>
+
+            <div style={{ fontSize: '12px', color: 'var(--color-danger)', marginBottom: '16px' }}>
+              Si continuás, esas vinculaciones se eliminarán automáticamente.
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => {
+                  const cb = cascadeWarning.onConfirm
+                  setCascadeWarning(null)
+                  cb()
+                }}
+                className="btn-primary"
+                style={{ flex: 1, padding: '10px', fontSize: '13px', background: 'var(--color-danger)', borderColor: 'var(--color-danger)' }}
+              >
+                Sí, continuar
+              </button>
+              <button
+                onClick={() => {
+                  const cb = cascadeWarning.onCancel
+                  setCascadeWarning(null)
+                  cb()
+                }}
+                className="btn-outline"
+                style={{ flex: 1, padding: '10px', fontSize: '13px' }}
+              >
+                Cancelar
+              </button>
+            </div>
+          </Modal>
+        )}
 
         {/* Modal recorte de imagen */}
         {cropModal && (

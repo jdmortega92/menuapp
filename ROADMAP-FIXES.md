@@ -490,6 +490,88 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
 
 ## Items
 
+### F8.3 ✅ Variantes de platos — Sesión 3 (Admin form EDIT) — CLOSED
+- **Closed**: 2026-05-19.
+- **Goal**: Extend "editar plato" expanded panel in /menu admin to
+  support variantes (CRUD on existing variantes + toggle ON/OFF
+  + reorder). Builds on F8.2 CREATE.
+- **UI added in EDIT panel (expanded under plato card)**:
+  - Same variantes editor pattern as F8.2 (toggle, rows of
+    [nombre | precio | ▲ | ▼ | ✕], "+ Agregar variante").
+  - Precio input wrapped in {!editPlato.hasVariantes && (...)}.
+  - Toggle OFF on plato with existing variantes pre-populates
+    precio input with min(variantes.precio), editable.
+  - Cascade-warning modal: queries combo_platos.variante_id,
+    plato_del_dia.variante_id, plato_ganador.variante_id BEFORE
+    delete; if any references, shows modal asking confirmation.
+- **Admin display change**: plato cards now show "desde $X" when
+  plato.variantes.length > 0 (consistent with public F8.4 to come).
+- **State**: editPlato widened with hasVariantes + variantes
+  array with optional id per row. New originalVariantes state
+  holds the DB snapshot at panel open for diff computation. New
+  cascadeWarning state holds the modal data.
+- **TRUE DIFF persistence (guardarEdicionPlato)**:
+  - If hasVariantes ON: computes rowsToInsert (new, no id),
+    rowsToUpdate (existing with id, where nombre/precio/orden
+    changed vs originalVariantes), rowsToDelete (in original but
+    not in form).
+  - If hasVariantes OFF: rowsToDelete = ALL originalVariantes
+    (forces deletion regardless of in-memory state).
+  - Executes DELETE-IN ids, per-row UPDATE, bulk INSERT.
+  - Wrapped in disponible: false → diff → disponible: true
+    envelope (only when hasVariantes, to hide partial state).
+  - Computes precioParaUpdate = min(variantes) if hasVariantes,
+    else parseInt(precio).
+- **UX decisions implemented**:
+  - D1: TRUE DIFF persistence (preserves variante ids for F8.5+
+    downstream references).
+  - D2: Cascade-warning modal built now (defensive). Currently
+    always returns 0 refs because F8.5/F8.6/F8.7 not implemented
+    yet, but the code path is in place.
+  - D3: Admin "desde $X" display when has variantes.
+  - D4: Toggle OFF pre-populates precio with min(variantes),
+    editable (user can override).
+- **Bug found and fixed mid-implementation**:
+  - Initial diff trusted editPlato.variantes (in-memory) to
+    compute rowsToDelete. But F8.2's Q2 decision is "hide but
+    keep state" — array stays populated even when toggle OFF.
+    Result: toggling OFF + save left variantes in DB silently.
+  - Fix: explicit branch on hasVariantes — if OFF, mark ALL
+    originalVariantes for deletion.
+  - This validates the decision to do exhaustive smoke testing
+    before commit.
+- **Drift fixes**: guardarEdicionPlato now uses nombre.trim() and
+  descripcion.trim() || null (aligned with F8.2 agregarPlato).
+- **Smoke test passed (13/13)**:
+  1. Admin "desde $X" display when variantes present: ✅
+  2. EDIT plato without variantes, no changes (regression): ✅
+  3. EDIT plato without variantes, modify fields: ✅
+  4. EDIT plato with variantes, seed correctly: ✅
+  5. UPDATE selectivo (single variante modified, others untouched
+     verified by updated_at timestamps in Supabase): ✅
+  6. INSERT new variante (existing ones preserved): ✅
+  7. DELETE selectivo via ✕ (other variantes' ids preserved): ✅
+  8. Reorder ▲▼ persists with orden updates: ✅
+  9. INSERT+UPDATE+DELETE combined in single save (ids preserved
+     for unchanged rows, critical for downstream refs): ✅
+  10. Toggle ON from plato without variantes, add + save: ✅
+  11. Toggle OFF on plato with variantes (verified PASS after fix
+      — variantes deleted from DB, card drops "desde" prefix): ✅
+  12. Toggle OFF + override pre-populated precio: ✅
+  13. Cancel discards all in-progress edits: ✅
+- **Line delta**: +458 / -20 = +438 net in src/app/menu/page.tsx
+  (UI duplication is acceptable; extracting to shared component
+  is BL.13 deferred).
+- **Next sessions**:
+  - F8.4: public cards + modal + cart key composite (MOST critical
+    UX-facing session; touches conversion-critical flow).
+  - F8.5-F8.8: combos, promos, plato del día/ganador, polish.
+- **Where**: src/app/menu/page.tsx (editPlato state ~L98-110,
+  originalVariantes ~L111-116, cascadeWarning ~L117-123,
+  guardarEdicionPlato + doSavePlatoEdit ~L1139-1291, panel
+  seeding ~L1804-1820, variantes editor UI ~L1917-2101, cascade
+  modal ~L3157-3214, admin "desde $X" ~L1858).
+
 ### F8.2 ✅ Variantes de platos — Sesión 2 (Admin form CREATE) — CLOSED
 - **Closed**: 2026-05-19.
 - **Goal**: Extend "crear plato" inline form in /menu admin to
