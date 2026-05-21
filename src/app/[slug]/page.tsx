@@ -31,6 +31,21 @@ function formatDiasFull(dias: string[]): string {
   return dias.map(d => map[d] || d).join(', ')
 }
 
+// F8.4 — Cart key helpers
+// Plain UUIDs for combos and platos without variantes; composite
+// for variantes. UUIDs don't contain "__" so the separator is safe.
+const CART_KEY_SEP = '__'
+
+function makeCartKey(platoId: string, varianteId?: string): string {
+  return varianteId ? `${platoId}${CART_KEY_SEP}${varianteId}` : platoId
+}
+
+function parseCartKey(key: string): { platoId: string; varianteId?: string } {
+  const parts = key.split(CART_KEY_SEP)
+  if (parts.length === 2) return { platoId: parts[0], varianteId: parts[1] }
+  return { platoId: parts[0] }
+}
+
 export default function MenuPublicoPage() {
   const params = useParams()
   const searchParams = useSearchParams()
@@ -48,6 +63,7 @@ export default function MenuPublicoPage() {
   const [mostrarMenu, setMostrarMenu] = useState(esQR)
   type PlatoDetalleModo = 'normal' | 'ganador' | 'platoDia'
   const [platoDetalle, setPlatoDetalle] = useState<{ id: string; modo: PlatoDetalleModo } | null>(null)
+  const [varianteSeleccionadaId, setVarianteSeleccionadaId] = useState<string | null>(null)
   const [platoCalificar, setPlatoCalificar] = useState<string | null>(null)
   const [calEstrellas, setCalEstrellas] = useState(0)
   const [calTags, setCalTags] = useState<string[]>([])
@@ -97,6 +113,7 @@ export default function MenuPublicoPage() {
             foto_url: p.foto_url || null,
             estrellas: stats?.promedio ?? 0,
             resenas: stats?.count ?? 0,
+            variantes: ((p as any).variantes || []).slice().sort((a: any, b: any) => a.orden - b.orden),
           }
         }),
     }))
@@ -162,6 +179,22 @@ export default function MenuPublicoPage() {
     ...categorias.flatMap((c: any) => c.platos),
     ...combosPublico.map((c: any) => ({ id: c.id, nombre: c.nombre, precio: c.precio, descripcion: c.descripcion || '', disponible: true, foto_url: null })),
   ]
+
+  // F8.4 — al abrir el detalle, preseleccionar la primera variante (orden ASC) o limpiar
+  useEffect(() => {
+    if (platoDetalle) {
+      const plato = todosLosPlatos.find((p: any) => p.id === platoDetalle.id)
+      if ((plato as any)?.variantes && (plato as any).variantes.length > 0) {
+        setVarianteSeleccionadaId((plato as any).variantes[0].id)
+      } else {
+        setVarianteSeleccionadaId(null)
+      }
+    }
+    // Solo re-ejecutar al abrir un PLATO distinto, no en cada render.
+    // todosLosPlatos se reconstruye cada render (no memoizado): incluirlo
+    // dispararía el efecto y sobrescribiría la selección del usuario (BL.17).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [platoDetalle?.id])
 
   // Filtrar por horario si está activo
   const ahora = new Date()
@@ -229,38 +262,56 @@ export default function MenuPublicoPage() {
     ? categoriasPorHorario.map((cat) => ({ ...cat, platos: cat.platos.filter((p) => p.nombre.toLowerCase().includes(busqueda.toLowerCase()) || p.descripcion?.toLowerCase().includes(busqueda.toLowerCase())) })).filter((cat) => cat.platos.length > 0)
     : categoriasPorHorario
 
-  function agregarAlPedido(platoId: string) {
+  function agregarAlPedido(cartKey: string) {
     // Si el plato tiene promo 2x1, sumar de 2 en 2 (lleva 4, paga 2)
-    const esPromo2x1 = preciosPromo[platoId]?.etiqueta === '2x1'
+    const esPromo2x1 = preciosPromo[cartKey]?.etiqueta === '2x1'
     const incremento = esPromo2x1 ? 2 : 1
-    setPedido({ ...pedido, [platoId]: (pedido[platoId] || 0) + incremento })
+    setPedido({ ...pedido, [cartKey]: (pedido[cartKey] || 0) + incremento })
   }
 
-  function quitarDelPedido(platoId: string) {
+  function quitarDelPedido(cartKey: string) {
     // Si el plato tiene promo 2x1, restar de 2 en 2 para mantener múltiplos
-    const esPromo2x1 = preciosPromo[platoId]?.etiqueta === '2x1'
+    const esPromo2x1 = preciosPromo[cartKey]?.etiqueta === '2x1'
     const decremento = esPromo2x1 ? 2 : 1
-    const c = (pedido[platoId] || 0) - decremento
+    const c = (pedido[cartKey] || 0) - decremento
 
     if (c <= 0) {
       const n = { ...pedido }
-      delete n[platoId]
+      delete n[cartKey]
       // Si se elimina totalmente, limpiar también el precio promo asociado
       const p = { ...preciosPromo }
-      delete p[platoId]
+      delete p[cartKey]
       setPedido(n)
       setPreciosPromo(p)
     } else {
-      setPedido({ ...pedido, [platoId]: c })
+      setPedido({ ...pedido, [cartKey]: c })
     }
   }
 
-  const itemsPedido = Object.entries(pedido).map(([id, cantidad]) => {
-    const plato = todosLosPlatos.find((p: any) => p.id === id)
-    const promo = preciosPromo[id]
-    return { plato: plato!, cantidad, promo }
-  }).filter(i => i.plato)
-  const totalPedido = itemsPedido.reduce((sum, i) => sum + (i.promo ? i.promo.precioUnitario : i.plato.precio) * i.cantidad, 0)
+  const itemsPedido = Object.entries(pedido).map(([cartKey, cantidad]) => {
+    const { platoId, varianteId } = parseCartKey(cartKey)
+    const plato = todosLosPlatos.find((p: any) => p.id === platoId)
+    if (!plato) return null
+    const variante = varianteId
+      ? (plato as any).variantes?.find((v: any) => v.id === varianteId)
+      : undefined
+    // Defensive: si la cartKey referencia una variante que ya no existe, descartar el item
+    if (varianteId && !variante) return null
+    const promo = preciosPromo[cartKey]
+    return { plato, variante, cantidad, promo, cartKey }
+  }).filter((i: any) => i !== null) as Array<{
+    plato: any
+    variante?: any
+    cantidad: number
+    promo?: { precioUnitario: number; etiqueta: string }
+    cartKey: string
+  }>
+  const totalPedido = itemsPedido.reduce((sum, i) => {
+    const unitPrice = i.promo
+      ? i.promo.precioUnitario
+      : (i.variante ? i.variante.precio : i.plato.precio)
+    return sum + unitPrice * i.cantidad
+  }, 0)
   const totalProductos = itemsPedido.reduce((sum, i) => sum + i.cantidad, 0)
 
   const [sorpresaPlatos, setSorpresaPlatos] = useState<typeof todosLosPlatos>([])
@@ -310,14 +361,19 @@ export default function MenuPublicoPage() {
       fecha: new Date(new Date().getTime() - 5 * 60 * 60 * 1000).toISOString().split('T')[0],
       total: totalPedido,
       nota: nota || null,
-      productos: itemsPedido.map(i => ({ nombre: i.plato.nombre, cantidad: i.cantidad, precio: i.plato.precio })),
+      productos: itemsPedido.map(i => ({
+        nombre: i.variante ? `${i.plato.nombre} (${i.variante.nombre})` : i.plato.nombre,
+        cantidad: i.cantidad,
+        precio: i.variante ? i.variante.precio : i.plato.precio,
+      })),
     }).then(({ error }: any) => {
-      
+
     })
     const lineas = itemsPedido.map(i => {
-      const precioUnit = i.promo ? i.promo.precioUnitario : i.plato.precio
+      const nombre = i.variante ? `${i.plato.nombre} (${i.variante.nombre})` : i.plato.nombre
+      const precioUnit = i.promo ? i.promo.precioUnitario : (i.variante ? i.variante.precio : i.plato.precio)
       const etiqueta = i.promo ? ` (${i.promo.etiqueta})` : ''
-      return `- ${i.cantidad} ${i.plato.nombre}${etiqueta} $${(precioUnit * i.cantidad).toLocaleString('es-CO')}`
+      return `- ${i.cantidad} ${nombre}${etiqueta} $${(precioUnit * i.cantidad).toLocaleString('es-CO')}`
     })
     let msg = `Hola! Vi tu menú en ${restaurante.nombre} y quiero pedir:\n${lineas.join('\n')}`
     if (nota) msg += `\nNota: ${nota}`
@@ -325,16 +381,16 @@ export default function MenuPublicoPage() {
     window.open(`https://wa.me/57${restaurante.whatsapp}?text=${encodeURIComponent(msg)}`, '_blank')
   }
 
-  function Qty({ id }: { id: string }) {
-    const c = pedido[id] || 0
+  function Qty({ cartKey }: { cartKey: string }) {
+    const c = pedido[cartKey] || 0
     return c > 0 ? (
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <div onClick={(e) => { e.stopPropagation(); quitarDelPedido(id) }} style={{ width: '26px', height: '26px', borderRadius: '50%', border: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', cursor: 'pointer', color: 'var(--text-secondary)' }}>-</div>
+        <div onClick={(e) => { e.stopPropagation(); quitarDelPedido(cartKey) }} style={{ width: '26px', height: '26px', borderRadius: '50%', border: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', cursor: 'pointer', color: 'var(--text-secondary)' }}>-</div>
         <span style={{ fontSize: '14px', fontWeight: 500, minWidth: '16px', textAlign: 'center' }}>{c}</span>
-        <div onClick={(e) => { e.stopPropagation(); agregarAlPedido(id) }} style={{ width: '26px', height: '26px', borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '14px', cursor: 'pointer' }}>+</div>
+        <div onClick={(e) => { e.stopPropagation(); agregarAlPedido(cartKey) }} style={{ width: '26px', height: '26px', borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '14px', cursor: 'pointer' }}>+</div>
       </div>
     ) : (
-      <div onClick={(e) => { e.stopPropagation(); agregarAlPedido(id) }} style={{ width: '26px', height: '26px', borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '14px', cursor: 'pointer' }}>+</div>
+      <div onClick={(e) => { e.stopPropagation(); agregarAlPedido(cartKey) }} style={{ width: '26px', height: '26px', borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '14px', cursor: 'pointer' }}>+</div>
     )
   }
 
@@ -914,10 +970,18 @@ export default function MenuPublicoPage() {
                   {platoGanador.descripcionEspecial && (
                     <div style={{ fontSize: '11px', color: '#6B6A65', marginTop: '2px', fontStyle: 'italic' }}>"{platoGanador.descripcionEspecial}"</div>
                   )}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
-                    <span style={{ fontSize: '14px', fontWeight: 500, color: '#B8860B' }}>${platoGanador.precio?.toLocaleString('es-CO')}</span>
-                    <Qty id={platoGanador.id} />
-                  </div>
+                  {(() => {
+                    // D4: si el ganador tiene variantes, mostrar "desde $X" y sin Qty inline
+                    // (el click de la tarjeta abre el modal)
+                    const ganadorPlato = todosLosPlatos.find((p: any) => p.id === platoGanador.id)
+                    const ganadorTieneVariantes = (ganadorPlato as any)?.variantes && (ganadorPlato as any).variantes.length > 0
+                    return (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
+                        <span style={{ fontSize: '14px', fontWeight: 500, color: '#B8860B' }}>{ganadorTieneVariantes ? 'desde ' : ''}${platoGanador.precio?.toLocaleString('es-CO')}</span>
+                        {ganadorTieneVariantes ? null : <Qty cartKey={platoGanador.id} />}
+                      </div>
+                    )
+                  })()}
                 </div>
               </div>
             </div>
@@ -925,7 +989,12 @@ export default function MenuPublicoPage() {
         )}
 
         {/* Plato del día */}
-        {esProPublico && config?.plato_dia_activo && platoDiaVisible && !busqueda.trim() && (
+        {esProPublico && config?.plato_dia_activo && platoDiaVisible && !busqueda.trim() && (() => {
+          // D4: si el plato del día tiene variantes, mostrarlo como un plato normal variantizado
+          // ("desde $X", sin precio tachado ni "+" inline). El click de la tarjeta abre el modal.
+          const platoDiaPlato = todosLosPlatos.find((p: any) => p.id === platoDia.id)
+          const platoDiaTieneVariantes = (platoDiaPlato as any)?.variantes && (platoDiaPlato as any).variantes.length > 0
+          return (
           <div style={{ padding: '0 16px 10px' }}>
             <div onClick={() => setPlatoDetalle({ id: platoDia.id, modo: 'platoDia' })} style={{
               background: `${color}10`,
@@ -960,16 +1029,23 @@ export default function MenuPublicoPage() {
                     {platoDia.descripcion}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
-                    <span style={{
-                      fontSize: '12px',
-                      color: 'var(--theme-text-subtle)',
-                      textDecoration: 'line-through',
-                    }}>
-                      ${formatoPrecio(platoDia.precio)}
-                    </span>
-                    <span style={{ fontSize: '14px', fontWeight: 500, color: color }}>${formatoPrecio(platoDia.precioEspecial)}</span>
+                    {platoDiaTieneVariantes ? (
+                      <span style={{ fontSize: '14px', fontWeight: 500, color: color }}>desde ${formatoPrecio(platoDia.precio)}</span>
+                    ) : (
+                      <>
+                        <span style={{
+                          fontSize: '12px',
+                          color: 'var(--theme-text-subtle)',
+                          textDecoration: 'line-through',
+                        }}>
+                          ${formatoPrecio(platoDia.precio)}
+                        </span>
+                        <span style={{ fontSize: '14px', fontWeight: 500, color: color }}>${formatoPrecio(platoDia.precioEspecial)}</span>
+                      </>
+                    )}
                   </div>
                 </div>
+                {platoDiaTieneVariantes ? null : (
                 <div onClick={(e) => {
                   e.stopPropagation()
                   // Agregar plato del día CON precio especial registrado
@@ -990,10 +1066,12 @@ export default function MenuPublicoPage() {
                   fontSize: '14px',
                   cursor: 'pointer',
                 }}>+</div>
+                )}
               </div>
             </div>
           </div>
-        )}
+          )
+        })()}
 
         {/* Sorpréndeme botón */}
         {esBasicoPublico && config?.sorprendeme_activo && sorprendemeVisible && !busqueda.trim() && (
@@ -1075,9 +1153,11 @@ export default function MenuPublicoPage() {
                         fontWeight: 500,
                         color: 'var(--theme-text)',
                       }}>
-                        ${plato.precio.toLocaleString('es-CO')}
+                        {plato.variantes && plato.variantes.length > 0 ? 'desde ' : ''}${plato.precio.toLocaleString('es-CO')}
                       </span>
-                      <Qty id={plato.id} />
+                      {plato.variantes && plato.variantes.length > 0
+                        ? null // Card click abre el modal; sin Qty inline para platos con variantes
+                        : <Qty cartKey={plato.id} />}
                     </div>
                   </div>
                 </div>
@@ -1157,7 +1237,7 @@ export default function MenuPublicoPage() {
                     <span style={{ fontSize: '11px', color: 'var(--color-green)', fontWeight: 500 }}>-${(combo.precioIndividual - combo.precio).toLocaleString('es-CO')}</span>
                   </div>
                   <div onClick={(e) => e.stopPropagation()}>
-                    <Qty id={combo.id} />
+                    <Qty cartKey={combo.id} />
                   </div>
                 </div>
                 <div style={{ fontSize: '11px', color: color, marginTop: '6px', fontWeight: 500 }}>Ver detalles →</div>
@@ -1446,6 +1526,8 @@ export default function MenuPublicoPage() {
             promoDetalle.platosIds.includes(p.id)
           )
 
+          // TODO(F8.4b): manejar variantes — el cálculo de promo debe operar
+          // contra la variante seleccionada y escribir la cartKey composite.
           function agregarPromoAlPedido() {
             if (promoSeleccion.length === 0) return
             const nuevoPedido = { ...pedido }
@@ -1705,7 +1787,7 @@ export default function MenuPublicoPage() {
                         fontWeight: 500,
                         color: 'var(--theme-text)',
                       }}>
-                        ${plato.precio.toLocaleString('es-CO')}
+                        {plato.variantes && plato.variantes.length > 0 ? 'desde ' : ''}${plato.precio.toLocaleString('es-CO')}
                       </span>
                       {config?.calificaciones_activo && plato.resenas > 0 && (
                         <span style={{ fontSize: '10px', color: '#F2A623' }}>
@@ -1713,7 +1795,11 @@ export default function MenuPublicoPage() {
                         </span>
                       )}
                     </div>
-                    {plato.disponible ? <Qty id={plato.id} /> : <span style={{ fontSize: '10px', color: 'var(--color-danger)', fontWeight: 500 }}>Agotado</span>}
+                    {plato.disponible
+                      ? (plato.variantes && plato.variantes.length > 0
+                          ? null // Card click abre el modal; sin Qty inline para platos con variantes
+                          : <Qty cartKey={plato.id} />)
+                      : <span style={{ fontSize: '10px', color: 'var(--color-danger)', fontWeight: 500 }}>Agotado</span>}
                   </div>
                 </div>
               </div>
@@ -1734,12 +1820,16 @@ export default function MenuPublicoPage() {
               <div style={{ fontSize: '11px', color: 'var(--theme-text-muted)', marginBottom: '8px' }}>Estos platos pertenecen a categorías fuera de horario y se eliminarán del pedido.</div>
               <div onClick={() => {
                 const nuevoPedido = { ...pedido }
-                Object.keys(nuevoPedido).forEach(id => {
-                  if (!platosVisiblesIds.has(id) && !combosVisibles.some((c: any) => c.id === id)) {
-                    delete nuevoPedido[id]
+                const nuevosPrecios = { ...preciosPromo }
+                Object.keys(nuevoPedido).forEach(cartKey => {
+                  const { platoId } = parseCartKey(cartKey)
+                  if (!platosVisiblesIds.has(platoId) && !combosVisibles.some((c: any) => c.id === platoId)) {
+                    delete nuevoPedido[cartKey]
+                    delete nuevosPrecios[cartKey]
                   }
                 })
                 setPedido(nuevoPedido)
+                setPreciosPromo(nuevosPrecios)
               }} style={{ fontSize: '12px', color: 'var(--color-warning)', fontWeight: 500, cursor: 'pointer' }}>
                 Limpiar platos no disponibles →
               </div>
@@ -1777,7 +1867,7 @@ export default function MenuPublicoPage() {
                 maxWidth: '200px',
               }}>
                 {(() => {
-                  const items = itemsPedido.map(i => `${i.cantidad} ${i.plato.nombre}`)
+                  const items = itemsPedido.map(i => `${i.cantidad} ${i.plato.nombre}${i.variante ? ` · ${i.variante.nombre}` : ''}`)
                   if (items.length <= 2) return items.join(' + ')
                   const visibles = items.slice(0, 2).join(' + ')
                   const restantes = items.length - 2
@@ -1817,7 +1907,7 @@ export default function MenuPublicoPage() {
           )}
           <div style={{ padding: '16px 20px' }}>
             {itemsPedido.map((item: any) => (
-              <div key={item.plato.id} style={{
+              <div key={item.cartKey} style={{
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
@@ -1831,7 +1921,7 @@ export default function MenuPublicoPage() {
                     color: 'var(--theme-text)',
                     fontFamily: 'var(--theme-font-body)',
                   }}>
-                    {item.plato.nombre}
+                    {item.plato.nombre}{item.variante ? ` · ${item.variante.nombre}` : ''}
                   </div>
                   <div style={{
                     fontSize: '12px',
@@ -1839,12 +1929,12 @@ export default function MenuPublicoPage() {
                     fontFamily: 'var(--theme-font-body)',
                   }}>
                     {item.promo ? (
-                      <><span style={{ textDecoration: 'line-through', marginRight: '4px' }}>${formatoPrecio(item.plato.precio)}</span><span style={{ color: color, fontWeight: 500 }}>${formatoPrecio(item.promo.precioUnitario)} c/u</span> <span style={{ fontSize: '10px', color: 'var(--color-green)' }}>({item.promo.etiqueta})</span></>
-                    ) : `$${formatoPrecio(item.plato.precio)} c/u`}
+                      <><span style={{ textDecoration: 'line-through', marginRight: '4px' }}>${formatoPrecio(item.variante ? item.variante.precio : item.plato.precio)}</span><span style={{ color: color, fontWeight: 500 }}>${formatoPrecio(item.promo.precioUnitario)} c/u</span> <span style={{ fontSize: '10px', color: 'var(--color-green)' }}>({item.promo.etiqueta})</span></>
+                    ) : `$${formatoPrecio(item.variante ? item.variante.precio : item.plato.precio)} c/u`}
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <div onClick={() => quitarDelPedido(item.plato.id)} style={{
+                  <div onClick={() => quitarDelPedido(item.cartKey)} style={{
                     width: '24px',
                     height: '24px',
                     borderRadius: '50%',
@@ -1866,7 +1956,7 @@ export default function MenuPublicoPage() {
                   }}>
                     {item.cantidad}
                   </span>
-                  <div onClick={() => agregarAlPedido(item.plato.id)} style={{ width: '24px', height: '24px', borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '14px', cursor: 'pointer' }}>+</div>
+                  <div onClick={() => agregarAlPedido(item.cartKey)} style={{ width: '24px', height: '24px', borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '14px', cursor: 'pointer' }}>+</div>
                 </div>
                 <div style={{
                   fontSize: '13px',
@@ -1876,7 +1966,7 @@ export default function MenuPublicoPage() {
                   color: 'var(--theme-text)',
                   fontFamily: 'var(--theme-font-body)',
                 }}>
-                  ${((item.promo ? item.promo.precioUnitario : item.plato.precio) * item.cantidad).toLocaleString('es-CO')}
+                  ${((item.promo ? item.promo.precioUnitario : (item.variante ? item.variante.precio : item.plato.precio)) * item.cantidad).toLocaleString('es-CO')}
                 </div>
               </div>
             ))}
@@ -2120,7 +2210,16 @@ export default function MenuPublicoPage() {
         {platoDetalle && (() => {
           const plato = todosLosPlatos.find((p: any) => p.id === platoDetalle?.id)
           if (!plato) return null
-          const cantidadActual = pedido[plato.id] || 0
+          // F8.4 — variantes del plato (ya ordenadas por orden ASC en la proyección)
+          const tieneVariantes = (plato as any).variantes && (plato as any).variantes.length > 0
+          const varianteActual = tieneVariantes
+            ? (plato as any).variantes.find((v: any) => v.id === varianteSeleccionadaId)
+            : null
+          // cartKey según selección: composite si hay variante, plano si no
+          const cartKey = tieneVariantes && varianteSeleccionadaId
+            ? makeCartKey(plato.id, varianteSeleccionadaId)
+            : plato.id
+          const cantidadActual = pedido[cartKey] || 0
           const cantidadMostrar = cantidadActual || 1
 
           return (
@@ -2195,7 +2294,61 @@ export default function MenuPublicoPage() {
                 }}>
                   {plato.descripcion}
                 </div>
+
+                {/* F8.4 — Selector de variantes */}
+                {tieneVariantes && (
+                  <div style={{ marginBottom: '14px' }}>
+                    <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: '8px', color: 'var(--theme-text)' }}>
+                      Elige una opción
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {(plato as any).variantes.map((v: any) => (
+                        <label
+                          key={v.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '10px 12px',
+                            border: `1px solid ${varianteSeleccionadaId === v.id ? color : 'var(--theme-border)'}`,
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            background: varianteSeleccionadaId === v.id ? 'var(--theme-surface-muted)' : 'transparent',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <input
+                              type="radio"
+                              name="variante"
+                              checked={varianteSeleccionadaId === v.id}
+                              onChange={() => setVarianteSeleccionadaId(v.id)}
+                              style={{ accentColor: color }}
+                            />
+                            <span style={{ fontSize: '14px', color: 'var(--theme-text)' }}>{v.nombre}</span>
+                          </div>
+                          <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--theme-text)' }}>
+                            ${v.precio.toLocaleString('es-CO')}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {(() => {
+                  // D4: con variantes, mostrar el precio de la variante seleccionada (ignorar precioEspecial)
+                  if (tieneVariantes) {
+                    return (
+                      <div style={{
+                        fontSize: '22px',
+                        fontWeight: 500,
+                        marginBottom: '16px',
+                        color: 'var(--theme-text)',
+                      }}>
+                        ${formatoPrecio(varianteActual ? varianteActual.precio : plato.precio)}
+                      </div>
+                    )
+                  }
                   const esPlatoDelDia = platoDia && platoDia.id === plato.id && esProPublico && config?.plato_dia_activo && platoDiaVisible && platoDetalle?.modo !== 'ganador'
                   if (esPlatoDelDia) {
                     return (
@@ -2356,7 +2509,7 @@ export default function MenuPublicoPage() {
                     borderRadius: 'var(--theme-radius-card)',
                     padding: '10px 14px',
                   }}>
-                    <div onClick={() => { if (cantidadActual > 0) quitarDelPedido(plato.id) }} style={{
+                    <div onClick={() => { if (cantidadActual > 0) quitarDelPedido(cartKey) }} style={{
                       width: '28px',
                       height: '28px',
                       borderRadius: '50%',
@@ -2377,7 +2530,7 @@ export default function MenuPublicoPage() {
                     }}>
                       {cantidadMostrar}
                     </span>
-                    <div onClick={() => agregarAlPedido(plato.id)} style={{
+                    <div onClick={() => agregarAlPedido(cartKey)} style={{
                       width: '28px',
                       height: '28px',
                       borderRadius: '50%',
@@ -2391,20 +2544,23 @@ export default function MenuPublicoPage() {
                     }}>+</div>
                   </div>
                   {(() => {
-                    const esPlatoDelDia = platoDia && platoDia.id === plato.id && esProPublico && config?.plato_dia_activo && platoDiaVisible && platoDetalle?.modo !== 'ganador'
-                    const precioParaCalcular = esPlatoDelDia ? platoDia.precioEspecial : plato.precio
+                    // D4: con variantes, ignorar precioEspecial y usar el precio de la variante
+                    const esPlatoDelDia = !tieneVariantes && platoDia && platoDia.id === plato.id && esProPublico && config?.plato_dia_activo && platoDiaVisible && platoDetalle?.modo !== 'ganador'
+                    const precioParaCalcular = esPlatoDelDia
+                      ? platoDia.precioEspecial
+                      : (varianteActual ? varianteActual.precio : plato.precio)
                     return (
                       <div onClick={() => {
                         if (cantidadActual === 0) {
                           if (esPlatoDelDia) {
                             // Agregar con precio especial registrado
-                            setPedido({ ...pedido, [plato.id]: 1 })
+                            setPedido({ ...pedido, [cartKey]: 1 })
                             setPreciosPromo({
                               ...preciosPromo,
-                              [plato.id]: { precioUnitario: platoDia.precioEspecial, etiqueta: 'Plato del día' }
+                              [cartKey]: { precioUnitario: platoDia.precioEspecial, etiqueta: 'Plato del día' }
                             })
                           } else {
-                            agregarAlPedido(plato.id)
+                            agregarAlPedido(cartKey)
                           }
                         }
                         setPlatoDetalle(null)

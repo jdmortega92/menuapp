@@ -490,6 +490,106 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
 
 ## Items
 
+### F8.4a ✅ Variantes de platos — Sesión 4a (Public menu + cart refactor) — CLOSED
+- **Closed**: 2026-05-20.
+- **Goal**: Extend public menu (/[slug]) to support platos with
+  variantes end-to-end. This is the MOST critical UX session of
+  F8 (touches conversion-critical cart flow).
+- **Critical projection fix**: public categorias projection in
+  /[slug]/page.tsx L82-103 dropped variantes. Investigation
+  caught this — first task added `variantes: p.variantes || []`
+  with `.slice().sort()` by orden ASC. Without this fix, nothing
+  else in F8.4a would have worked.
+- **Cart key composite strings**: introduced
+  CART_KEY_SEP = '__', helpers makeCartKey(platoId, varianteId?)
+  and parseCartKey(key). UUIDs don't contain "__" so the
+  separator is safe. Combos and platos without variantes use
+  bare platoId; variantes use ${platoId}__${varianteId}.
+- **Cart functions refactored**:
+  - agregarAlPedido / quitarDelPedido signatures changed to
+    (cartKey: string). All callers updated.
+  - itemsPedido resolver: parses composite key, looks up plato +
+    variante, attaches them to each item along with cartKey.
+    Defensive filter drops items where varianteId references a
+    non-existent variante (stale cart handling).
+  - totalPedido uses effective price (promo → variante → plato).
+- **UI changes**:
+  - Card grid: "desde $X" prefix when plato has variantes; NO
+    inline Qty button when variantes (force modal opening).
+  - Detail modal: new "Elige una opción" section with vertical
+    radio buttons, one per variante, first pre-selected by
+    orden ASC.
+  - Modal price block, qty stepper, and "Agregar $X" button
+    react to varianteSeleccionadaId.
+  - Same hide-Qty + price prefix logic applied to Sorpréndeme
+    cards, ganador card, and plato del día card.
+  - Cart drawer line items: "Pizza Margarita · Mediana" with
+    item.variante?.nombre, item.cartKey used for key and +/-
+    callbacks, variante.precio used for unit/line prices.
+  - Floating tray summary: also includes "· Variante" suffix
+    for consistency with drawer.
+- **External integrations (D5)**:
+  - WhatsApp message: lines now use "1× Pizza Margarita (Mediana)
+    $25.000" with parenthesis format.
+  - pedidos_whatsapp insert: productos[].nombre with parenthesis
+    + productos[].precio = variante.precio.
+- **Defensive fallbacks (D4)**:
+  - Plato del día / ganador with variantes (variante_id always
+    NULL today, will be wired in F8.7): card shows "desde $X"
+    + no inline +, modal opens in 'normal' mode (ignores
+    precioEspecial). Both card display and onClick handle this.
+- **Out-of-hours cleanup**: parses composite keys via
+  parseCartKey to get platoId, and also prunes preciosPromo.
+- **Bugs found and fixed mid-smoke-test**:
+  - **Bug 1**: useEffect for variante pre-select had
+    [platoDetalle, todosLosPlatos] in dep array. todosLosPlatos
+    is reconstructed on every render (not memoized), causing the
+    effect to re-run and reset selection on every render. User
+    couldn't change variante because state reverted immediately.
+    Fix: dep array reduced to [platoDetalle?.id]. Same anti-
+    pattern as BL.17 — non-primitive deps that change reference
+    every render.
+  - **Bug 2**: Plato del día card display did NOT apply D4
+    defensive fallback. Showed precio tachado + precioEspecial
+    visible + inline "+" button even when plato had variantes.
+    The onClick was defensive (T8) but the visual was not.
+    Same issue on Ganador card price (T6 added Qty-hide but
+    missed "desde" prefix on price).
+    Fix: wrapped both card render blocks in IIFE computing
+    tieneVariantes once; conditional price ("desde $X" vs
+    crossed-out + precioEspecial) and conditional button render.
+  - Both bugs caught BEFORE commit. Validates exhaustive smoke
+    testing.
+- **Promo modal**: NOT touched (deferred to F8.4b). TODO comment
+  added at agregarPromoAlPedido. Promos applied to variantized
+  platos will produce incorrect math until F8.4b — acceptable
+  for F8.4a deploy because admin F8.2/F8.3 validations don't
+  yet block this configuration (will be added in F8.6).
+- **Smoke test passed (10/10)**:
+  1. Card "desde $X" prefix: ✅
+  2. Inline + hidden when variantes: ✅
+  3. Modal opens with radio selector + first variante pre-selected: ✅
+  4. Change variante updates price reactively (PASS after Bug 1 fix): ✅
+  5. Agregar variante creates cart line: ✅
+  6. Agregar SAME plato + DIFFERENT variante = SEPARATE line items: ✅ (CRITICAL)
+  7. WhatsApp message with parenthesis format and variant prices: ✅
+  8. pedidos_whatsapp insert with parenthesis and variant prices: ✅
+  9. Plato del día card + modal defensive (PASS after Bug 2 fix): ✅
+  10. Stale cart filter when variante deleted in DB: ✅
+- **Line delta**: +280 / -62 = +218 net in src/app/[slug]/page.tsx
+    (includes both bug fixes applied mid-smoke-test).
+- **Next**: F8.4b (promo modal per-row variant selectors +
+  promo math against variante).
+- **Where**: src/app/[slug]/page.tsx (helpers L34-47, projection
+  L100, varianteSeleccionadaId state L66, pre-select effect
+  L183-197, agregar/quitar L248-272, itemsPedido L274-291,
+  totalPedido L292-297, Qty component L362-373, WhatsApp +
+  insert L341-360, ganador card L973-984, plato del día card
+  L990-1072, sorpresa card L1114-1116, grid card L1750-1754,
+  promo TODO L1516-1517, cart drawer L1872-1933, detail modal
+  selector L2283-2321, modal price block L2323-2336, modal
+  stepper + add button L2497-2553).
+
 ### F8.3 ✅ Variantes de platos — Sesión 3 (Admin form EDIT) — CLOSED
 - **Closed**: 2026-05-19.
 - **Goal**: Extend "editar plato" expanded panel in /menu admin to
