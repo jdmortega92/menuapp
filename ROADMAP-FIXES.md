@@ -490,6 +490,108 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
 
 ## Items
 
+### F8.4b ✅ Variantes de platos — Sesión 4b (Promo modal) — CLOSED
+- **Closed**: 2026-05-21.
+- **Goal**: Extend the promo modal in /[slug] public page to
+  support platos with variantes. Last pendiente del flujo
+  cliente para F8. F8.4a (commit 31f31a3) dejó un TODO comment
+  near agregarPromoAlPedido marking exactly where this work
+  belonged.
+- **3 helpers added at module level** (after parseCartKey):
+  - precioEfectivo(plato, varianteId?) — returns variante.precio
+    when applicable, else plato.precio. Fallback ensures
+    byte-identical behavior for no-variante platos.
+  - algunaKeyEsDePlato(seleccion, platoId) — replaces
+    promoSeleccion.includes(plato.id) since selection now stores
+    composite keys for variante platos.
+  - obtenerKeyDePlato(seleccion, platoId) — gets the exact key
+    (composite or bare) for a plato in the selection.
+- **promoSeleccion data shape**: stays string[] but values are
+  composite keys via makeCartKey for variantes. UUIDs don't
+  contain '__' so the separator is safe (same pattern as cart).
+- **UI per row (inline expand pattern)**:
+  - When row checked + plato has variantes → inline variante
+    selector renders below the row content with vertical radios.
+  - Selector uses stopPropagation on label onClick to prevent
+    triggering row toggle when changing variante.
+  - Radio name unique per plato (variante-promo-${plato.id}) to
+    avoid radio group collisions across rows.
+  - Selector NOT rendered for non-variante platos (regression
+    safe).
+- **Auto-select (D2)**: when checking a row with variantes, the
+  first variante (orden ASC) is auto-selected immediately. No
+  "incomplete selection" state. CTA validation stays simple
+  (just promoSeleccion.length > 0).
+- **Row container restructured**: outer onClick div lost its
+  flex layout; inner wrapper now does the flex row (image +
+  name + price + check circle). The selector stacks below as
+  a second child of the outer div. This is the only structural
+  change to the existing row JSX.
+- **Per-row price display**: 3 price branches (2x1, descuento,
+  precio_especial) all swapped plato.precio → precioEfectivoPlato.
+  For non-variante platos, precioEfectivo returns plato.precio,
+  so behavior is unchanged. For variante platos, the math
+  applies against the selected variante's price.
+- **agregarPromoAlPedido refactor**:
+  - Iterates over composite keys (was bare platoIds).
+  - Parses each key via parseCartKey.
+  - Defensive check: if varianteId is set but variante no
+    longer exists, skip the entry silently (stale handling).
+  - Math uses precioEfectivo as base.
+  - Writes to pedido[key] and preciosPromo[key] using the
+    composite key, ensuring distinct cart entries for variante
+    vs non-variante items even in the same promo.
+- **Promo types handled**:
+  - dos_por_uno (2x1): +2 units, precioUnitario = round(base/2).
+  - descuento: +1 unit, precioUnitario = round(base * (1 - valor/100)).
+  - precio_especial: +1 unit, precioUnitario = valor (fixed,
+    base unused — interim per D4).
+- **D4 interim for precio_especial**: with variantes, the fixed
+  promoDetalle.valor applies to whichever variante is selected.
+  Semantically dubious (Grande and Mediana both cost the same
+  special price), but F8.6 will block this configuration at
+  admin level. F8.4b ships the interim behavior with a comment
+  noting the deferral.
+- **TODO(F8.4b) comment removed** from agregarPromoAlPedido.
+- **Smoke test passed (8/8)**:
+  1. Regression: 2x1 with non-variante plato — unchanged: ✅
+  2. Regression: descuento with non-variante plato — unchanged: ✅
+  3. Regression: precio_especial with non-variante plato — unchanged: ✅
+  4. 2x1 with variante plato (Mediana pre-selected, cart key composite, $20k → $10k unit): ✅
+  5. Switch variante in promo modal (Mediana → Grande, price updates, cart key updates): ✅
+  6. Descuento with variante plato (30% off applied to variante price): ✅
+  7. Precio especial with variante plato (interim — fixed valor regardless of variante): ✅
+  8. Mixed promo cart (variante + non-variante in same promo, 2 distinct cart entries): ✅ CRITICAL
+- **Deviations from spec** (both safer, both noted by Claude Code):
+  1. Used --theme-border instead of --theme-border-subtle (the
+     subtle variant doesn't exist in the codebase — would have
+     rendered no border).
+  2. Wrapped existing row content in inner flex div instead of
+     keeping outer flex; without this, the selector would have
+     rendered beside the check circle instead of below the row.
+- **Line delta**: +101 / -23 = +78 net in src/app/[slug]/page.tsx.
+- **Cleanest F8 session yet**: zero bugs found mid-implementation
+  (vs F8.4a which had 2). The F8.4a foundation (composite keys
+  + helpers) made F8.4b's changes mostly mechanical.
+- **F8 flujo cliente COMPLETO**: with F8.4b done, the customer-
+  facing flow for variantes works end-to-end (cards, detail
+  modal, cart, drawer, WhatsApp, AND promos). Remaining F8
+  sessions touch admin and edge cases.
+- **Next sessions**:
+  - F8.5: combos × variantes (variante_id lock at config time,
+    admin form variant selector, public combo modal display).
+  - F8.6: promos × variantes admin validation (block
+    precio_especial for platos with variantes).
+  - F8.7: plato del día/ganador admin form with variante
+    selector.
+  - F8.8: polish, edge cases, final WhatsApp/Sorpréndeme
+    verification.
+- **Where**: src/app/[slug]/page.tsx (helpers L49-64,
+  agregarPromoAlPedido L1546-1576, row seleccion vars
+  L1636-1644, row toggle handler L1647-1660, restructured
+  row container L1664-1670, per-row price display L1693-1714,
+  inline variante selector L1728-1774).
+
 ### F8.4a ✅ Variantes de platos — Sesión 4a (Public menu + cart refactor) — CLOSED
 - **Closed**: 2026-05-20.
 - **Goal**: Extend public menu (/[slug]) to support platos with

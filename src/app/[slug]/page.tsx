@@ -46,6 +46,23 @@ function parseCartKey(key: string): { platoId: string; varianteId?: string } {
   return { platoId: parts[0] }
 }
 
+// F8.4b — Promo helpers
+function precioEfectivo(plato: any, varianteId?: string): number {
+  if (varianteId && plato.variantes) {
+    const v = plato.variantes.find((v: any) => v.id === varianteId)
+    if (v) return v.precio
+  }
+  return plato.precio
+}
+
+function algunaKeyEsDePlato(seleccion: string[], platoId: string): boolean {
+  return seleccion.some(key => parseCartKey(key).platoId === platoId)
+}
+
+function obtenerKeyDePlato(seleccion: string[], platoId: string): string | undefined {
+  return seleccion.find(key => parseCartKey(key).platoId === platoId)
+}
+
 export default function MenuPublicoPage() {
   const params = useParams()
   const searchParams = useSearchParams()
@@ -1526,28 +1543,34 @@ export default function MenuPublicoPage() {
             promoDetalle.platosIds.includes(p.id)
           )
 
-          // TODO(F8.4b): manejar variantes — el cálculo de promo debe operar
-          // contra la variante seleccionada y escribir la cartKey composite.
           function agregarPromoAlPedido() {
             if (promoSeleccion.length === 0) return
             const nuevoPedido = { ...pedido }
             const nuevosPrecios = { ...preciosPromo }
 
-            promoSeleccion.forEach(platoId => {
+            promoSeleccion.forEach(key => {
+              const { platoId, varianteId } = parseCartKey(key)
               const plato = platosPromo.find((p: any) => p.id === platoId)
               if (!plato) return
+              // Defensive: la variante pudo eliminarse entre la selección y el submit.
+              if (varianteId) {
+                const variante = plato.variantes?.find((v: any) => v.id === varianteId)
+                if (!variante) return
+              }
+              const base = precioEfectivo(plato, varianteId)
 
               if (promoDetalle.tipo === 'dos_por_uno') {
                 // 2x1: agrega 2 unidades, cobra solo 1
-                nuevoPedido[platoId] = (nuevoPedido[platoId] || 0) + 2
-                nuevosPrecios[platoId] = { precioUnitario: Math.round(plato.precio / 2), etiqueta: '2x1' }
+                nuevoPedido[key] = (nuevoPedido[key] || 0) + 2
+                nuevosPrecios[key] = { precioUnitario: Math.round(base / 2), etiqueta: '2x1' }
               } else if (promoDetalle.tipo === 'descuento') {
-                const precioDesc = Math.round(plato.precio * (1 - (promoDetalle.valor || 0) / 100))
-                nuevoPedido[platoId] = (nuevoPedido[platoId] || 0) + 1
-                nuevosPrecios[platoId] = { precioUnitario: precioDesc, etiqueta: `${promoDetalle.valor}% OFF` }
+                const precioDesc = Math.round(base * (1 - (promoDetalle.valor || 0) / 100))
+                nuevoPedido[key] = (nuevoPedido[key] || 0) + 1
+                nuevosPrecios[key] = { precioUnitario: precioDesc, etiqueta: `${promoDetalle.valor}% OFF` }
               } else if (promoDetalle.tipo === 'precio_especial') {
-                nuevoPedido[platoId] = (nuevoPedido[platoId] || 0) + 1
-                nuevosPrecios[platoId] = { precioUnitario: promoDetalle.valor, etiqueta: 'Precio especial' }
+                // Interim F8.4b D4: valor fijo sin importar la variante. F8.6 lo bloqueará en admin.
+                nuevoPedido[key] = (nuevoPedido[key] || 0) + 1
+                nuevosPrecios[key] = { precioUnitario: promoDetalle.valor, etiqueta: 'Precio especial' }
               }
             })
 
@@ -1610,19 +1633,28 @@ export default function MenuPublicoPage() {
                 </div>
 
                 {platosPromo.map((plato: any) => {
-                  const seleccionado = promoSeleccion.includes(plato.id)
+                  const seleccionado = algunaKeyEsDePlato(promoSeleccion, plato.id)
+                  const tieneVariantes = plato.variantes && plato.variantes.length > 0
+                  const keyDePlato = obtenerKeyDePlato(promoSeleccion, plato.id)
+                  const varianteIdSeleccionada = keyDePlato
+                    ? parseCartKey(keyDePlato).varianteId
+                    : undefined
+                  const precioEfectivoPlato = precioEfectivo(plato, varianteIdSeleccionada)
                   const maxSeleccion = promoDetalle.tipo === 'dos_por_uno' ? 1 : platosPromo.length
                   const puedeSeleccionar = seleccionado || promoSeleccion.length < maxSeleccion
 
                   return (
                     <div key={plato.id} onClick={() => {
-                      if (seleccionado) {
-                        setPromoSeleccion(promoSeleccion.filter(id => id !== plato.id))
+                      if (keyDePlato) {
+                        setPromoSeleccion(promoSeleccion.filter(k => k !== keyDePlato))
                       } else if (puedeSeleccionar) {
+                        const newKey = tieneVariantes
+                          ? makeCartKey(plato.id, plato.variantes[0].id)
+                          : plato.id
                         if (promoDetalle.tipo === 'dos_por_uno') {
-                          setPromoSeleccion([plato.id])
+                          setPromoSeleccion([newKey])
                         } else {
-                          setPromoSeleccion([...promoSeleccion, plato.id])
+                          setPromoSeleccion([...promoSeleccion, newKey])
                         }
                       }
                     }} style={{
@@ -1633,10 +1665,8 @@ export default function MenuPublicoPage() {
                       border: seleccionado ? `2px solid ${color}` : '1px solid var(--theme-border)',
                       background: seleccionado ? `${color}08` : 'var(--theme-bg)',
                       opacity: !puedeSeleccionar && !seleccionado ? 0.4 : 1,
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
                     }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                         <div style={{
                           width: '44px',
@@ -1664,18 +1694,18 @@ export default function MenuPublicoPage() {
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
                             {promoDetalle.tipo === 'dos_por_uno' ? (
                               <>
-                                <span style={{ fontSize: '12px', color: 'var(--theme-text-subtle)', textDecoration: 'line-through' }}>${(plato.precio * 2).toLocaleString('es-CO')}</span>
-                                <span style={{ fontSize: '13px', fontWeight: 500, color: color }}>${plato.precio.toLocaleString('es-CO')}</span>
+                                <span style={{ fontSize: '12px', color: 'var(--theme-text-subtle)', textDecoration: 'line-through' }}>${(precioEfectivoPlato * 2).toLocaleString('es-CO')}</span>
+                                <span style={{ fontSize: '13px', fontWeight: 500, color: color }}>${precioEfectivoPlato.toLocaleString('es-CO')}</span>
                                 <span style={{ fontSize: '10px', color: 'var(--color-green)', fontWeight: 500 }}>× 2 unidades</span>
                               </>
                             ) : promoDetalle.tipo === 'descuento' ? (
                               <>
-                                <span style={{ fontSize: '12px', color: 'var(--theme-text-subtle)', textDecoration: 'line-through' }}>${plato.precio.toLocaleString('es-CO')}</span>
-                                <span style={{ fontSize: '13px', fontWeight: 500, color: color }}>${Math.round(plato.precio * (1 - (promoDetalle.valor || 0) / 100)).toLocaleString('es-CO')}</span>
+                                <span style={{ fontSize: '12px', color: 'var(--theme-text-subtle)', textDecoration: 'line-through' }}>${precioEfectivoPlato.toLocaleString('es-CO')}</span>
+                                <span style={{ fontSize: '13px', fontWeight: 500, color: color }}>${Math.round(precioEfectivoPlato * (1 - (promoDetalle.valor || 0) / 100)).toLocaleString('es-CO')}</span>
                               </>
                             ) : (
                               <>
-                                <span style={{ fontSize: '12px', color: 'var(--theme-text-subtle)', textDecoration: 'line-through' }}>${plato.precio.toLocaleString('es-CO')}</span>
+                                <span style={{ fontSize: '12px', color: 'var(--theme-text-subtle)', textDecoration: 'line-through' }}>${precioEfectivoPlato.toLocaleString('es-CO')}</span>
                                 <span style={{ fontSize: '13px', fontWeight: 500, color: color }}>${parseInt(promoDetalle.valor || '0').toLocaleString('es-CO')}</span>
                               </>
                             )}
@@ -1694,6 +1724,54 @@ export default function MenuPublicoPage() {
                       }}>
                         {seleccionado && <span style={{ color: 'white', fontSize: '14px' }}>✓</span>}
                       </div>
+                      </div>
+                      {seleccionado && tieneVariantes && (
+                        <div style={{
+                          marginTop: '10px',
+                          paddingTop: '10px',
+                          borderTop: '1px solid var(--theme-border)',
+                        }}>
+                          <div style={{ fontSize: '12px', fontWeight: 500, marginBottom: '6px', color: 'var(--theme-text-muted)' }}>
+                            Elige una opción
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            {plato.variantes.map((v: any) => (
+                              <label
+                                key={v.id}
+                                onClick={(e) => e.stopPropagation()}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  padding: '8px 10px',
+                                  border: `1px solid ${varianteIdSeleccionada === v.id ? color : 'var(--theme-border)'}`,
+                                  borderRadius: '6px',
+                                  cursor: 'pointer',
+                                  background: varianteIdSeleccionada === v.id ? 'var(--theme-surface-muted)' : 'transparent',
+                                }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <input
+                                    type="radio"
+                                    name={`variante-promo-${plato.id}`}
+                                    checked={varianteIdSeleccionada === v.id}
+                                    onChange={() => {
+                                      const oldKey = obtenerKeyDePlato(promoSeleccion, plato.id)
+                                      const newKey = makeCartKey(plato.id, v.id)
+                                      setPromoSeleccion(promoSeleccion.map(k => k === oldKey ? newKey : k))
+                                    }}
+                                    style={{ accentColor: color }}
+                                  />
+                                  <span style={{ fontSize: '13px', color: 'var(--theme-text)' }}>{v.nombre}</span>
+                                </div>
+                                <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--theme-text)' }}>
+                                  ${v.precio.toLocaleString('es-CO')}
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )
                 })}
