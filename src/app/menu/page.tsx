@@ -45,6 +45,12 @@ interface Categoria {
   id: string; nombre: string; orden: number; platos: Plato[]; hora_inicio?: string | null; hora_fin?: string | null
 }
 
+// F8.5b — Combo item shape for admin form state
+type ComboItem = {
+  plato_id: string
+  variante_id: string | null
+}
+
 export default function MiMenuPage() {
   const router = useRouter()
   const { usuario, restaurante: rest, cargando: cargandoAuth } = useAuth()
@@ -138,7 +144,7 @@ export default function MiMenuPage() {
   const [mostrarFormCombo, setMostrarFormCombo] = useState(false)
   const [mostrarFormPromo, setMostrarFormPromo] = useState(false)
   const [nuevoCombo, setNuevoCombo] = useState({
-    nombre: '', descripcion: '', platoIds: [] as string[], precio: '',
+    nombre: '', descripcion: '', platoIds: [] as ComboItem[], precio: '',
     dias: [] as DiaSemana[], horaInicio: '', horaFin: '',
   })
   const [intentoCombo, setIntentoCombo] = useState(false)
@@ -605,8 +611,14 @@ export default function MiMenuPage() {
       platosIds: c.combo_platos?.map((cp: any) => cp.plato_id) || [],
       platos: c.combo_platos?.map((cp: any) => {
         const plato = catsAndPlatos.platos.find((p: any) => p.id === cp.plato_id)
-        return plato?.nombre || 'Plato'
+        const nombre = plato?.nombre || 'Plato'
+        if (cp.variante_id && plato?.variantes?.length) {
+          const v = plato.variantes.find((x: any) => x.id === cp.variante_id)
+          if (v) return `${nombre} (${v.nombre})`
+        }
+        return nombre
       }) || [],
+      combo_platos: c.combo_platos || [],
       dias: c.dias || [],
       horario_inicio: c.horario_inicio || null,
       horario_fin: c.horario_fin || null,
@@ -722,17 +734,31 @@ export default function MiMenuPage() {
     }
   }, [cargandoAuth, usuario, router])
   const precioIndividualCombo = useMemo(() => {
-    return nuevoCombo.platoIds.reduce((sum, id) => {
-      const plato = todosPlatos.find(p => p.id === id)
-      return sum + (plato?.precio || 0)
+    return nuevoCombo.platoIds.reduce((sum: number, item: ComboItem) => {
+      const plato = todosPlatos.find(p => p.id === item.plato_id)
+      if (!plato) return sum
+      if (item.variante_id) {
+        const v = plato.variantes?.find(x => x.id === item.variante_id)
+        if (v) return sum + v.precio
+      }
+      return sum + (plato.precio || 0)
     }, 0)
   }, [nuevoCombo.platoIds, todosPlatos])
-  function validarCombo(state: { nombre: string; precio: string; platoIds: string[] }): Record<string, string> {
+  function validarCombo(state: { nombre: string; precio: string; platoIds: ComboItem[] }): Record<string, string> {
     const e: Record<string, string> = {}
     if (!state.nombre.trim()) e.nombre = 'El nombre es obligatorio'
     const precioNum = parseInt(state.precio)
     if (!state.precio || isNaN(precioNum) || precioNum <= 0) e.precio = 'El precio debe ser mayor a 0'
-    if (state.platoIds.length < 2) e.platos = 'Selecciona al menos 2 platos'
+    if (state.platoIds.length < 2) {
+      e.platos = 'Selecciona al menos 2 platos'
+    } else {
+      // F8.5b — force-variante: every plato with variantes must have one picked
+      const faltan = state.platoIds.some(item => {
+        const plato = todosPlatos.find(p => p.id === item.plato_id)
+        return plato?.variantes?.length && !item.variante_id
+      })
+      if (faltan) e.platos = 'Selecciona una variante para cada plato con opciones'
+    }
     return e
   }
   async function agregarCombo() {
@@ -761,7 +787,11 @@ export default function MiMenuPage() {
     // Step 2: insert junction rows
     if (nuevoCombo.platoIds.length > 0) {
       const { error: cpError } = await supabase.from('combo_platos').insert(
-        nuevoCombo.platoIds.map(platoId => ({ combo_id: comboData.id, plato_id: platoId }))
+        nuevoCombo.platoIds.map((item: ComboItem) => ({
+          combo_id: comboData.id,
+          plato_id: item.plato_id,
+          variante_id: item.variante_id,
+        }))
       )
       if (cpError) {
         await supabase.from('combos').delete().eq('id', comboData.id)
@@ -787,7 +817,7 @@ export default function MiMenuPage() {
     setGuardadoCombo(true)
     setTimeout(() => {
       setGuardadoCombo(false)
-      setNuevoCombo({ nombre: '', descripcion: '', platoIds: [], precio: '', dias: [], horaInicio: '', horaFin: '' })
+      setNuevoCombo({ nombre: '', descripcion: '', platoIds: [] as ComboItem[], precio: '', dias: [], horaInicio: '', horaFin: '' })
       setIntentoCombo(false)
       setTouchedCombo({})
       setMostrarFormCombo(false)
@@ -825,7 +855,11 @@ export default function MiMenuPage() {
     // Step 3: insert new junction rows
     if (nuevoCombo.platoIds.length > 0) {
       const { error: cpError } = await supabase.from('combo_platos').insert(
-        nuevoCombo.platoIds.map(platoId => ({ combo_id: editandoComboId, plato_id: platoId }))
+        nuevoCombo.platoIds.map((item: ComboItem) => ({
+          combo_id: editandoComboId,
+          plato_id: item.plato_id,
+          variante_id: item.variante_id,
+        }))
       )
       if (cpError) {
         setGuardandoCombo(false)
@@ -850,7 +884,7 @@ export default function MiMenuPage() {
     setGuardadoCombo(true)
     setTimeout(() => {
       setGuardadoCombo(false)
-      setNuevoCombo({ nombre: '', descripcion: '', platoIds: [], precio: '', dias: [], horaInicio: '', horaFin: '' })
+      setNuevoCombo({ nombre: '', descripcion: '', platoIds: [] as ComboItem[], precio: '', dias: [], horaInicio: '', horaFin: '' })
       setIntentoCombo(false)
       setTouchedCombo({})
       setMostrarFormCombo(false)
@@ -2205,12 +2239,12 @@ export default function MiMenuPage() {
                     <div style={{ fontSize: '32px', marginBottom: '8px' }}>🍱</div>
                     <div style={{ fontSize: '14px', fontWeight: 500, marginBottom: '4px' }}>Sin combos</div>
                     <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '16px' }}>Crea paquetes de platos con descuento</div>
-                    <button onClick={() => { setEditandoComboId(null); setNuevoCombo({ nombre: '', descripcion: '', platoIds: [], precio: '', dias: [], horaInicio: '', horaFin: '' }); setBusquedaPlatosCombo(''); setMostrarFormCombo(true); setIntentoCombo(false); setTouchedCombo({}) }} className="btn-primary" style={{ padding: '10px 20px', fontSize: '13px' }}>+ Crear combo</button>
+                    <button onClick={() => { setEditandoComboId(null); setNuevoCombo({ nombre: '', descripcion: '', platoIds: [] as ComboItem[], precio: '', dias: [], horaInicio: '', horaFin: '' }); setBusquedaPlatosCombo(''); setMostrarFormCombo(true); setIntentoCombo(false); setTouchedCombo({}) }} className="btn-primary" style={{ padding: '10px 20px', fontSize: '13px' }}>+ Crear combo</button>
                   </div>
                 ) : (
                   <>
                     {!mostrarFormCombo && (
-                      <button onClick={() => { setEditandoComboId(null); setNuevoCombo({ nombre: '', descripcion: '', platoIds: [], precio: '', dias: [], horaInicio: '', horaFin: '' }); setBusquedaPlatosCombo(''); setMostrarFormCombo(true); setIntentoCombo(false); setTouchedCombo({}) }} className="btn-primary" style={{ padding: '8px 14px', fontSize: '13px', marginBottom: '14px' }}>+ Crear combo</button>
+                      <button onClick={() => { setEditandoComboId(null); setNuevoCombo({ nombre: '', descripcion: '', platoIds: [] as ComboItem[], precio: '', dias: [], horaInicio: '', horaFin: '' }); setBusquedaPlatosCombo(''); setMostrarFormCombo(true); setIntentoCombo(false); setTouchedCombo({}) }} className="btn-primary" style={{ padding: '8px 14px', fontSize: '13px', marginBottom: '14px' }}>+ Crear combo</button>
                     )}
                   </>
                 )}
@@ -2251,28 +2285,76 @@ export default function MiMenuPage() {
                       />
                     )}
                     <div style={{ maxHeight: '160px', overflowY: 'auto', marginBottom: '8px' }}>
-                      {platosFiltradosCombo.map(p => (
-                        <div key={p.id} onClick={() => {
-                          const sel = nuevoCombo.platoIds.includes(p.id)
-                            ? nuevoCombo.platoIds.filter(id => id !== p.id)
-                            : [...nuevoCombo.platoIds, p.id]
-                          setNuevoCombo({ ...nuevoCombo, platoIds: sel })
-                          setTouchedCombo(prev => ({ ...prev, platos: true }))
-                        }} style={{
-                          padding: '8px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                          borderBottom: '1px solid var(--border-light)', cursor: 'pointer',
-                          background: nuevoCombo.platoIds.includes(p.id) ? 'var(--color-info-light)' : 'transparent',
-                        }}>
-                          <div>
-                          <span style={{ fontSize: '12px' }}>{p.nombre}</span>
-                          {(() => { const h = getHorarioPlato(p.id); return h ? <span style={{ fontSize: '9px', color: 'var(--color-warning)', marginLeft: '4px' }}>⏰ {formato12h(h.hora_inicio)}–{formato12h(h.hora_fin)}</span> : null })()}
-                        </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>${p.precio.toLocaleString('es-CO')}</span>
-                            {nuevoCombo.platoIds.includes(p.id) && <span style={{ color: 'var(--color-info)', fontSize: '12px' }}>✓</span>}
+                      {platosFiltradosCombo.map(p => {
+                        const currentItem = nuevoCombo.platoIds.find((i: ComboItem) => i.plato_id === p.id)
+                        const isSelected = !!currentItem
+                        const tieneVariantes = !!p.variantes && p.variantes.length > 0
+                        const precioMostrar = (() => {
+                          if (currentItem?.variante_id) {
+                            const v = p.variantes?.find(x => x.id === currentItem.variante_id)
+                            if (v) return v.precio
+                          }
+                          return p.precio
+                        })()
+                        return (
+                          <div key={p.id} onClick={() => {
+                            const yaSeleccionado = nuevoCombo.platoIds.some((i: ComboItem) => i.plato_id === p.id)
+                            const sel: ComboItem[] = yaSeleccionado
+                              ? nuevoCombo.platoIds.filter((i: ComboItem) => i.plato_id !== p.id)
+                              : [...nuevoCombo.platoIds, {
+                                  plato_id: p.id,
+                                  variante_id: p.variantes?.[0]?.id ?? null,
+                                }]
+                            setNuevoCombo({ ...nuevoCombo, platoIds: sel })
+                            setTouchedCombo(prev => ({ ...prev, platos: true }))
+                          }} style={{
+                            padding: '8px 10px',
+                            borderBottom: '1px solid var(--border-light)', cursor: 'pointer',
+                            background: isSelected ? 'var(--color-info-light)' : 'transparent',
+                          }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <div>
+                                <span style={{ fontSize: '12px' }}>{p.nombre}</span>
+                                {(() => { const h = getHorarioPlato(p.id); return h ? <span style={{ fontSize: '9px', color: 'var(--color-warning)', marginLeft: '4px' }}>⏰ {formato12h(h.hora_inicio)}–{formato12h(h.hora_fin)}</span> : null })()}
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>${precioMostrar.toLocaleString('es-CO')}</span>
+                                {isSelected && <span style={{ color: 'var(--color-info)', fontSize: '12px' }}>✓</span>}
+                              </div>
+                            </div>
+                            {isSelected && tieneVariantes && (
+                              <div onClick={(e) => e.stopPropagation()} style={{ marginTop: '6px' }}>
+                                <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginBottom: '4px' }}>
+                                  Variante:
+                                </div>
+                                <Select
+                                  value={currentItem?.variante_id ?? ''}
+                                  onChange={(v) => {
+                                    const sel = nuevoCombo.platoIds.map((item: ComboItem) =>
+                                      item.plato_id === p.id ? { ...item, variante_id: v as string } : item
+                                    )
+                                    setNuevoCombo({ ...nuevoCombo, platoIds: sel })
+                                  }}
+                                  options={(p.variantes ?? []).map((v: any) => ({
+                                    value: v.id,
+                                    label: (
+                                      <span>
+                                        {v.nombre}
+                                        <span style={{ color: 'var(--text-tertiary)' }}>
+                                          {' '}— ${v.precio.toLocaleString('es-CO')}
+                                        </span>
+                                      </span>
+                                    ),
+                                    searchText: v.nombre,
+                                  }))}
+                                  placeholder="Selecciona variante"
+                                  error={intentoCombo && !!errores.platos && !currentItem?.variante_id}
+                                />
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                     {intentoCombo && touchedCombo.platos && errores.platos && (
                       <div style={{ fontSize: '11px', color: 'var(--color-danger)', marginBottom: '8px' }}>
@@ -2328,7 +2410,7 @@ export default function MiMenuPage() {
                       </div>
                     )}
                     {nuevoCombo.platoIds.length > 0 && (() => {
-                      const platosConHorario = nuevoCombo.platoIds.map(id => ({ id, horario: getHorarioPlato(id) })).filter(p => p.horario)
+                      const platosConHorario = nuevoCombo.platoIds.map((item: ComboItem) => ({ id: item.plato_id, horario: getHorarioPlato(item.plato_id) })).filter(p => p.horario)
                       if (platosConHorario.length === 0) return null
                       const horarios = platosConHorario.map(p => `${p.horario!.hora_inicio}–${p.horario!.hora_fin}`)
                       return (
@@ -2345,7 +2427,7 @@ export default function MiMenuPage() {
                           cursor: valido ? 'pointer' : 'default',
                           ...(valido ? {} : { transform: 'none', boxShadow: 'none' }),
                         }}>{guardandoCombo ? 'Guardando...' : guardadoCombo ? '✓ Guardado' : editandoComboId ? 'Guardar cambios' : 'Crear'}</button>
-                      <button onClick={() => { setMostrarFormCombo(false); setIntentoCombo(false); setTouchedCombo({}); setNuevoCombo({ nombre: '', descripcion: '', platoIds: [], precio: '', dias: [], horaInicio: '', horaFin: '' }); setBusquedaPlatosCombo(''); setEditandoComboId(null) }} className="btn-outline" style={{ flex: 1, padding: '10px', fontSize: '13px' }}>Cancelar</button>
+                      <button onClick={() => { setMostrarFormCombo(false); setIntentoCombo(false); setTouchedCombo({}); setNuevoCombo({ nombre: '', descripcion: '', platoIds: [] as ComboItem[], precio: '', dias: [], horaInicio: '', horaFin: '' }); setBusquedaPlatosCombo(''); setEditandoComboId(null) }} className="btn-outline" style={{ flex: 1, padding: '10px', fontSize: '13px' }}>Cancelar</button>
                     </div>
                   </div>
                   )
@@ -2386,7 +2468,10 @@ export default function MiMenuPage() {
                           setNuevoCombo({
                             nombre: combo.nombre,
                             descripcion: combo.descripcion || '',
-                            platoIds: combo.platosIds || [],
+                            platoIds: (combo.combo_platos ?? []).map((cp: any) => ({
+                              plato_id: cp.plato_id,
+                              variante_id: cp.variante_id ?? null,
+                            })) as ComboItem[],
                             precio: combo.precio.toString(),
                             dias: combo.dias || [],
                             horaInicio: combo.horario_inicio || '',
