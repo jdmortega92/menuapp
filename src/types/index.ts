@@ -104,10 +104,31 @@ export interface Combo {
   horario_fin?: string
 }
 
+// F8.5a — raw shape produced by useCombos (hook has no plato_variantes data).
+// precioBase is the plato's sentinel price; consumers resolve variante info.
+export interface ComboPlatoRaw {
+  plato_id: string
+  variante_id: string | null
+  nombre: string       // plato's nombre
+  precioBase: number   // plato.precio (sentinel)
+}
+
+// F8.5a — enriched shape used at display time (after the consumer resolves
+// variante name + price from in-memory todosLosPlatos).
+export interface ComboPlatoEnriquecido {
+  plato_id: string
+  variante_id: string | null
+  nombre: string                  // plato's nombre
+  varianteNombre: string | null   // variante's nombre (null if no variante)
+  precioEfectivo: number          // variante.precio if variante_id set, else plato.precio
+}
+
 export interface ComboPlato {
   id: string
   combo_id: string
   plato_id: string
+  variante_id?: string | null  // F8.1: nullable FK to plato_variantes
+  platos?: { nombre: string; precio: number }
 }
 
 export type TipoPromo = 'dos_por_uno' | 'descuento' | 'precio_especial' | 'gratis'

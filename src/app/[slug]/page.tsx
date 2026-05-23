@@ -63,6 +63,35 @@ function obtenerKeyDePlato(seleccion: string[], platoId: string): string | undef
   return seleccion.find(key => parseCartKey(key).platoId === platoId)
 }
 
+// F8.5a — Combo helpers
+// Resolves each raw combo_plato (plato_id + variante_id from the hook) against
+// the in-memory plato data, producing the enriched shape used for display:
+// variante name + effective price + (foto/descripcion carried for the modal rows).
+function enriquecerComboPlatos(rawComboPlatos: any[], todosLosPlatos: any[]) {
+  return (rawComboPlatos || []).map(cp => {
+    const plato = todosLosPlatos.find((p: any) => p.id === cp.plato_id)
+    const variante = cp.variante_id && plato?.variantes
+      ? plato.variantes.find((v: any) => v.id === cp.variante_id)
+      : null
+    // Graceful fallback: if variante_id was set but the variante was since
+    // deleted, fall back to plato.precio (sentinel). ON DELETE CASCADE on
+    // combo_platos.variante_id should prevent this, but defensive coding.
+    const precioEfectivo = variante
+      ? variante.precio
+      : (cp.precioBase || plato?.precio || 0)
+    return {
+      plato_id: cp.plato_id,
+      variante_id: cp.variante_id || null,
+      nombre: cp.nombre || plato?.nombre || '',
+      varianteNombre: variante?.nombre || null,
+      precioEfectivo,
+      // carried for the combo modal rows (image + description)
+      foto_url: plato?.foto_url || null,
+      descripcion: plato?.descripcion || null,
+    }
+  })
+}
+
 export default function MenuPublicoPage() {
   const params = useParams()
   const searchParams = useSearchParams()
@@ -197,6 +226,13 @@ export default function MenuPublicoPage() {
     ...combosPublico.map((c: any) => ({ id: c.id, nombre: c.nombre, precio: c.precio, descripcion: c.descripcion || '', disponible: true, foto_url: null })),
   ]
 
+  // F8.5a — enrich each combo with variante names/prices for display.
+  // Runs after todosLosPlatos so the plato/variante lookup has data.
+  const combosEnriquecidos = combosPublico.map((combo: any) => ({
+    ...combo,
+    comboPlatosEnriquecidos: enriquecerComboPlatos(combo.comboPlatos, todosLosPlatos),
+  }))
+
   // F8.4 — al abrir el detalle, preseleccionar la primera variante (orden ASC) o limpiar
   useEffect(() => {
     if (platoDetalle) {
@@ -227,7 +263,7 @@ export default function MenuPublicoPage() {
   const platosVisiblesIds = new Set(categoriasPorHorario.flatMap((c) => c.platos.map((p) => p.id)))
 
   // Filtrar combos: solo mostrar si TODOS sus platos son visibles
-  const combosVisibles = combosPublico.filter((combo: any) => {
+  const combosVisibles = combosEnriquecidos.filter((combo: any) => {
     // Excluir combos sin precio válido
     if (combo.precio === null || combo.precio === undefined) return false
 
@@ -1228,7 +1264,11 @@ export default function MenuPublicoPage() {
                   color: 'var(--theme-text-subtle)',
                   marginTop: '4px',
                 }}>
-                  {combo.platos.join(' + ')}
+                  {(combo.comboPlatosEnriquecidos ?? []).length > 0
+                    ? combo.comboPlatosEnriquecidos
+                        .map((cp: any) => cp.varianteNombre ? `${cp.nombre} (${cp.varianteNombre})` : cp.nombre)
+                        .join(' + ')
+                    : combo.platos.join(' + ')}
                 </div>
                 {((combo.dias && combo.dias.length > 0) || (combo.horario_inicio && combo.horario_fin)) && (
                   <div style={{
@@ -1328,13 +1368,28 @@ export default function MenuPublicoPage() {
         )}
         {/* Modal detalle combo */}
         {comboDetalle && (() => {
-          // Obtener los platos completos del combo desde categorías
-          const platosDelCombo = categorias
-            .flatMap((c: any) => c.platos)
-            .filter((p: any) => comboDetalle.platosIds?.includes(p.id))
+          // F8.5a — preferir los platos enriquecidos (con variante + precio efectivo).
+          const enriquecidos = comboDetalle.comboPlatosEnriquecidos
+          const tieneEnriquecidos = Array.isArray(enriquecidos) && enriquecidos.length > 0
 
-          const ahorro = comboDetalle.precioIndividual - comboDetalle.precio
-          const porcentajeAhorro = Math.round((ahorro / comboDetalle.precioIndividual) * 100)
+          // Fallback defensivo (Task 7): si por algún motivo no hay datos
+          // enriquecidos, reconstruir desde categorías y usar el precio
+          // individual almacenado — preserva el comportamiento previo.
+          const platosDelCombo = tieneEnriquecidos
+            ? enriquecidos
+            : categorias
+                .flatMap((c: any) => c.platos)
+                .filter((p: any) => comboDetalle.platosIds?.includes(p.id))
+
+          // Strategy B: recomputar precio individual desde los platos del combo.
+          const precioIndividual = tieneEnriquecidos
+            ? enriquecidos.reduce((sum: number, p: any) => sum + (p.precioEfectivo || 0), 0)
+            : comboDetalle.precioIndividual
+
+          const ahorro = precioIndividual - comboDetalle.precio
+          const porcentajeAhorro = precioIndividual > 0
+            ? Math.round((ahorro / precioIndividual) * 100)
+            : 0
 
           return (
             <Modal
@@ -1409,7 +1464,7 @@ export default function MenuPublicoPage() {
 
                 {/* Lista de platos del combo */}
                 {platosDelCombo.map((plato: any) => (
-                  <div key={plato.id} style={{
+                  <div key={plato.id ?? `${plato.plato_id}-${plato.variante_id ?? 'base'}`} style={{
                     padding: '12px',
                     borderRadius: 'var(--theme-radius-card)',
                     marginBottom: '8px',
@@ -1444,7 +1499,7 @@ export default function MenuPublicoPage() {
                         fontWeight: 500,
                         color: 'var(--theme-text)',
                       }}>
-                        {plato.nombre}
+                        {plato.nombre}{plato.varianteNombre ? ` (${plato.varianteNombre})` : ''}
                       </div>
                       {plato.descripcion && (
                         <div style={{
@@ -1465,7 +1520,7 @@ export default function MenuPublicoPage() {
                         color: 'var(--theme-text-subtle)',
                         marginTop: '4px',
                       }}>
-                        Precio individual: ${plato.precio.toLocaleString('es-CO')}
+                        Precio individual: ${(plato.precioEfectivo ?? plato.precio).toLocaleString('es-CO')}
                       </div>
                     </div>
                   </div>
@@ -1488,7 +1543,7 @@ export default function MenuPublicoPage() {
                     marginBottom: '6px',
                   }}>
                     <span>Comprando por separado</span>
-                    <span style={{ textDecoration: 'line-through' }}>${comboDetalle.precioIndividual.toLocaleString('es-CO')}</span>
+                    <span style={{ textDecoration: 'line-through' }}>${precioIndividual.toLocaleString('es-CO')}</span>
                   </div>
                   <div style={{
                     display: 'flex',

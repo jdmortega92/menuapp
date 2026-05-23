@@ -2,7 +2,7 @@
 
 import useSWR, { SWRResponse } from 'swr'
 import { createClient } from '@/lib/supabase-browser'
-import type { DiaSemana } from '@/types'
+import type { DiaSemana, ComboPlatoRaw } from '@/types'
 
 export interface ComboPublico {
   id: string
@@ -12,6 +12,8 @@ export interface ComboPublico {
   precioIndividual: number
   platos: string[]
   platosIds: string[]
+  // ───── F8.5a — raw combo_platos (consumer enriches variante info) ─────
+  comboPlatos: ComboPlatoRaw[]
   // ───── New fields ─────
   dias: DiaSemana[] | null
   horario_inicio: string | null
@@ -29,14 +31,14 @@ export interface ComboAdmin {
   dias: DiaSemana[] | null
   horario_inicio: string | null
   horario_fin: string | null
-  combo_platos: { plato_id: string; platos?: { nombre: string; precio: number } | null }[]
+  combo_platos: { plato_id: string; variante_id: string | null; platos?: { nombre: string; precio: number } | null }[]
 }
 
 async function fetchCombosPublic(restauranteId: string): Promise<ComboPublico[]> {
   const supabase = createClient()
   const { data } = await supabase
     .from('combos')
-    .select('*, combo_platos(plato_id, platos(nombre, precio))')
+    .select('*, combo_platos(plato_id, variante_id, platos(nombre, precio))')
     .eq('restaurante_id', restauranteId)
     .eq('activo', true)
     .order('created_at', { ascending: false })
@@ -50,6 +52,12 @@ async function fetchCombosPublic(restauranteId: string): Promise<ComboPublico[]>
     precioIndividual: c.precio_individual,
     platos: (c.combo_platos ?? []).map((cp: any) => cp.platos?.nombre || 'Plato'),
     platosIds: (c.combo_platos ?? []).map((cp: any) => cp.plato_id),
+    comboPlatos: (c.combo_platos ?? []).map((cp: any) => ({
+      plato_id: cp.plato_id,
+      variante_id: cp.variante_id ?? null,
+      nombre: cp.platos?.nombre || '',
+      precioBase: cp.platos?.precio || 0,
+    })),
     dias: (c.dias && c.dias.length > 0) ? c.dias as DiaSemana[] : null,
     horario_inicio: c.horario_inicio ?? null,
     horario_fin: c.horario_fin ?? null,
@@ -60,7 +68,7 @@ async function fetchCombosAdmin(restauranteId: string): Promise<ComboAdmin[]> {
   const supabase = createClient()
   const { data } = await supabase
     .from('combos')
-    .select('*, combo_platos(plato_id, platos(nombre, precio))')
+    .select('*, combo_platos(plato_id, variante_id, platos(nombre, precio))')
     .eq('restaurante_id', restauranteId)
     .order('created_at', { ascending: false })
   return (data ?? []) as ComboAdmin[]
