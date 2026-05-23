@@ -490,6 +490,152 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
 
 ## Items
 
+### F8.5b ✅ Variantes de platos — Sesión 5b (combos × variantes, admin write path) — CLOSED
+- **Closed**: 2026-05-23.
+- **Goal**: Wire the admin combo form write path so admin can
+  lock a variante per plato when creating or editing a combo.
+  F8.5a (display) was already in place; F8.5b activates the
+  F8.5a display path with real data.
+- **Most invasive F8 session**: 23 reference sites of
+  nuevoCombo.platoIds migrated from string[] to ComboItem[],
+  plus 6 reset literals where the entire nuevoCombo shape is
+  hard-coded. Required two investigations (A: data model,
+  B: UX) before implementation to avoid mid-implementation
+  bugs from missed sites.
+- **15 decisions locked across Investigations A and B**:
+  - Shape: ComboItem[] (Option B) over cart-key strings.
+    Compile-time type safety wins; F8.4a/b cart-key pattern
+    not applicable here (admin form is typed editable record,
+    not a Map key).
+  - Custom Select component reused (project's @/components/ui/Select
+    used at plato del día L2743 and plato ganador L2903, L2917).
+    NO native select, NO radios. Maintains design system.
+  - Auto-pick variantes[0] (orden ASC) on plato selection.
+    Matches F8.4a/b cart pattern.
+  - Force-variante validation on legacy combo edit. Accept
+    friction — guarantees forward-only data consistency.
+    Legacy combos with variante_id NULL trigger save block
+    until admin picks a variante.
+  - Admin combo list shows enriched names ('Pizza (Mediana) + Limonada')
+    matching F8.5a public display.
+  - Dropdown placement: inline below plato name (user-locked
+    in F8.5 visual mockup review).
+  - Label format: 'Mediana — \$20.000' (em-dash + tertiary)
+    matching platoDiaOptions L658-665.
+  - Label above dropdown: 'Variante:' (10px text-tertiary).
+  - No live feedback on variante change beyond existing
+    ahorro display + row right-side price.
+  - Empty-state for non-variante platos: render nothing
+    (presence/absence of dropdown IS the variante indicator).
+  - Search input unchanged (no match against variante names).
+  - Cascade warning copy NOT enriched in F8.5b (defer to F8.8).
+  - Legacy combo badge in admin list NOT added (defer to F8.7/F8.8).
+  - Force-variante error copy: banner + per-row red border.
+  - Implementation order: types → 6 reset literals (locking
+    step) → consumers → UI. TS stays green between steps.
+- **New type added** (src/app/menu/page.tsx L48-52):
+  ComboItem = { plato_id: string; variante_id: string | null }.
+  Local to menu/page.tsx (no cross-file consumer needed yet;
+  if F8.7/F8.8 needs same shape, promote to types/index.ts).
+- **6 reset literals migrated** to platoIds: [] as ComboItem[]:
+  initial state (L147), agregarCombo cleanup, actualizarCombo
+  cleanup, 2x '+Crear combo' buttons (empty-state L2214 +
+  list header L2219), Cancel button.
+- **23 reference sites migrated** (per Investigation A enumeration):
+  - validarCombo (L744-762): typed signature + force-variante
+    branch ('Selecciona una variante para cada plato con opciones').
+  - precioIndividualCombo memo (L730-740): variante.precio
+    lookup with fallback to plato.precio.
+  - agregarCombo + actualizarCombo (L781-789, L849-857):
+    insert variante_id into combo_platos rows.
+  - Toggle handler (L2294-2303): auto-pick variantes[0] on
+    add via p.variantes?.[0]?.id ?? null; discard variante_id
+    on remove via filter on plato_id.
+  - Row UI accessors (L2295, L2316): .includes →
+    .some(i => i.plato_id === p.id) for selected style + check.
+  - Horario warn map (L2412): extracts item.plato_id.
+  - Edit-pop (L2465-2468): reads raw combo.combo_platos
+    (not lossy derived platosIds), maps to ComboItem[].
+  - Admin list derive (L605-622): enriches platos names with
+    (VarianteName) suffix; also CARRIES combo_platos in the
+    derived shape so edit-pop has access (Claude Code caught
+    this dependency that the prompt missed).
+- **New JSX added** (L2319-2348): per-row inline Select
+  dropdown that renders when isSelected && tieneVariantes.
+  Wrapped with onClick stopPropagation to prevent row
+  re-toggle. Label 'Variante:' (10px text-tertiary) above
+  Select. Options labeled 'Mediana — \$20.000' format.
+  Error prop bound to intentoCombo && !!errores.platos &&
+  !currentItem?.variante_id for per-row red border.
+- **Row right-side price** (L2286-2292, L2315): IIFE checks
+  currentItem?.variante_id → variante.precio; falls back to
+  plato.precio. Live updates when admin changes dropdown.
+- **Row container restructured**: outer onClick div lost
+  flex layout; inner flex row hosts existing content; dropdown
+  stacks as second child of outer. Same pattern as F8.4b
+  promo modal. Without this, dropdown would have rendered
+  beside the check circle instead of below the row.
+- **Public side activates automatically**: F8.5a's
+  enriquecerComboPlatos helper picks up the new variante_id
+  values without any [slug]/page.tsx changes. The admin write
+  → DB → hook → public display chain works end-to-end.
+- **Smoke test passed 6/6**:
+  1. Create combo without variantes — no spurious dropdowns,
+     admin list shows 'jul + 3434'. Regression OK. ✅
+  2. Create combo with variante — dropdown auto-shows Mediana,
+     row price reflects variante \$20k, admin list shows
+     'Pizza Test F8.4b (Mediana) + jul'. ✅
+  3. Switch variante Mediana → Grande in dropdown — row price
+     live-updates to \$30k, ahorro recalculates, admin list
+     shows '(Grande)' after save. ✅
+  4. Force-variante on Combo Test F8.5a (legacy NULL): empty
+     placeholder + red border + banner block save; after
+     selecting Mediana, save succeeds, list shows '(Mediana)'. ✅
+  5. Toggle off variante plato: dropdown disappears, variante_id
+     discarded; reopening edit confirms clean state. ✅
+  6. Public end-to-end: card shows 'Pizza Test F8.4b (Grande) + ...',
+     modal shows '(Grande)' name + \$30k precio individual,
+     ahorro \$49.334 / -62% (math: \$79.334 individual - \$30k combo).
+     F8.5a display path activated correctly with F8.5b-written
+     data. ✅
+- **Zero console errors** across admin and public routes during
+  the full smoke test session.
+- **Percentage rounding audit (bonus)**: user flagged a UX
+  question on whether percentages might be incorrectly rounded
+  (e.g., 88.7% as 88% instead of 89%). Full codebase audit
+  confirmed all 10 calculated percentage sites use Math.round
+  consistently. No bug found, no fix needed. The two F8.5b
+  test cases (-53% for 53.367%, -64% for 64.286%) are
+  mathematically correct.
+- **Line delta**: +122 / -37 = +85 net in src/app/menu/page.tsx.
+  Estimate was +75; actual +10 from outer container restructuring.
+- **Deviations from spec** (both safer):
+  1. Admin list derive carries combo_platos raw alongside the
+     enriched names. Spec only said 'enrich names'. Without
+     carrying combo_platos, the edit-pop (which reads from
+     combo.combo_platos) would break. Claude Code identified
+     the dependency.
+  2. Row container restructured per the spec's anticipation
+     (same pattern as F8.4b promo modal).
+- **F8 progress**: 7 of 8 sessions complete. Customer-facing
+  flow 100% complete (cards, detail modal, cart, drawer,
+  WhatsApp, promos, combos). Admin write paths for variantes
+  in combos complete.
+- **Next sessions**:
+  - F8.6: promos × variantes admin validation (block
+    precio_especial for platos con variantes).
+  - F8.7: plato del día/ganador admin form with variante
+    selector.
+  - F8.8: polish (cascade warning copy enrichment, legacy
+    combo badge in admin list, final edge cases).
+- **Where**:
+  - src/app/menu/page.tsx L48-52 (ComboItem type), L147 + 5
+    other reset literals, L605-622 (admin list derive +
+    combo_platos carry), L730-762 (precioIndividualCombo memo
+    + validarCombo with force-variante), L781-789 + L849-857
+    (insert variante_id), L2282-2351 (row JSX with Select
+    dropdown), L2412 (horario warn map), L2465-2468 (edit-pop).
+
 ### F8.5a ✅ Variantes de platos — Sesión 5a (combos × variantes, display) — CLOSED
 - **Closed**: 2026-05-22.
 - **Goal**: Extend public combo display to support variantes.
