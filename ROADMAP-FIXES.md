@@ -490,6 +490,125 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
 
 ## Items
 
+### F8.5a ✅ Variantes de platos — Sesión 5a (combos × variantes, display) — CLOSED
+- **Closed**: 2026-05-22.
+- **Goal**: Extend public combo display to support variantes.
+  Read-only foundation; F8.5b will wire the admin write path.
+- **Scope split**: F8.5 was split into F8.5a (display) and
+  F8.5b (admin form). Pattern mirrors F8.4a/F8.4b split.
+  F8.5a is low-risk because all existing combos have
+  combo_platos.variante_id = NULL — display behavior is
+  byte-identical until F8.5b starts writing variante data.
+- **Decisions locked**:
+  1. Client-side variante resolution (no Supabase nested
+     embed). Hook brings only variante_id from combo_platos;
+     consumer resolves variante name + price from in-memory
+     todosLosPlatos / categorias. Both surfaces already hold
+     this data via useCategoriasYPlatos, so embed adds no
+     value and adds first-try failure risk.
+  2. Strategy B for precio_individual backward compat:
+     recompute client-side from comboPlatos[].precioEfectivo.
+     Stored column becomes best-effort cache, no longer used
+     for display. Repairs legacy combos without migration.
+  3. Bonus: combo card name join also enriched (not just modal).
+     Combo card now shows 'Pizza (Mediana) + Limonada (500ml)'
+     when variante_id is set, identical to what the modal
+     would show.
+- **Types added** (src/types/index.ts):
+  - ComboPlatoRaw: hook output shape (plato_id, variante_id,
+    nombre, precioBase).
+  - ComboPlatoEnriquecido: display shape (+ varianteNombre,
+    precioEfectivo).
+  - ComboPlato extended with variante_id? + platos? (additive,
+    safe; no callers rely on absent fields).
+- **Hook updated** (src/hooks/data/useCombos.ts):
+  - Both fetchCombosPublic and fetchCombosAdmin selects bring
+    variante_id from combo_platos.
+  - Public mapping builds comboPlatos: ComboPlatoRaw[]
+    alongside existing platos: string[] (backward compat).
+  - ComboAdmin.combo_platos shape extended.
+- **Helper** (src/app/[slug]/page.tsx near F8.4b helpers):
+  enriquecerComboPlatos(rawComboPlatos, todosLosPlatos)
+  resolves variante_id against in-memory plato data.
+  Defensive: if variante_id is set but variante was since
+  deleted (shouldn't happen with ON DELETE CASCADE but
+  defensive), falls back to plato.precio sentinel.
+  Helper also carries foto_url + descripcion because modal
+  rows render them — without these the modal would have
+  regressed (spec'd shape would have dropped them; Claude
+  Code caught this and added them).
+- **Combo card display** (src/app/[slug]/page.tsx L1267-1271):
+  Name join now reads from comboPlatosEnriquecidos with
+  varianteNombre suffix in parenthesis. Falls back to
+  combo.platos.join(' + ') for defensive empty case.
+- **Combo modal display** (src/app/[slug]/page.tsx L1370-1547):
+  - platosDelCombo from comboPlatosEnriquecidos with
+    defensive fallback to categorias.flatMap.filter
+    reconstruction.
+  - precioIndividual recomputed client-side via reduce when
+    enriquecidos present; falls back to stored value
+    otherwise.
+  - ahorro and porcentajeAhorro auto-updated since they
+    derive from precioIndividual. Div-by-zero guard added.
+  - Per-row name shows '(VarianteName)' when applicable.
+  - Per-row precio uses precioEfectivo with sentinel fallback.
+  - 'Comprando por separado' summary uses recomputed total.
+- **Card click already passes enriched combo**: combosVisibles
+  now filters combosEnriquecidos (instead of combosPublico),
+  so the combo object passed to setComboDetalle on card click
+  already carries comboPlatosEnriquecidos. No explicit
+  Task 6-style wiring needed.
+- **Smoke test passed 4/4 + 1 extra confirmation**:
+  1. Regression: 6 existing combos render byte-identical to
+     pre-F8.5a. ✅
+  2. Manual variante_id injection via Supabase (Mediana into
+     Combo Test F8.5a): card shows 'Plato (Mediana)', modal
+     shows variante name + variante price, ahorro recomputed.
+     Math correct: $70k individual / $25k combo / $45k ahorro
+     / -64% badge.
+  3. Other combos unaffected by injection: dos_por_uno combo
+     and others remained unchanged. ✅
+  4. Cleanup: variante_id reset to NULL, combo reverted to
+     baseline state. ✅
+  5. Extra confirmation with Grande variante ($30k != base
+     $20k): modal showed 'Plato (Grande)' + precio individual
+     $30k + total $80k + ahorro $55k (-69%). This
+     unambiguously proved variante.precio path is correct
+     (Mediana coincidentally equaled plato base price).
+- **Deviations from spec** (both safer, both noted by Claude
+  Code):
+  1. Helper carries foto_url + descripcion (modal regression
+     prevention).
+  2. Card strikethrough price unchanged in F8.5a (per literal
+     scope — only name join changed). F8.5b will extend this
+     for consistency once variante_id is being written by
+     admin form.
+- **Line delta**: +101 / -17 = +84 net across 3 files.
+- **F8 flujo cliente sigue 100% COMPLETO**: cards, detail
+  modal, cart, drawer, WhatsApp, promos, AND combos display
+  all work end-to-end with variantes.
+- **Next sessions**:
+  - F8.5b: admin combo form write path (23 platoIds reference
+    sites including 6 reset literals, dropdown selector with
+    'Variante:' label below plato name, force-variante rule,
+    variante_id inserts in agregarCombo and actualizarCombo,
+    edit pre-population, fix precioIndividualCombo admin memo).
+  - F8.6: promos × variantes admin validation (block
+    precio_especial for platos with variantes).
+  - F8.7: plato del día / ganador admin form with variante
+    selector.
+  - F8.8: polish + edge cases.
+- **Where**:
+  - src/types/index.ts L107-132 (new interfaces + ComboPlato
+    extension).
+  - src/hooks/data/useCombos.ts L5, L15-16, L34, L41, L52-60,
+    L71 (variante_id in selects + comboPlatos build).
+  - src/app/[slug]/page.tsx L66-93 (enriquecerComboPlatos
+    helper), L229-234 (combosEnriquecidos), L266
+    (combosVisibles switch), L1267-1271 (card name join),
+    L1370-1393 (modal precio recompute), L1467 (key),
+    L1502 (name), L1523 (precio), L1546 (summary).
+
 ### F8.4b ✅ Variantes de platos — Sesión 4b (Promo modal) — CLOSED
 - **Closed**: 2026-05-21.
 - **Goal**: Extend the promo modal in /[slug] public page to
