@@ -359,7 +359,19 @@ export default function MiMenuPage() {
     if (!state.nombre.trim()) e.nombre = 'El nombre es obligatorio'
     if (!state.tipo) e.tipo = 'Selecciona el tipo de promoción'
     if (state.dias.length === 0) e.dias = 'Selecciona al menos un día'
-    if (state.platoIds.length === 0) e.platos = 'Selecciona al menos un plato'
+    if (state.platoIds.length === 0) {
+      e.platos = 'Selecciona al menos un plato'
+    } else if (state.tipo === 'precio_especial') {
+      // F8.6 — block precio_especial with variantized platos:
+      // fixed valor doesn't differentiate Mediana vs Grande.
+      const tieneVariantizado = state.platoIds.some(id => {
+        const p = todosPlatos.find(x => x.id === id)
+        return p?.variantes?.length
+      })
+      if (tieneVariantizado) {
+        e.platos = 'Las promos de precio especial no admiten platos con variantes. Elimina el plato o cambia el tipo de promo.'
+      }
+    }
     if (state.tipo === 'descuento') {
       const v = parseInt(state.valor)
       if (!state.valor || isNaN(v) || v < 1 || v > 100) e.valor = 'Ingresa un porcentaje entre 1 y 100'
@@ -2549,7 +2561,7 @@ export default function MiMenuPage() {
                       ].map(t => (
                         <div key={t.id} onClick={() => {
                           setNuevaPromo({ ...nuevaPromo, tipo: t.id, valor: '' })
-                          setTouchedPromo(prev => ({ ...prev, tipo: true, valor: false }))
+                          setTouchedPromo(prev => ({ ...prev, tipo: true, valor: false, platos: false }))
                         }} style={{
                           padding: '7px 12px', borderRadius: '8px', fontSize: '12px', cursor: 'pointer',
                           background: nuevaPromo.tipo === t.id ? 'var(--text-primary)' : 'var(--bg-secondary)',
@@ -2599,7 +2611,16 @@ export default function MiMenuPage() {
                       />
                     )}
                     <div style={{ maxHeight: '160px', overflowY: 'auto', marginBottom: '10px', border: '1px solid var(--border-light)', borderRadius: '8px' }}>
-                      {platosFiltradosPromo.map(p => (
+                      {platosFiltradosPromo.map(p => {
+                        const isSelected = nuevaPromo.platoIds.includes(p.id)
+                        const tieneVariantes = !!p.variantes && p.variantes.length > 0
+                        // F8.6 — flag invalid combination on this row
+                        const filaConError =
+                          intentoPromo &&
+                          nuevaPromo.tipo === 'precio_especial' &&
+                          isSelected &&
+                          tieneVariantes
+                        return (
                         <div key={p.id} onClick={() => {
                           const sel = nuevaPromo.platoIds.includes(p.id)
                             ? nuevaPromo.platoIds.filter(id => id !== p.id)
@@ -2609,7 +2630,15 @@ export default function MiMenuPage() {
                         }} style={{
                           padding: '8px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                           borderBottom: '1px solid var(--border-light)', cursor: 'pointer',
-                          background: nuevaPromo.platoIds.includes(p.id) ? 'var(--color-info-light)' : 'transparent',
+                          background: filaConError
+                            ? 'var(--color-danger-light)'
+                            : isSelected ? 'var(--color-info-light)' : 'transparent',
+                          ...(filaConError && {
+                            borderTop: '1px solid var(--color-danger)',
+                            borderRight: '1px solid var(--color-danger)',
+                            borderBottom: '1px solid var(--color-danger)',
+                            borderLeft: '1px solid var(--color-danger)',
+                          }),
                         }}>
                           <div>
                           <span style={{ fontSize: '12px' }}>{p.nombre}</span>
@@ -2620,7 +2649,8 @@ export default function MiMenuPage() {
                             {nuevaPromo.platoIds.includes(p.id) && <span style={{ color: 'var(--color-info)', fontSize: '12px' }}>✓</span>}
                           </div>
                         </div>
-                      ))}
+                        )
+                      })}
                     </div>
                     {intentoPromo && touchedPromo.platos && errores.platos && (
                       <div style={{ fontSize: '11px', color: 'var(--color-danger)', marginBottom: '8px' }}>
