@@ -490,6 +490,124 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
 
 ## Items
 
+### F8.6 ✅ Variantes de platos — Sesión 6 (admin promo validation) — CLOSED
+- **Closed**: 2026-05-23.
+- **Goal**: Block the invalid combination 'tipo === precio_especial
+  + plato con variantes' at admin write time. Closes the F8.4b
+  interim behavior comment in [slug]/page.tsx:1626 which deferred
+  this validation to F8.6.
+- **Math justification**:
+  - dos_por_uno: base/2 — proportional per variante. ALLOWED.
+  - descuento: base * (1 - valor/100) — proportional. ALLOWED.
+  - precio_especial: fixed valor regardless of base — Mediana
+    \$20k and Grande \$30k both cost the same special price.
+    Non-proportional, semantically broken. BLOCKED.
+- **Cheapest F8 session so far**: 1 file, ~35 lines net, ~1.5h
+  total (investigation + implementation + smoke test + post-fix
+  re-test). No new types, no shape migration, no reset literals,
+  no cross-file touches. Compare to F8.5b (4 files, 23 reference
+  sites, ~3h).
+- **6 decisions locked from investigation**:
+  1. Validation strategy: ON-SAVE (Option C) — banner + per-row
+     red border. Mirrors F8.5b force-variante pattern exactly.
+  2. Legacy promos: read-only on display (F8.4b interim continues),
+     blocked at edit-save. Forward-only consistency.
+  3. Cascade on variante-add: defer to F8.8.
+  4. Banner copy: 'Las promos de precio especial no admiten
+     platos con variantes. Elimina el plato o cambia el tipo
+     de promo.' — actionable, imperative, no 'Por favor'.
+  5. Stale touch reset on tipo switch: YES — clears stale red
+     borders/banner immediately when admin changes type.
+  6. Red border scope: only on SELECTED variantized platos
+     (non-variantized platos in same form stay clean).
+- **Changes** (src/app/menu/page.tsx):
+  - validarPromo (L357+): new branch nested inside the else of
+    platoIds.length === 0 check. Closure on todosPlatos for the
+    variante lookup (same pattern as validarCombo at L754-760).
+    Detects variantized platos via p.variantes?.length and
+    triggers the banner copy when admin attempts save with
+    tipo === 'precio_especial'.
+  - Tipo radio click handler (L2562+): added platos: false to
+    setTouchedPromo reset alongside valor: false. Clears stale
+    visual state on type switch.
+  - Row JSX (L2614+): added filaConError boolean computed at
+    top of row map (intentoPromo && tipo === precio_especial
+    && isSelected && tieneVariantes). Conditional styling:
+    red border + light-danger background.
+- **CSS variable reuse**: Claude Code grepped the codebase and
+  found --color-danger and --color-danger-light already exist
+  (paired in .badge-danger pattern at globals.css:289). Reused
+  them instead of inventing new vars or hardcoding colors. This
+  maintains visual coherence with the rest of the app.
+- **Shorthand-border warning fix** (post-implementation):
+  - Initial implementation used 'border: 1px solid var(--color-danger)'
+    in the conditional spread, which conflicted with the existing
+    'borderBottom: 1px solid var(--border-light)' during rerenders.
+    React DevTools warned: 'Removing a style property during
+    rerender (border) when a conflicting property is set
+    (borderBottom)...'
+  - Smoke test missed this because the Chrome DevTools console
+    filter hides Warnings by default and the prompt asked for
+    'console errors' specifically.
+  - Fixed by replacing shorthand 'border' with 4 individual
+    properties: borderTop, borderRight, borderBottom, borderLeft.
+    Both add-path and remove-path now use non-shorthand form.
+  - Re-test confirmed: visual behavior identical (all 4 sides
+    red), 0 console messages on both paint and tipo-switch rerender.
+- **Methodology lesson**: For future smoke tests, console
+  monitoring must explicitly request 'errors AND warnings' (not
+  just 'console errors'). The read_console_messages tool
+  captures all levels at runtime — the limitation was the prompt
+  wording, not the tooling. F8.7 and F8.8 prompts will use
+  improved phrasing.
+- **Smoke test passed 6/6**:
+  1. Create dos_por_uno + variantized plato (Pizza Test F8.4b):
+     saves. ✅
+  2. Create descuento + variantized plato: saves. ✅
+  3. Create precio_especial + non-variantized plato (jul only):
+     saves. ✅
+  4. Create precio_especial + variantized plato: BLOCKED con
+     banner + red border. Per-row scope verified — adding jul
+     to the same form did NOT add red border to jul row. ✅
+  5. Tipo switch (precio_especial → descuento) on broken form:
+     red border and banner disappear immediately, valor field
+     clears. ✅
+  6. Edit legacy precio_especial promo with variantized plato
+     (Test Precio Especial F8.4b): clean open (no error yet)
+     → click Guardar cambios fires error → cleanup (changed
+     tipo to dos_por_uno) → second Guardar cambios succeeds.
+     Legacy promo now stored as 2x1. ✅
+- **Post-fix re-test (2/2 PASS)**:
+  - Test 4 re-run: visual identical (DOM inspection confirmed
+    all 4 individual border properties applied), 0 console
+    messages.
+  - Test 5 re-run (critical rerender path): tipo switch
+    triggers filaConError true → false transition. 0 console
+    messages. DOM inspection confirmed only the upstream
+    borderBottom remains after switch (light-grey), the 3
+    conditional borders cleanly removed.
+- **Line delta**: +30 / -5 + 5 (border fix) = +30 net in
+  src/app/menu/page.tsx. Within original +15 to +25 envelope
+  for the validator + tipo handler + row JSX, plus 5 lines from
+  the shorthand-to-individual replacement.
+- **F8 progress**: 7 of 8 sessions complete. Customer-facing flow
+  100% complete. Admin validation for variantes in combos
+  (F8.5b force-variante) AND promos (F8.6 type compatibility)
+  now both complete.
+- **Next sessions**:
+  - F8.7: plato del día / ganador admin form with variante
+    selector. Smaller surface than F8.5b — single dropdown per
+    item (no array migration). Estimated ~1.5-2h.
+  - F8.8: polish — cascade warning copy enrichment (deferred
+    from F8.5b + F8.6), legacy combo badge in admin list (if
+    time), final WhatsApp / Sorpréndeme verification, edge
+    case audit. Estimated ~1.5-2h.
+- **Where**:
+  - src/app/menu/page.tsx L357+ (validarPromo with force-variante
+    branch), L2562+ (tipo radio handler with platos reset),
+    L2614+ (filaConError + row red border with 4 individual
+    border properties).
+
 ### F8.5b ✅ Variantes de platos — Sesión 5b (combos × variantes, admin write path) — CLOSED
 - **Closed**: 2026-05-23.
 - **Goal**: Wire the admin combo form write path so admin can
