@@ -692,6 +692,7 @@ export default function MenuPublicoPage() {
                 color: 'var(--theme-text-muted)',
                 lineHeight: 1.6,
                 marginBottom: '20px',
+                overflowWrap: 'break-word',
               }}>
                 {restaurante?.descripcion || ''}
               </div>
@@ -1021,7 +1022,7 @@ export default function MenuPublicoPage() {
                     {platoGanador.nombre}
                   </div>
                   {platoGanador.descripcionEspecial && (
-                    <div style={{ fontSize: '11px', color: '#6B6A65', marginTop: '2px', fontStyle: 'italic' }}>"{platoGanador.descripcionEspecial}"</div>
+                    <div style={{ fontSize: '11px', color: '#6B6A65', marginTop: '2px', fontStyle: 'italic', overflowWrap: 'break-word' }}>"{platoGanador.descripcionEspecial}"</div>
                   )}
                   {(() => {
                     // D4: si el ganador tiene variantes, mostrar "desde $X" y sin Qty inline
@@ -1078,6 +1079,7 @@ export default function MenuPublicoPage() {
                     fontSize: '11px',
                     color: 'var(--theme-text-muted)',
                     marginTop: '2px',
+                    overflowWrap: 'break-word',
                   }}>
                     {platoDia.descripcion}
                   </div>
@@ -1197,6 +1199,7 @@ export default function MenuPublicoPage() {
                     <div style={{
                       fontSize: '11px',
                       color: 'var(--theme-text-muted)',
+                      overflowWrap: 'break-word',
                     }}>
                       {plato.descripcion}
                     </div>
@@ -1255,6 +1258,7 @@ export default function MenuPublicoPage() {
                     fontSize: '12px',
                     color: 'var(--theme-text-muted)',
                     marginTop: '2px',
+                    overflowWrap: 'break-word',
                   }}>
                     {combo.descripcion}
                   </div>
@@ -1445,6 +1449,7 @@ export default function MenuPublicoPage() {
                     color: 'var(--theme-text-muted)',
                     marginBottom: '16px',
                     lineHeight: 1.5,
+                    overflowWrap: 'break-word',
                   }}>
                     {comboDetalle.descripcion}
                   </div>
@@ -1511,6 +1516,7 @@ export default function MenuPublicoPage() {
                           display: '-webkit-box',
                           WebkitLineClamp: 2,
                           WebkitBoxOrient: 'vertical' as any,
+                          overflowWrap: 'break-word',
                         }}>
                           {plato.descripcion}
                         </div>
@@ -1909,6 +1915,7 @@ export default function MenuPublicoPage() {
                       fontSize: '11px',
                       color: 'var(--theme-text-muted)',
                       marginTop: '2px',
+                      overflowWrap: 'break-word',
                     }}>
                       {plato.descripcion}
                     </div>
@@ -2424,6 +2431,7 @@ export default function MenuPublicoPage() {
                   color: 'var(--theme-text-muted)',
                   lineHeight: 1.6,
                   marginBottom: '14px',
+                  overflowWrap: 'break-word',
                 }}>
                   {plato.descripcion}
                 </div>
