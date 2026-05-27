@@ -490,6 +490,45 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
 
 ## Items
 
+### UI-BUGS ✅ Description handling — multi-surface fix — CLOSED
+- **Closed**: 2026-05-23.
+- **Goal**: Fix 10 description-related bugs discovered during F8.6
+  smoke testing. All bugs share schema drift between code and DB
+  as their root cause.
+- **Schema migration applied** (manual, via Supabase Dashboard SQL Editor):
+  ALTER TABLE promos ADD COLUMN descripcion text;
+  The column did NOT exist before today. Code was writing to it
+  silently (NULL drop, no error) and reading from it (got NULL).
+  This is the first manual DB migration documented in this roadmap.
+- **10 bugs closed**:
+  1. UI overflow on 9 description surfaces (spaceless strings broke layout).
+  2. Combo descripcion had no char limit in admin form.
+  3. Promo descripcion silently dropped on INSERT.
+  4. Promo descripcion silently dropped on UPDATE.
+  5. promos.descripcion column didn't exist in DB.
+  6. Promo public modal had no descripcion render JSX.
+  7. Admin promo input had no MAX_DESC guard + counter.
+  8. Admin promo card descripcion had no overflowWrap.
+  9. usePromos.fetchPromosPublic map silently dropped descripcion.
+  10. Combo card on public list showed descripcion (visual noise).
+- **Plus visual polish**: Plato card descripcion now truncates to
+  1-line preview with ellipsis (WebkitLineClamp:1). Full text
+  remains visible in the detail modal.
+- **Files changed**: 3 — src/hooks/data/usePromos.ts,
+  src/app/menu/page.tsx, src/app/[slug]/page.tsx.
+- **Line delta**: ~+48 / -16 = +32 net.
+- **Methodology lesson — schema drift detection across 4 layers**:
+  When persisting a new field, verify all 4 layers in order:
+  (1) DB schema, (2) SELECT query, (3) mapping/transformation,
+  (4) consumer types. Inferring from one layer does NOT validate
+  the others. Today's bug had to be caught at each of the 4
+  layers separately.
+- **Methodology lesson — console monitoring scope**: When asking
+  Claude in Chrome to monitor console, explicitly request
+  "errors AND warnings" — the default Chrome DevTools filter
+  hides warnings. The read_console_messages tool captures all
+  levels at runtime; the limitation was prompt wording.
+
 ### F8.6 ✅ Variantes de platos — Sesión 6 (admin promo validation) — CLOSED
 - **Closed**: 2026-05-23.
 - **Goal**: Block the invalid combination 'tipo === precio_especial
