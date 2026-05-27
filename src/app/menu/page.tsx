@@ -354,7 +354,7 @@ export default function MiMenuPage() {
     await invalidateAll('plato-del-dia')
   }
 
-  function validarPromo(state: { nombre: string; tipo: string; valor: string; dias: string[]; platoIds: string[] }): Record<string, string> {
+  function validarPromo(state: { nombre: string; descripcion: string; tipo: string; valor: string; dias: string[]; platoIds: string[] }): Record<string, string> {
     const e: Record<string, string> = {}
     if (!state.nombre.trim()) e.nombre = 'El nombre es obligatorio'
     if (!state.tipo) e.tipo = 'Selecciona el tipo de promoción'
@@ -393,6 +393,7 @@ export default function MiMenuPage() {
     const { data: promoData, error } = await supabase.from('promos').insert({
       restaurante_id: rest.id,
       nombre: nuevaPromo.nombre,
+      descripcion: nuevaPromo.descripcion || null,
       tipo: nuevaPromo.tipo,
       valor: nuevaPromo.valor ? parseInt(nuevaPromo.valor) : null,
       dias: nuevaPromo.dias,
@@ -451,6 +452,7 @@ export default function MiMenuPage() {
     // Step 1: update fields and deactivate so public menu can't see partial state
     const { error } = await supabase.from('promos').update({
       nombre: nuevaPromo.nombre,
+      descripcion: nuevaPromo.descripcion || null,
       tipo: nuevaPromo.tipo,
       valor: nuevaPromo.valor ? parseInt(nuevaPromo.valor) : null,
       dias: nuevaPromo.dias,
@@ -2284,7 +2286,20 @@ export default function MiMenuPage() {
                       </div>
                     )}
                     <input className="input" placeholder="Descripción (opcional)" value={nuevoCombo.descripcion || ''}
-                      onChange={(e) => setNuevoCombo({ ...nuevoCombo, descripcion: e.target.value })} style={{ marginBottom: '8px' }} />
+                      onChange={(e) => {
+                        if (e.target.value.length <= MAX_DESC) setNuevoCombo({ ...nuevoCombo, descripcion: e.target.value })
+                      }}
+                      style={{ marginBottom: '2px' }} />
+                    <div style={{
+                      textAlign: 'right',
+                      fontSize: '10px',
+                      color: (nuevoCombo.descripcion || '').length > MAX_DESC - 20
+                        ? 'var(--color-warning)'
+                        : 'var(--text-tertiary)',
+                      marginBottom: '8px',
+                    }}>
+                      {(nuevoCombo.descripcion || '').length}/{MAX_DESC}
+                    </div>
                     <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Selecciona los platos:</div>
                     {totalPlatosCombo >= 10 && (
                       <input
@@ -2550,7 +2565,20 @@ export default function MiMenuPage() {
                       </div>
                     )}
                     <input className="input" placeholder="Descripción (ej: Bebidas al 2x1 los viernes)" value={nuevaPromo.descripcion}
-                      onChange={(e) => setNuevaPromo({ ...nuevaPromo, descripcion: e.target.value })} style={{ marginBottom: '8px' }} />
+                      onChange={(e) => {
+                        if (e.target.value.length <= MAX_DESC) setNuevaPromo({ ...nuevaPromo, descripcion: e.target.value })
+                      }}
+                      style={{ marginBottom: '2px' }} />
+                    <div style={{
+                      textAlign: 'right',
+                      fontSize: '10px',
+                      color: nuevaPromo.descripcion.length > MAX_DESC - 20
+                        ? 'var(--color-warning)'
+                        : 'var(--text-tertiary)',
+                      marginBottom: '8px',
+                    }}>
+                      {nuevaPromo.descripcion.length}/{MAX_DESC}
+                    </div>
 
                     <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Tipo de promo:</div>
                     <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '10px' }}>
@@ -2788,7 +2816,7 @@ export default function MiMenuPage() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
                       <div>
                         <div style={{ fontSize: '14px', fontWeight: 500 }}>{promo.nombre}</div>
-                        {promo.descripcion && <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>{promo.descripcion}</div>}
+                        {promo.descripcion && <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px', overflowWrap: 'break-word' }}>{promo.descripcion}</div>}
                         {promo.platos && promo.platos.length > 0 && (
                           <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '4px' }}>Aplica en: {promo.platos.join(', ')}</div>
                         )}

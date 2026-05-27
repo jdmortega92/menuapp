@@ -7,6 +7,7 @@ import type { TipoPromo, DiaSemana } from '@/types'
 export interface PromoPublica {
   id: string
   nombre: string
+  descripcion: string | null
   tipo: TipoPromo
   valor: number | null
   dias: DiaSemana[]
@@ -39,6 +40,7 @@ async function fetchPromosPublic(restauranteId: string): Promise<PromoPublica[]>
   return (data as any[]).map((p) => ({
     id: p.id,
     nombre: p.nombre,
+    descripcion: p.descripcion ?? null,
     tipo: p.tipo as TipoPromo,
     valor: p.valor ?? null,
     dias: (p.dias ?? []) as DiaSemana[],

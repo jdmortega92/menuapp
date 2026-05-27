@@ -1253,16 +1253,6 @@ export default function MenuPublicoPage() {
                 }}>
                   {combo.nombre}
                 </div>
-                {combo.descripcion && (
-                  <div style={{
-                    fontSize: '12px',
-                    color: 'var(--theme-text-muted)',
-                    marginTop: '2px',
-                    overflowWrap: 'break-word',
-                  }}>
-                    {combo.descripcion}
-                  </div>
-                )}
                 <div style={{
                   fontSize: '11px',
                   color: 'var(--theme-text-subtle)',
@@ -1687,6 +1677,17 @@ export default function MenuPublicoPage() {
               </div>
 
               <div style={{ padding: '16px 20px' }}>
+                {promoDetalle.descripcion && (
+                  <div style={{
+                    fontSize: '13px',
+                    color: 'var(--theme-text-muted)',
+                    marginBottom: '12px',
+                    lineHeight: 1.5,
+                    overflowWrap: 'break-word',
+                  }}>
+                    {promoDetalle.descripcion}
+                  </div>
+                )}
                 <div style={{ fontSize: '13px', color: 'var(--theme-text-muted)', marginBottom: '12px' }}>
                   {promoDetalle.tipo === 'dos_por_uno' && 'Selecciona un plato y lleva 2 por el precio de 1'}
                   {promoDetalle.tipo === 'descuento' && `Selecciona los platos con ${promoDetalle.valor}% de descuento`}
@@ -1916,6 +1917,11 @@ export default function MenuPublicoPage() {
                       color: 'var(--theme-text-muted)',
                       marginTop: '2px',
                       overflowWrap: 'break-word',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      display: '-webkit-box',
+                      WebkitLineClamp: 1,
+                      WebkitBoxOrient: 'vertical' as any,
                     }}>
                       {plato.descripcion}
                     </div>
