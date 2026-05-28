@@ -36,14 +36,14 @@ function formatDiasFull(dias: string[]): string {
 // for variantes. UUIDs don't contain "__" so the separator is safe.
 const CART_KEY_SEP = '__'
 
-function makeCartKey(platoId: string, varianteId?: string): string {
+function makeCartKey(platoId: string, varianteId?: string, source?: string): string {
+  if (source) return `${platoId}${CART_KEY_SEP}${varianteId || ''}${CART_KEY_SEP}${source}`
   return varianteId ? `${platoId}${CART_KEY_SEP}${varianteId}` : platoId
 }
 
-function parseCartKey(key: string): { platoId: string; varianteId?: string } {
+function parseCartKey(key: string): { platoId: string; varianteId?: string; source?: string } {
   const parts = key.split(CART_KEY_SEP)
-  if (parts.length === 2) return { platoId: parts[0], varianteId: parts[1] }
-  return { platoId: parts[0] }
+  return { platoId: parts[0], varianteId: parts[1] || undefined, source: parts[2] || undefined }
 }
 
 // F8.4b — Promo helpers
@@ -333,6 +333,14 @@ export default function MenuPublicoPage() {
     const esPromo2x1 = preciosPromo[cartKey]?.etiqueta === '2x1'
     const incremento = esPromo2x1 ? 2 : 1
     setPedido({ ...pedido, [cartKey]: (pedido[cartKey] || 0) + incremento })
+    // F8.7: si la key es de plato del día, registrar el precio especial (idempotente).
+    const parsed = parseCartKey(cartKey)
+    if (parsed.source === 'dia' && platoDia && parsed.platoId === platoDia.id) {
+      setPreciosPromo({
+        ...preciosPromo,
+        [cartKey]: { precioUnitario: platoDia.precioEspecial, etiqueta: 'Plato del día' }
+      })
+    }
   }
 
   function quitarDelPedido(cartKey: string) {
@@ -1040,7 +1048,18 @@ export default function MenuPublicoPage() {
                     )
                   })()}
                   {platoGanador.descripcionEspecial && (
-                    <div style={{ fontSize: '11px', color: '#6B6A65', marginTop: '2px', fontStyle: 'italic', overflowWrap: 'break-word' }}>"{platoGanador.descripcionEspecial}"</div>
+                    <div style={{
+                      fontSize: '11px',
+                      color: '#6B6A65',
+                      marginTop: '2px',
+                      fontStyle: 'italic',
+                      overflowWrap: 'break-word',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical' as any,
+                    }}>"{platoGanador.descripcionEspecial}"</div>
                   )}
                   {(() => {
                     // D4: si el ganador tiene variantes pero sin lock, mostrar "desde $X" y sin Qty inline
@@ -1049,7 +1068,7 @@ export default function MenuPublicoPage() {
                     const ganadorTieneVariantes = (ganadorPlato as any)?.variantes && (ganadorPlato as any).variantes.length > 0
                     const varianteLocked = platoGanador.varianteId && platoGanador.variante ? platoGanador.variante : null
                     if (varianteLocked) {
-                      const cartKeyGanador = makeCartKey(platoGanador.id, varianteLocked.id)
+                      const cartKeyGanador = makeCartKey(platoGanador.id, varianteLocked.id, 'ganador')
                       return (
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
                           <span style={{ fontSize: '14px', fontWeight: 500, color: '#B8860B' }}>${formatoPrecio(varianteLocked.precio)}</span>
@@ -1060,7 +1079,7 @@ export default function MenuPublicoPage() {
                     return (
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
                         <span style={{ fontSize: '14px', fontWeight: 500, color: '#B8860B' }}>{ganadorTieneVariantes ? 'desde ' : ''}${platoGanador.precio?.toLocaleString('es-CO')}</span>
-                        {ganadorTieneVariantes ? null : <Qty cartKey={platoGanador.id} />}
+                        {ganadorTieneVariantes ? null : <Qty cartKey={makeCartKey(platoGanador.id, undefined, 'ganador')} />}
                       </div>
                     )
                   })()}
@@ -1078,7 +1097,7 @@ export default function MenuPublicoPage() {
           const platoDiaTieneVariantes = (platoDiaPlato as any)?.variantes && (platoDiaPlato as any).variantes.length > 0
           // F8.7: variante locked → resolved variante card path
           const varianteLocked = platoDia.varianteId && platoDia.variante ? platoDia.variante : null
-          const cartKeyDia = varianteLocked ? makeCartKey(platoDia.id, varianteLocked.id) : platoDia.id
+          const cartKeyDia = makeCartKey(platoDia.id, varianteLocked?.id, 'dia')
           return (
           <div style={{ padding: '0 16px 10px' }}>
             <div onClick={() => setPlatoDetalle({ id: platoDia.id, modo: 'platoDia' })} style={{
@@ -1097,8 +1116,8 @@ export default function MenuPublicoPage() {
                   </span>
                 )}
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
+              <div style={{ display: 'flex', alignItems: 'center' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{
                     fontSize: '14px',
                     fontWeight: 500,
@@ -1111,59 +1130,47 @@ export default function MenuPublicoPage() {
                     color: 'var(--theme-text-muted)',
                     marginTop: '2px',
                     overflowWrap: 'break-word',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    display: '-webkit-box',
+                    WebkitLineClamp: 1,
+                    WebkitBoxOrient: 'vertical' as any,
                   }}>
                     {platoDia.descripcion}
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
-                    {varianteLocked ? (
-                      <>
-                        <span style={{
-                          fontSize: '12px',
-                          color: 'var(--theme-text-subtle)',
-                          textDecoration: 'line-through',
-                        }}>
-                          ${formatoPrecio(varianteLocked.precio)}
-                        </span>
-                        <span style={{ fontSize: '14px', fontWeight: 500, color: color }}>${formatoPrecio(platoDia.precioEspecial)}</span>
-                      </>
-                    ) : platoDiaTieneVariantes ? (
-                      <span style={{ fontSize: '14px', fontWeight: 500, color: color }}>desde ${formatoPrecio(platoDia.precio)}</span>
-                    ) : (
-                      <>
-                        <span style={{
-                          fontSize: '12px',
-                          color: 'var(--theme-text-subtle)',
-                          textDecoration: 'line-through',
-                        }}>
-                          ${formatoPrecio(platoDia.precio)}
-                        </span>
-                        <span style={{ fontSize: '14px', fontWeight: 500, color: color }}>${formatoPrecio(platoDia.precioEspecial)}</span>
-                      </>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      {varianteLocked ? (
+                        <>
+                          <span style={{
+                            fontSize: '12px',
+                            color: 'var(--theme-text-subtle)',
+                            textDecoration: 'line-through',
+                          }}>
+                            ${formatoPrecio(varianteLocked.precio)}
+                          </span>
+                          <span style={{ fontSize: '14px', fontWeight: 500, color: color }}>${formatoPrecio(platoDia.precioEspecial)}</span>
+                        </>
+                      ) : platoDiaTieneVariantes ? (
+                        <span style={{ fontSize: '14px', fontWeight: 500, color: color }}>desde ${formatoPrecio(platoDia.precio)}</span>
+                      ) : (
+                        <>
+                          <span style={{
+                            fontSize: '12px',
+                            color: 'var(--theme-text-subtle)',
+                            textDecoration: 'line-through',
+                          }}>
+                            ${formatoPrecio(platoDia.precio)}
+                          </span>
+                          <span style={{ fontSize: '14px', fontWeight: 500, color: color }}>${formatoPrecio(platoDia.precioEspecial)}</span>
+                        </>
+                      )}
+                    </div>
+                    {(!varianteLocked && platoDiaTieneVariantes) ? null : (
+                      <Qty cartKey={cartKeyDia} />
                     )}
                   </div>
                 </div>
-                {(!varianteLocked && platoDiaTieneVariantes) ? null : (
-                <div onClick={(e) => {
-                  e.stopPropagation()
-                  // Agregar plato del día CON precio especial registrado
-                  setPedido({ ...pedido, [cartKeyDia]: (pedido[cartKeyDia] || 0) + 1 })
-                  setPreciosPromo({
-                    ...preciosPromo,
-                    [cartKeyDia]: { precioUnitario: platoDia.precioEspecial, etiqueta: 'Plato del día' }
-                  })
-                }} style={{
-                  width: '26px',
-                  height: '26px',
-                  borderRadius: '50%',
-                  background: color,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'white',
-                  fontSize: '14px',
-                  cursor: 'pointer',
-                }}>+</div>
-                )}
               </div>
             </div>
           </div>
@@ -1242,6 +1249,11 @@ export default function MenuPublicoPage() {
                       fontSize: '11px',
                       color: 'var(--theme-text-muted)',
                       overflowWrap: 'break-word',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      display: '-webkit-box',
+                      WebkitLineClamp: 1,
+                      WebkitBoxOrient: 'vertical' as any,
                     }}>
                       {plato.descripcion}
                     </div>
@@ -2403,10 +2415,15 @@ export default function MenuPublicoPage() {
           const varianteActual = tieneVariantes
             ? (plato as any).variantes.find((v: any) => v.id === varianteSeleccionadaId)
             : null
-          // cartKey según selección: composite si hay variante, plano si no
-          const cartKey = tieneVariantes && varianteSeleccionadaId
-            ? makeCartKey(plato.id, varianteSeleccionadaId)
-            : plato.id
+          // F8.7 — detección día/ganador hoisted (la usan el bloque de precio y el botón Agregar).
+          // Debe vivir antes de cartKey para que el source del key coincida con el precio aplicado.
+          const esPlatoDelDiaModal = !!(platoDia && platoDia.id === plato.id && esProPublico && config?.plato_dia_activo && platoDiaVisible && platoDetalle?.modo !== 'ganador')
+          const lockMatchModal = !!(esPlatoDelDiaModal && platoDia && platoDia.varianteId && platoDia.varianteId === varianteSeleccionadaId)
+          const esPlatoDelDiaPrecio = !!(esPlatoDelDiaModal && platoDia && (!tieneVariantes || lockMatchModal))
+          // cartKey según selección: composite si hay variante, plano si no; con source dia/ganador
+          // para que día/ganador no colisionen con la tarjeta regular del mismo plato.
+          const cartKeySource = esPlatoDelDiaPrecio ? 'dia' : (platoDetalle?.modo === 'ganador' ? 'ganador' : undefined)
+          const cartKey = makeCartKey(plato.id, (tieneVariantes && varianteSeleccionadaId) ? varianteSeleccionadaId : undefined, cartKeySource)
           const cantidadActual = pedido[cartKey] || 0
           const cantidadMostrar = cantidadActual || 1
 
@@ -2527,9 +2544,7 @@ export default function MenuPublicoPage() {
                 {(() => {
                   // F8.7: si el plato del día tiene variante lockeada Y el usuario tiene esa variante
                   // seleccionada en el modal, mostrar discount (variante.precio tachado + precioEspecial).
-                  const esPlatoDelDiaModo = !!(platoDia && platoDia.id === plato.id && esProPublico && config?.plato_dia_activo && platoDiaVisible && platoDetalle?.modo !== 'ganador')
-                  const lockedVarianteCoincide = !!(esPlatoDelDiaModo && platoDia && platoDia.varianteId && platoDia.varianteId === varianteSeleccionadaId)
-                  if (tieneVariantes && lockedVarianteCoincide && varianteActual && platoDia) {
+                  if (tieneVariantes && lockMatchModal && varianteActual && platoDia) {
                     return (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
                         <span style={{
@@ -2572,7 +2587,7 @@ export default function MenuPublicoPage() {
                       </div>
                     )
                   }
-                  if (esPlatoDelDiaModo && platoDia) {
+                  if (esPlatoDelDiaModal && platoDia) {
                     return (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
                         <span style={{
@@ -2767,26 +2782,15 @@ export default function MenuPublicoPage() {
                   </div>
                   {(() => {
                     // F8.7: discount aplica cuando (a) plato sin variantes, o (b) plato con variantes
-                    // Y variante lockeada coincide con la seleccionada en el modal.
-                    const esPlatoDelDiaBase = !!(platoDia && platoDia.id === plato.id && esProPublico && config?.plato_dia_activo && platoDiaVisible && platoDetalle?.modo !== 'ganador')
-                    const lockMatch = !!(esPlatoDelDiaBase && platoDia && platoDia.varianteId && platoDia.varianteId === varianteSeleccionadaId)
-                    const esPlatoDelDia = !!(esPlatoDelDiaBase && platoDia && (!tieneVariantes || lockMatch))
-                    const precioParaCalcular = (esPlatoDelDia && platoDia)
+                    // Y variante lockeada coincide con la seleccionada (esPlatoDelDiaPrecio hoisted arriba).
+                    const precioParaCalcular = (esPlatoDelDiaPrecio && platoDia)
                       ? platoDia.precioEspecial
                       : (varianteActual ? varianteActual.precio : plato.precio)
                     return (
                       <div onClick={() => {
                         if (cantidadActual === 0) {
-                          if (esPlatoDelDia && platoDia) {
-                            // Agregar con precio especial registrado
-                            setPedido({ ...pedido, [cartKey]: 1 })
-                            setPreciosPromo({
-                              ...preciosPromo,
-                              [cartKey]: { precioUnitario: platoDia.precioEspecial, etiqueta: 'Plato del día' }
-                            })
-                          } else {
-                            agregarAlPedido(cartKey)
-                          }
+                          // agregarAlPedido registra el precio especial para keys con source 'dia'.
+                          agregarAlPedido(cartKey)
                         }
                         setPlatoDetalle(null)
                       }} style={{
