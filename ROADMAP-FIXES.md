@@ -490,6 +490,44 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
 
 ## Items
 
+### F8.7 ✅ Variantes de platos — Sesión 7 (variante selector para plato del día y plato ganador) — CLOSED
+- **Closed**: 2026-05-27.
+- **Goal**: el admin puede lockear una variante específica al plato
+  del día y al plato ganador.
+- **Changes by layer**:
+  - Types (src/types/index.ts): variante_id?: string | null en
+    PlatoDelDia y PlatoGanador.
+  - Hooks (usePlatoDelDia, usePlatoGanador): los public mappers
+    joinean plato_variantes(*) y resuelven la variante locked
+    (varianteId + variante {id, nombre, precio}); los admin types
+    exponen variante_id.
+  - Admin (src/app/menu/page.tsx): Select de variante en ambos
+    forms ('Sin variante específica' + lista; oculto si el plato no
+    tiene variantes). Reset a variantes[0] al cambiar de plato.
+    INSERT con variante_id. Seed desde SWR. validarPlatoDia rechaza
+    variante inválida. Soft-warning de precio compara contra el
+    precio de la variante locked. Vista Previa variante-aware
+    (nombre · variante + precio de variante).
+  - Consumer (src/app/[slug]/page.tsx): las cards de día/ganador
+    muestran 'nombre · variante' + precio de variante; la de día
+    muestra precio tachado + precio_especial. El modal pre-selecciona
+    la variante locked; el descuento del día solo aplica si la
+    variante seleccionada coincide con la locked. Cart key composite
+    (heredado de F8.4a). Fallback 'desde $X' preservado para rows
+    legacy sin lock.
+- **Plan gating**: Pro-only (heredado de la superficie de render).
+- **Methodology lesson — schema drift en una 4ta capa de consumer**:
+  la detección de schema drift falló en una 4ta capa de consumer no
+  auditada (la Vista Previa del admin). Había DOS consumers del
+  precio — el público + el preview admin. Cazado en smoke test,
+  fixeado en el mismo batch antes del commit.
+- **Commits**: feat 91ec57e.
+- **Follow-ups en backlog (no bloquean)**:
+  - E1: el error 'Variante seleccionada inválida' del validator no
+    tiene UI render → posible silent fail (verificar con devtools).
+  - L1/L2: backward compat de rows legacy con variante_id NULL
+    (verificar manual en Supabase Dashboard).
+
 ### UI-BUGS ✅ Description handling — multi-surface fix — CLOSED
 - **Closed**: 2026-05-23.
 - **Goal**: Fix 10 description-related bugs discovered during F8.6
