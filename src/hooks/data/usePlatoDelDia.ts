@@ -11,12 +11,15 @@ export interface PlatoDelDiaPublico {
   descripcion: string | null
   horaInicio: string | null
   horaFin: string | null
+  varianteId: string | null
+  variante: { id: string; nombre: string; precio: number } | null
 }
 
 export interface PlatoDelDiaAdmin {
   id: string
   restaurante_id: string
   plato_id: string
+  variante_id: string | null
   precio_especial: number
   horario_inicio: string | null
   horario_fin: string | null
@@ -30,13 +33,17 @@ async function fetchPlatoDelDiaPublic(restauranteId: string): Promise<PlatoDelDi
   const supabase = createClient()
   const { data } = await supabase
     .from('plato_del_dia')
-    .select('*, platos(*)')
+    .select('*, platos(*, plato_variantes(*))')
     .eq('restaurante_id', restauranteId)
     .eq('activo', true)
     .maybeSingle()
 
   const pd = data as any
   if (!pd?.platos) return null
+  const varianteId: string | null = pd.variante_id ?? null
+  const variantes: any[] = pd.platos.plato_variantes ?? []
+  const found = varianteId ? variantes.find((v: any) => v.id === varianteId) : null
+  const variante = found ? { id: found.id, nombre: found.nombre, precio: found.precio } : null
   return {
     id: pd.platos.id,
     nombre: pd.platos.nombre,
@@ -45,6 +52,8 @@ async function fetchPlatoDelDiaPublic(restauranteId: string): Promise<PlatoDelDi
     descripcion: pd.platos.descripcion ?? null,
     horaInicio: normalizar(pd.horario_inicio),
     horaFin: normalizar(pd.horario_fin),
+    varianteId,
+    variante,
   }
 }
 

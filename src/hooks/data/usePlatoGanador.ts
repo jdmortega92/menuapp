@@ -13,12 +13,15 @@ export interface PlatoGanadorPublico {
   // descripcionEspecial proviene de plato_ganador.descripcion (la fila del plato ganador),
   // NO de platos.descripcion. Son campos distintos en el join.
   descripcionEspecial: string | null
+  varianteId: string | null
+  variante: { id: string; nombre: string; precio: number } | null
 }
 
 export interface PlatoGanadorAdmin {
   id: string
   restaurante_id: string
   plato_id: string
+  variante_id: string | null
   titulo: string
   descripcion: string | null
   activo: boolean
@@ -28,13 +31,17 @@ async function fetchPlatoGanadorPublic(restauranteId: string): Promise<PlatoGana
   const supabase = createClient()
   const { data } = await supabase
     .from('plato_ganador')
-    .select('*, platos(*)')
+    .select('*, platos(*, plato_variantes(*))')
     .eq('restaurante_id', restauranteId)
     .eq('activo', true)
     .maybeSingle()
 
   const pg = data as any
   if (!pg?.platos) return null
+  const varianteId: string | null = pg.variante_id ?? null
+  const variantes: any[] = pg.platos.plato_variantes ?? []
+  const found = varianteId ? variantes.find((v: any) => v.id === varianteId) : null
+  const variante = found ? { id: found.id, nombre: found.nombre, precio: found.precio } : null
   return {
     id: pg.platos.id,
     nombre: pg.platos.nombre,
@@ -43,6 +50,8 @@ async function fetchPlatoGanadorPublic(restauranteId: string): Promise<PlatoGana
     foto_url: pg.platos.foto_url ?? null,
     titulo: pg.titulo,
     descripcionEspecial: pg.descripcion ?? null,
+    varianteId,
+    variante,
   }
 }
 

@@ -159,6 +159,7 @@ export interface PlatoDelDia {
   id: string
   restaurante_id: string
   plato_id: string
+  variante_id?: string | null
   precio_especial: number
   horario_inicio: string
   horario_fin: string
@@ -171,6 +172,7 @@ export interface PlatoGanador {
   id: string
   restaurante_id: string
   plato_id: string
+  variante_id?: string | null
   reconocimiento: string
   descripcion?: string
   activo: boolean

@@ -237,8 +237,21 @@ export default function MenuPublicoPage() {
   useEffect(() => {
     if (platoDetalle) {
       const plato = todosLosPlatos.find((p: any) => p.id === platoDetalle.id)
-      if ((plato as any)?.variantes && (plato as any).variantes.length > 0) {
-        setVarianteSeleccionadaId((plato as any).variantes[0].id)
+      const variantes = (plato as any)?.variantes
+      if (variantes && variantes.length > 0) {
+        // F8.7: si el modal abre en modo platoDia/ganador con variante lockeada,
+        // pre-seleccionar esa variante en lugar de variantes[0].
+        let preseleccion: string = variantes[0].id
+        if (platoDetalle.modo === 'platoDia' && platoDia?.varianteId) {
+          if (variantes.some((v: any) => v.id === platoDia.varianteId)) {
+            preseleccion = platoDia.varianteId
+          }
+        } else if (platoDetalle.modo === 'ganador' && platoGanador?.varianteId) {
+          if (variantes.some((v: any) => v.id === platoGanador.varianteId)) {
+            preseleccion = platoGanador.varianteId
+          }
+        }
+        setVarianteSeleccionadaId(preseleccion)
       } else {
         setVarianteSeleccionadaId(null)
       }
@@ -1014,21 +1027,36 @@ export default function MenuPublicoPage() {
                   )}
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{
-                    fontSize: '14px',
-                    fontWeight: 500,
-                    color: '#1A1A18',
-                  }}>
-                    {platoGanador.nombre}
-                  </div>
+                  {(() => {
+                    const varianteLocked = platoGanador.varianteId && platoGanador.variante ? platoGanador.variante : null
+                    return (
+                      <div style={{
+                        fontSize: '14px',
+                        fontWeight: 500,
+                        color: '#1A1A18',
+                      }}>
+                        {platoGanador.nombre}{varianteLocked ? ` · ${varianteLocked.nombre}` : ''}
+                      </div>
+                    )
+                  })()}
                   {platoGanador.descripcionEspecial && (
                     <div style={{ fontSize: '11px', color: '#6B6A65', marginTop: '2px', fontStyle: 'italic', overflowWrap: 'break-word' }}>"{platoGanador.descripcionEspecial}"</div>
                   )}
                   {(() => {
-                    // D4: si el ganador tiene variantes, mostrar "desde $X" y sin Qty inline
-                    // (el click de la tarjeta abre el modal)
+                    // D4: si el ganador tiene variantes pero sin lock, mostrar "desde $X" y sin Qty inline
+                    // F8.7: si hay variante lockeada, mostrar variante.precio + Qty con composite cartKey
                     const ganadorPlato = todosLosPlatos.find((p: any) => p.id === platoGanador.id)
                     const ganadorTieneVariantes = (ganadorPlato as any)?.variantes && (ganadorPlato as any).variantes.length > 0
+                    const varianteLocked = platoGanador.varianteId && platoGanador.variante ? platoGanador.variante : null
+                    if (varianteLocked) {
+                      const cartKeyGanador = makeCartKey(platoGanador.id, varianteLocked.id)
+                      return (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
+                          <span style={{ fontSize: '14px', fontWeight: 500, color: '#B8860B' }}>${formatoPrecio(varianteLocked.precio)}</span>
+                          <Qty cartKey={cartKeyGanador} />
+                        </div>
+                      )
+                    }
                     return (
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
                         <span style={{ fontSize: '14px', fontWeight: 500, color: '#B8860B' }}>{ganadorTieneVariantes ? 'desde ' : ''}${platoGanador.precio?.toLocaleString('es-CO')}</span>
@@ -1048,6 +1076,9 @@ export default function MenuPublicoPage() {
           // ("desde $X", sin precio tachado ni "+" inline). El click de la tarjeta abre el modal.
           const platoDiaPlato = todosLosPlatos.find((p: any) => p.id === platoDia.id)
           const platoDiaTieneVariantes = (platoDiaPlato as any)?.variantes && (platoDiaPlato as any).variantes.length > 0
+          // F8.7: variante locked → resolved variante card path
+          const varianteLocked = platoDia.varianteId && platoDia.variante ? platoDia.variante : null
+          const cartKeyDia = varianteLocked ? makeCartKey(platoDia.id, varianteLocked.id) : platoDia.id
           return (
           <div style={{ padding: '0 16px 10px' }}>
             <div onClick={() => setPlatoDetalle({ id: platoDia.id, modo: 'platoDia' })} style={{
@@ -1073,7 +1104,7 @@ export default function MenuPublicoPage() {
                     fontWeight: 500,
                     color: 'var(--theme-text)',
                   }}>
-                    {platoDia.nombre}
+                    {platoDia.nombre}{varianteLocked ? ` · ${varianteLocked.nombre}` : ''}
                   </div>
                   <div style={{
                     fontSize: '11px',
@@ -1084,7 +1115,18 @@ export default function MenuPublicoPage() {
                     {platoDia.descripcion}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
-                    {platoDiaTieneVariantes ? (
+                    {varianteLocked ? (
+                      <>
+                        <span style={{
+                          fontSize: '12px',
+                          color: 'var(--theme-text-subtle)',
+                          textDecoration: 'line-through',
+                        }}>
+                          ${formatoPrecio(varianteLocked.precio)}
+                        </span>
+                        <span style={{ fontSize: '14px', fontWeight: 500, color: color }}>${formatoPrecio(platoDia.precioEspecial)}</span>
+                      </>
+                    ) : platoDiaTieneVariantes ? (
                       <span style={{ fontSize: '14px', fontWeight: 500, color: color }}>desde ${formatoPrecio(platoDia.precio)}</span>
                     ) : (
                       <>
@@ -1100,14 +1142,14 @@ export default function MenuPublicoPage() {
                     )}
                   </div>
                 </div>
-                {platoDiaTieneVariantes ? null : (
+                {(!varianteLocked && platoDiaTieneVariantes) ? null : (
                 <div onClick={(e) => {
                   e.stopPropagation()
                   // Agregar plato del día CON precio especial registrado
-                  setPedido({ ...pedido, [platoDia.id]: (pedido[platoDia.id] || 0) + 1 })
+                  setPedido({ ...pedido, [cartKeyDia]: (pedido[cartKeyDia] || 0) + 1 })
                   setPreciosPromo({
                     ...preciosPromo,
-                    [platoDia.id]: { precioUnitario: platoDia.precioEspecial, etiqueta: 'Plato del día' }
+                    [cartKeyDia]: { precioUnitario: platoDia.precioEspecial, etiqueta: 'Plato del día' }
                   })
                 }} style={{
                   width: '26px',
@@ -2483,7 +2525,41 @@ export default function MenuPublicoPage() {
                 )}
 
                 {(() => {
-                  // D4: con variantes, mostrar el precio de la variante seleccionada (ignorar precioEspecial)
+                  // F8.7: si el plato del día tiene variante lockeada Y el usuario tiene esa variante
+                  // seleccionada en el modal, mostrar discount (variante.precio tachado + precioEspecial).
+                  const esPlatoDelDiaModo = !!(platoDia && platoDia.id === plato.id && esProPublico && config?.plato_dia_activo && platoDiaVisible && platoDetalle?.modo !== 'ganador')
+                  const lockedVarianteCoincide = !!(esPlatoDelDiaModo && platoDia && platoDia.varianteId && platoDia.varianteId === varianteSeleccionadaId)
+                  if (tieneVariantes && lockedVarianteCoincide && varianteActual && platoDia) {
+                    return (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+                        <span style={{
+                          fontSize: '16px',
+                          color: 'var(--theme-text-subtle)',
+                          textDecoration: 'line-through',
+                        }}>
+                          ${formatoPrecio(varianteActual.precio)}
+                        </span>
+                        <span style={{
+                          fontSize: '22px',
+                          fontWeight: 500,
+                          color: color,
+                        }}>
+                          ${formatoPrecio(platoDia.precioEspecial)}
+                        </span>
+                        <span style={{
+                          fontSize: '11px',
+                          color: 'white',
+                          background: color,
+                          padding: '3px 8px',
+                          borderRadius: '10px',
+                          fontWeight: 500,
+                        }}>
+                          Plato del día
+                        </span>
+                      </div>
+                    )
+                  }
+                  // D4: con variantes (sin lock o variante no coincide), mostrar el precio de la variante seleccionada
                   if (tieneVariantes) {
                     return (
                       <div style={{
@@ -2496,8 +2572,7 @@ export default function MenuPublicoPage() {
                       </div>
                     )
                   }
-                  const esPlatoDelDia = platoDia && platoDia.id === plato.id && esProPublico && config?.plato_dia_activo && platoDiaVisible && platoDetalle?.modo !== 'ganador'
-                  if (esPlatoDelDia) {
+                  if (esPlatoDelDiaModo && platoDia) {
                     return (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
                         <span style={{
@@ -2691,15 +2766,18 @@ export default function MenuPublicoPage() {
                     }}>+</div>
                   </div>
                   {(() => {
-                    // D4: con variantes, ignorar precioEspecial y usar el precio de la variante
-                    const esPlatoDelDia = !tieneVariantes && platoDia && platoDia.id === plato.id && esProPublico && config?.plato_dia_activo && platoDiaVisible && platoDetalle?.modo !== 'ganador'
-                    const precioParaCalcular = esPlatoDelDia
+                    // F8.7: discount aplica cuando (a) plato sin variantes, o (b) plato con variantes
+                    // Y variante lockeada coincide con la seleccionada en el modal.
+                    const esPlatoDelDiaBase = !!(platoDia && platoDia.id === plato.id && esProPublico && config?.plato_dia_activo && platoDiaVisible && platoDetalle?.modo !== 'ganador')
+                    const lockMatch = !!(esPlatoDelDiaBase && platoDia && platoDia.varianteId && platoDia.varianteId === varianteSeleccionadaId)
+                    const esPlatoDelDia = !!(esPlatoDelDiaBase && platoDia && (!tieneVariantes || lockMatch))
+                    const precioParaCalcular = (esPlatoDelDia && platoDia)
                       ? platoDia.precioEspecial
                       : (varianteActual ? varianteActual.precio : plato.precio)
                     return (
                       <div onClick={() => {
                         if (cantidadActual === 0) {
-                          if (esPlatoDelDia) {
+                          if (esPlatoDelDia && platoDia) {
                             // Agregar con precio especial registrado
                             setPedido({ ...pedido, [cartKey]: 1 })
                             setPreciosPromo({

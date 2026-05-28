@@ -160,14 +160,14 @@ export default function MiMenuPage() {
   const [busquedaPlatosPromo, setBusquedaPlatosPromo] = useState('')
   const [guardandoPromo, setGuardandoPromo] = useState(false)
   const [guardadoPromo, setGuardadoPromo] = useState(false)
-  const [platoDiaConfig, setPlatoDiaConfig] = useState({ platoId: '', precioEspecial: '', horaInicio: '11:00', horaFin: '15:00' })
+  const [platoDiaConfig, setPlatoDiaConfig] = useState({ platoId: '', varianteId: '', precioEspecial: '', horaInicio: '11:00', horaFin: '15:00' })
   const [guardandoPlatoDia, setGuardandoPlatoDia] = useState(false)
   const [guardadoPlatoDia, setGuardadoPlatoDia] = useState(false)
   const [intentoPlatoDia, setIntentoPlatoDia] = useState(false)
   const [touchedPlatoDia, setTouchedPlatoDia] = useState<Record<string, boolean>>({})
   const [platoDiaActivo, setPlatoDiaActivo] = useState(false)
   const [sorprendemeCatsMenu, setSorprendemeCatsMenu] = useState<string[]>([])
-  const [platoGanadorConfig, setPlatoGanadorConfig] = useState({ platoId: '', titulo: 'Recomendado del chef', descripcion: '' })
+  const [platoGanadorConfig, setPlatoGanadorConfig] = useState({ platoId: '', varianteId: '', titulo: 'Recomendado del chef', descripcion: '' })
   const [platoGanadorActivo, setPlatoGanadorActivo] = useState(false)
   const [guardandoGanador, setGuardandoGanador] = useState(false)
   const [guardadoGanador, setGuardadoGanador] = useState(false)
@@ -244,8 +244,9 @@ export default function MiMenuPage() {
   }
   
   function validarPlatoDia(
-    state: { platoId: string; precioEspecial: string },
-    otherActive?: { activo: boolean; platoId: string }
+    state: { platoId: string; varianteId: string; precioEspecial: string },
+    otherActive?: { activo: boolean; platoId: string },
+    variantes?: { id: string }[]
   ): Record<string, string> {
     const e: Record<string, string> = {}
     if (!state.platoId) e.platoId = 'Selecciona un plato'
@@ -256,15 +257,20 @@ export default function MiMenuPage() {
       e.platoId = 'Este plato ya está configurado como plato ganador. Selecciona otro o desactiva el plato ganador primero.'
     }
 
+    if (state.varianteId && variantes && !variantes.some(x => x.id === state.varianteId)) {
+      e.varianteId = 'Variante seleccionada inválida'
+    }
+
     return e
   }
   async function guardarPlatoDia() {
     setIntentoPlatoDia(true)
     setTouchedPlatoDia({ platoId: true, precioEspecial: true })
+    const variantesActuales = todosPlatos.find(p => p.id === platoDiaConfig.platoId)?.variantes ?? []
     const errores = validarPlatoDia(platoDiaConfig, {
       activo: platoGanadorActivo,
       platoId: platoGanadorConfig.platoId,
-    })
+    }, variantesActuales)
     if (Object.keys(errores).length > 0 || !rest?.id) return
     setGuardandoPlatoDia(true)
     const supabase = createClient()
@@ -279,6 +285,7 @@ export default function MiMenuPage() {
     await supabase.from('plato_del_dia').insert({
       restaurante_id: rest.id,
       plato_id: platoDiaConfig.platoId,
+      variante_id: platoDiaConfig.varianteId || null,
       precio_especial: parseInt(platoDiaConfig.precioEspecial),
       horario_inicio: platoDiaConfig.horaInicio,
       horario_fin: platoDiaConfig.horaFin,
@@ -324,6 +331,7 @@ export default function MiMenuPage() {
     await supabase.from('plato_ganador').insert({
       restaurante_id: rest.id,
       plato_id: platoGanadorConfig.platoId,
+      variante_id: platoGanadorConfig.varianteId || null,
       titulo: platoGanadorConfig.titulo,
       descripcion: platoGanadorConfig.descripcion || null,
       activo: true,
@@ -341,7 +349,7 @@ export default function MiMenuPage() {
     const supabase = createClient()
     await supabase.from('plato_ganador').delete().eq('restaurante_id', rest.id)
     setPlatoGanadorActivo(false)
-    setPlatoGanadorConfig({ platoId: '', titulo: 'Recomendado del chef', descripcion: '' })
+    setPlatoGanadorConfig({ platoId: '', varianteId: '', titulo: 'Recomendado del chef', descripcion: '' })
     await invalidateAll('plato-ganador')
   }
 
@@ -350,7 +358,7 @@ export default function MiMenuPage() {
     const supabase = createClient()
     await supabase.from('plato_del_dia').delete().eq('restaurante_id', rest.id)
     setPlatoDiaActivo(false)
-    setPlatoDiaConfig({ platoId: '', precioEspecial: '', horaInicio: '11:00', horaFin: '15:00' })
+    setPlatoDiaConfig({ platoId: '', varianteId: '', precioEspecial: '', horaInicio: '11:00', horaFin: '15:00' })
     await invalidateAll('plato-del-dia')
   }
 
@@ -709,6 +717,7 @@ export default function MiMenuPage() {
       if (platoDiaSwr && platoDiaSwr.activo) {
         setPlatoDiaConfig({
           platoId: platoDiaSwr.plato_id || '',
+          varianteId: platoDiaSwr.variante_id ?? '',
           precioEspecial: platoDiaSwr.precio_especial?.toString() || '',
           horaInicio: platoDiaSwr.horario_inicio || '11:00',
           horaFin: platoDiaSwr.horario_fin || '15:00',
@@ -725,6 +734,7 @@ export default function MiMenuPage() {
       if (platoGanadorSwr && platoGanadorSwr.activo) {
         setPlatoGanadorConfig({
           platoId: platoGanadorSwr.plato_id || '',
+          varianteId: platoGanadorSwr.variante_id ?? '',
           titulo: platoGanadorSwr.titulo || 'Recomendado del chef',
           descripcion: platoGanadorSwr.descripcion || '',
         })
@@ -2865,10 +2875,11 @@ export default function MiMenuPage() {
 
             {/* === PLATO DEL DÍA === */}
             {subTab === 'plato-dia' && (() => {
+              const variantesActualesDia = todosPlatos.find(p => p.id === platoDiaConfig.platoId)?.variantes ?? []
               const errores = validarPlatoDia(platoDiaConfig, {
                 activo: platoGanadorActivo,
                 platoId: platoGanadorConfig.platoId,
-              })
+              }, variantesActualesDia)
               const valido = Object.keys(errores).length === 0
               return (
               <div style={{ padding: '14px 20px' }}>
@@ -2887,7 +2898,11 @@ export default function MiMenuPage() {
                             className="input"
                             value={platoDiaConfig.platoId}
                             onChange={(v) => {
-                              setPlatoDiaConfig({ ...platoDiaConfig, platoId: v })
+                              const platoNuevo = todosPlatos.find(p => p.id === v)
+                              const nuevaVariante = (platoNuevo?.variantes && platoNuevo.variantes.length > 0)
+                                ? platoNuevo.variantes[0].id
+                                : ''
+                              setPlatoDiaConfig({ ...platoDiaConfig, platoId: v, varianteId: nuevaVariante })
                               setTouchedPlatoDia(prev => ({ ...prev, platoId: true }))
                             }}
                             options={platoDiaOptions}
@@ -2914,6 +2929,33 @@ export default function MiMenuPage() {
                       </div>
                     )
                   })()}
+                  {(() => {
+                    const platoSel = todosPlatos.find(p => p.id === platoDiaConfig.platoId)
+                    const variantes = platoSel?.variantes ?? []
+                    if (variantes.length === 0) return null
+                    const opciones = [
+                      { value: '', label: <span style={{ color: 'var(--text-tertiary)' }}>Sin variante específica</span> },
+                      ...variantes.map(v => ({
+                        value: v.id,
+                        label: <span>{v.nombre} <span style={{ color: 'var(--text-tertiary)' }}>— ${v.precio.toLocaleString('es-CO')}</span></span>,
+                        searchText: `${v.nombre} ${v.precio}`.toLowerCase(),
+                      })),
+                    ]
+                    return (
+                      <>
+                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Variante:</div>
+                        <div style={{ marginBottom: '8px' }}>
+                          <Select
+                            className="input"
+                            value={platoDiaConfig.varianteId}
+                            onChange={(v) => setPlatoDiaConfig({ ...platoDiaConfig, varianteId: v })}
+                            options={opciones}
+                            placeholder="Sin variante específica"
+                          />
+                        </div>
+                      </>
+                    )
+                  })()}
                   <input className="input" type="number" placeholder="Precio especial" value={platoDiaConfig.precioEspecial}
                     onChange={(e) => setPlatoDiaConfig({ ...platoDiaConfig, precioEspecial: e.target.value })}
                     onBlur={() => setTouchedPlatoDia(prev => ({ ...prev, precioEspecial: true }))}
@@ -2936,7 +2978,12 @@ export default function MiMenuPage() {
                     const precioEspNum = parseInt(platoDiaConfig.precioEspecial || '0')
                     if (precioEspNum <= 0) return null
 
-                    if (precioEspNum >= platoSeleccionado.precio) {
+                    const varianteLocked = platoDiaConfig.varianteId
+                      ? platoSeleccionado.variantes?.find(v => v.id === platoDiaConfig.varianteId)
+                      : null
+                    const precioReferencia = varianteLocked ? varianteLocked.precio : platoSeleccionado.precio
+
+                    if (precioEspNum >= precioReferencia) {
                       return (
                         <div style={{
                           background: 'var(--color-warning-light)',
@@ -2948,7 +2995,7 @@ export default function MiMenuPage() {
                           marginTop: '6px',
                           marginBottom: '8px',
                         }}>
-                          ⚠️ El precio especial es igual o mayor al precio original (${platoSeleccionado.precio.toLocaleString('es-CO')}). ¿Es correcto?
+                          ⚠️ El precio especial es igual o mayor al precio original (${precioReferencia.toLocaleString('es-CO')}). ¿Es correcto?
                         </div>
                       )
                     }
@@ -2974,27 +3021,52 @@ export default function MiMenuPage() {
                     />
                   </div>
 
-                  {platoDiaConfig.platoId && platoDiaConfig.precioEspecial && (
-                    <div style={{
-                      background: 'var(--color-accent-light)', borderRadius: '8px', padding: '12px', marginBottom: '10px',
-                    }}>
-                      <div style={{ fontSize: '11px', fontWeight: 500, color: 'var(--color-accent)', marginBottom: '4px' }}>Vista previa</div>
-                      <div style={{ fontSize: '14px', fontWeight: 500 }}>
-                        {todosPlatos.find(p => p.id === platoDiaConfig.platoId)?.nombre}
+                  {platoDiaConfig.platoId && platoDiaConfig.precioEspecial && (() => {
+                    const platoPreview = todosPlatos.find(p => p.id === platoDiaConfig.platoId)
+                    if (!platoPreview) return null
+                    const varianteLockedPreview = platoDiaConfig.varianteId
+                      ? platoPreview.variantes?.find(v => v.id === platoDiaConfig.varianteId)
+                      : null
+                    const tieneVariantesPreview = !!(platoPreview.variantes && platoPreview.variantes.length > 0)
+                    return (
+                      <div style={{
+                        background: 'var(--color-accent-light)', borderRadius: '8px', padding: '12px', marginBottom: '10px',
+                      }}>
+                        <div style={{ fontSize: '11px', fontWeight: 500, color: 'var(--color-accent)', marginBottom: '4px' }}>Vista previa</div>
+                        <div style={{ fontSize: '14px', fontWeight: 500 }}>
+                          {platoPreview.nombre}{varianteLockedPreview ? ` · ${varianteLockedPreview.nombre}` : ''}
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px' }}>
+                          {varianteLockedPreview ? (
+                            <>
+                              <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', textDecoration: 'line-through' }}>
+                                ${varianteLockedPreview.precio.toLocaleString('es-CO')}
+                              </span>
+                              <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--color-accent)' }}>
+                                ${parseInt(platoDiaConfig.precioEspecial).toLocaleString('es-CO')}
+                              </span>
+                            </>
+                          ) : tieneVariantesPreview ? (
+                            <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--color-accent)' }}>
+                              desde ${platoPreview.precio.toLocaleString('es-CO')}
+                            </span>
+                          ) : (
+                            <>
+                              <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', textDecoration: 'line-through' }}>
+                                ${platoPreview.precio.toLocaleString('es-CO')}
+                              </span>
+                              <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--color-accent)' }}>
+                                ${parseInt(platoDiaConfig.precioEspecial).toLocaleString('es-CO')}
+                              </span>
+                            </>
+                          )}
+                        </div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                          {formato12h(platoDiaConfig.horaInicio)} — {formato12h(platoDiaConfig.horaFin)}
+                        </div>
                       </div>
-                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px' }}>
-                        <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', textDecoration: 'line-through' }}>
-                          ${todosPlatos.find(p => p.id === platoDiaConfig.platoId)?.precio.toLocaleString('es-CO')}
-                        </span>
-                        <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--color-accent)' }}>
-                          ${parseInt(platoDiaConfig.precioEspecial).toLocaleString('es-CO')}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                        {formato12h(platoDiaConfig.horaInicio)} — {formato12h(platoDiaConfig.horaFin)}
-                      </div>
-                    </div>
-                  )}
+                    )
+                  })()}
 
                   <button onClick={guardarPlatoDia} disabled={guardandoPlatoDia || guardadoPlatoDia} className="btn-primary"
                     style={{
@@ -3061,7 +3133,11 @@ export default function MiMenuPage() {
                       className="input"
                       value={platoGanadorConfig.platoId}
                       onChange={(v) => {
-                        setPlatoGanadorConfig({ ...platoGanadorConfig, platoId: v })
+                        const platoNuevo = todosPlatos.find(p => p.id === v)
+                        const nuevaVariante = (platoNuevo?.variantes && platoNuevo.variantes.length > 0)
+                          ? platoNuevo.variantes[0].id
+                          : ''
+                        setPlatoGanadorConfig({ ...platoGanadorConfig, platoId: v, varianteId: nuevaVariante })
                         setTouchedGanador(prev => ({ ...prev, platoId: true }))
                       }}
                       options={platoGanadorOptions}
@@ -3085,6 +3161,33 @@ export default function MiMenuPage() {
                       </div>
                     )
                   })()}
+                  {(() => {
+                    const platoSel = todosPlatos.find(p => p.id === platoGanadorConfig.platoId)
+                    const variantes = platoSel?.variantes ?? []
+                    if (variantes.length === 0) return null
+                    const opciones = [
+                      { value: '', label: <span style={{ color: 'var(--text-tertiary)' }}>Sin variante específica</span> },
+                      ...variantes.map(v => ({
+                        value: v.id,
+                        label: <span>{v.nombre} <span style={{ color: 'var(--text-tertiary)' }}>— ${v.precio.toLocaleString('es-CO')}</span></span>,
+                        searchText: `${v.nombre} ${v.precio}`.toLowerCase(),
+                      })),
+                    ]
+                    return (
+                      <>
+                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Variante:</div>
+                        <div style={{ marginBottom: '10px' }}>
+                          <Select
+                            className="input"
+                            value={platoGanadorConfig.varianteId}
+                            onChange={(v) => setPlatoGanadorConfig({ ...platoGanadorConfig, varianteId: v })}
+                            options={opciones}
+                            placeholder="Sin variante específica"
+                          />
+                        </div>
+                      </>
+                    )
+                  })()}
 
                   <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Descripción especial (opcional):</div>
                   <div style={{ position: 'relative', marginBottom: '10px' }}>
@@ -3097,26 +3200,38 @@ export default function MiMenuPage() {
                     </span>
                   </div>
 
-                  {platoGanadorConfig.platoId && (
-                    <div style={{ background: 'var(--color-warning-light)', borderRadius: '8px', padding: '12px', marginBottom: '12px' }}>
-                      <div style={{ fontSize: '11px', fontWeight: 500, color: 'var(--color-warning)', marginBottom: '6px' }}>Vista previa</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-                        <span style={{ fontSize: '14px' }}>⭐</span>
-                        <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--color-warning)' }}>{platoGanadorConfig.titulo.toUpperCase()}</span>
-                      </div>
-                      <div style={{ fontSize: '14px', fontWeight: 500 }}>
-                        {todosPlatos.find(p => p.id === platoGanadorConfig.platoId)?.nombre}
-                      </div>
-                      {platoGanadorConfig.descripcion && (
-                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px', fontStyle: 'italic' }}>
-                          "{platoGanadorConfig.descripcion}"
+                  {platoGanadorConfig.platoId && (() => {
+                    const platoPreview = todosPlatos.find(p => p.id === platoGanadorConfig.platoId)
+                    if (!platoPreview) return null
+                    const varianteLockedPreview = platoGanadorConfig.varianteId
+                      ? platoPreview.variantes?.find(v => v.id === platoGanadorConfig.varianteId)
+                      : null
+                    const tieneVariantesPreview = !!(platoPreview.variantes && platoPreview.variantes.length > 0)
+                    return (
+                      <div style={{ background: 'var(--color-warning-light)', borderRadius: '8px', padding: '12px', marginBottom: '12px' }}>
+                        <div style={{ fontSize: '11px', fontWeight: 500, color: 'var(--color-warning)', marginBottom: '6px' }}>Vista previa</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                          <span style={{ fontSize: '14px' }}>⭐</span>
+                          <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--color-warning)' }}>{platoGanadorConfig.titulo.toUpperCase()}</span>
                         </div>
-                      )}
-                      <div style={{ fontSize: '13px', fontWeight: 500, marginTop: '4px' }}>
-                        ${todosPlatos.find(p => p.id === platoGanadorConfig.platoId)?.precio.toLocaleString('es-CO')}
+                        <div style={{ fontSize: '14px', fontWeight: 500 }}>
+                          {platoPreview.nombre}{varianteLockedPreview ? ` · ${varianteLockedPreview.nombre}` : ''}
+                        </div>
+                        {platoGanadorConfig.descripcion && (
+                          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px', fontStyle: 'italic' }}>
+                            "{platoGanadorConfig.descripcion}"
+                          </div>
+                        )}
+                        <div style={{ fontSize: '13px', fontWeight: 500, marginTop: '4px' }}>
+                          {varianteLockedPreview
+                            ? `$${varianteLockedPreview.precio.toLocaleString('es-CO')}`
+                            : tieneVariantesPreview
+                              ? `desde $${platoPreview.precio.toLocaleString('es-CO')}`
+                              : `$${platoPreview.precio.toLocaleString('es-CO')}`}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )
+                  })()}
 
                   <button onClick={guardarPlatoGanador} disabled={guardandoGanador || guardadoGanador} className="btn-primary"
                     style={{
