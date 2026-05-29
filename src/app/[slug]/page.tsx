@@ -1225,7 +1225,11 @@ export default function MenuPublicoPage() {
                 <span style={{ fontSize: '13px', fontWeight: 500, color: color }}>🎲 Tu combinación</span>
                 <span onClick={() => setMostrarSorpresa(false)} style={{ fontSize: '11px', color: 'var(--theme-text-subtle)', cursor: 'pointer' }}>✕ Cerrar</span>
               </div>
-              {sorpresaPlatos.map((plato: any) => (
+              {sorpresaPlatos.map((plato: any) => {
+                const esEstePlatoElDia = esProPublico && config?.plato_dia_activo && platoDiaVisible && platoDia && platoDia.id === plato.id
+                const varianteLockedDelDia = esEstePlatoElDia && platoDia.varianteId && platoDia.variante ? platoDia.variante : null
+                const platoTieneVariantes = plato.variantes && plato.variantes.length > 0
+                return (
                 <div key={plato.id} onClick={() => setPlatoDetalle({ id: plato.id, modo: 'normal' })} style={{
                   background: 'var(--theme-surface)',
                   borderRadius: 'var(--theme-radius-image)',
@@ -1260,7 +1264,7 @@ export default function MenuPublicoPage() {
                       fontWeight: 500,
                       color: 'var(--theme-text)',
                     }}>
-                      {plato.nombre}
+                      {plato.nombre}{varianteLockedDelDia ? ` · ${varianteLockedDelDia.nombre}` : ''}
                     </div>
                     <div style={{
                       fontSize: '11px',
@@ -1275,20 +1279,44 @@ export default function MenuPublicoPage() {
                       {plato.descripcion}
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
-                      <span style={{
-                        fontSize: '13px',
-                        fontWeight: 500,
-                        color: 'var(--theme-text)',
-                      }}>
-                        {plato.variantes && plato.variantes.length > 0 ? 'desde ' : ''}${plato.precio.toLocaleString('es-CO')}
-                      </span>
+                      {esEstePlatoElDia ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          {varianteLockedDelDia ? (
+                            <>
+                              <span style={{ fontSize: '12px', color: 'var(--theme-text-subtle)', textDecoration: 'line-through' }}>${formatoPrecio(varianteLockedDelDia.precio)}</span>
+                              <span style={{ fontSize: '13px', fontWeight: 500, color: color }}>${formatoPrecio(platoDia.precioEspecial)}</span>
+                              <span style={{ fontSize: '10px', color: 'white', background: color, padding: '2px 6px', borderRadius: '8px', fontWeight: 500 }}>Plato del día</span>
+                            </>
+                          ) : platoTieneVariantes ? (
+                            <>
+                              <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--theme-text)' }}>desde ${formatoPrecio(plato.precio)}</span>
+                              <span style={{ fontSize: '10px', color: 'white', background: color, padding: '2px 6px', borderRadius: '8px', fontWeight: 500 }}>Plato del día</span>
+                            </>
+                          ) : (
+                            <>
+                              <span style={{ fontSize: '12px', color: 'var(--theme-text-subtle)', textDecoration: 'line-through' }}>${formatoPrecio(plato.precio)}</span>
+                              <span style={{ fontSize: '13px', fontWeight: 500, color: color }}>${formatoPrecio(platoDia.precioEspecial)}</span>
+                              <span style={{ fontSize: '10px', color: 'white', background: color, padding: '2px 6px', borderRadius: '8px', fontWeight: 500 }}>Plato del día</span>
+                            </>
+                          )}
+                        </div>
+                      ) : (
+                        <span style={{
+                          fontSize: '13px',
+                          fontWeight: 500,
+                          color: 'var(--theme-text)',
+                        }}>
+                          {plato.variantes && plato.variantes.length > 0 ? 'desde ' : ''}${plato.precio.toLocaleString('es-CO')}
+                        </span>
+                      )}
                       {plato.variantes && plato.variantes.length > 0
                         ? null // Card click abre el modal; sin Qty inline para platos con variantes
-                        : <Qty cartKey={plato.id} />}
+                        : <Qty cartKey={esEstePlatoElDia ? makeCartKey(plato.id, undefined, 'dia') : plato.id} />}
                     </div>
                   </div>
                 </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         )}
@@ -1943,7 +1971,11 @@ export default function MenuPublicoPage() {
             }}>
               {cat.nombre}
             </div>
-            {cat.platos.map((plato: any) => (
+            {cat.platos.map((plato: any) => {
+              const esEstePlatoElDia = esProPublico && config?.plato_dia_activo && platoDiaVisible && platoDia && platoDia.id === plato.id
+              const varianteLockedDelDia = esEstePlatoElDia && platoDia.varianteId && platoDia.variante ? platoDia.variante : null
+              const platoTieneVariantes = plato.variantes && plato.variantes.length > 0
+              return (
               <div key={plato.id} style={{
                 background: 'var(--theme-surface)',
                 border: '1px solid var(--theme-border)',
@@ -1981,7 +2013,7 @@ export default function MenuPublicoPage() {
                       fontWeight: 500,
                       color: 'var(--theme-text)',
                     }}>
-                      {plato.nombre}
+                      {plato.nombre}{varianteLockedDelDia ? ` · ${varianteLockedDelDia.nombre}` : ''}
                     </div>
                     <div style={{
                       fontSize: '11px',
@@ -1999,13 +2031,34 @@ export default function MenuPublicoPage() {
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span style={{
-                        fontSize: '13px',
-                        fontWeight: 500,
-                        color: 'var(--theme-text)',
-                      }}>
-                        {plato.variantes && plato.variantes.length > 0 ? 'desde ' : ''}${plato.precio.toLocaleString('es-CO')}
-                      </span>
+                      {esEstePlatoElDia ? (
+                        varianteLockedDelDia ? (
+                          <>
+                            <span style={{ fontSize: '12px', color: 'var(--theme-text-subtle)', textDecoration: 'line-through' }}>${formatoPrecio(varianteLockedDelDia.precio)}</span>
+                            <span style={{ fontSize: '13px', fontWeight: 500, color: color }}>${formatoPrecio(platoDia.precioEspecial)}</span>
+                            <span style={{ fontSize: '10px', color: 'white', background: color, padding: '2px 6px', borderRadius: '8px', fontWeight: 500 }}>Plato del día</span>
+                          </>
+                        ) : platoTieneVariantes ? (
+                          <>
+                            <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--theme-text)' }}>desde ${formatoPrecio(plato.precio)}</span>
+                            <span style={{ fontSize: '10px', color: 'white', background: color, padding: '2px 6px', borderRadius: '8px', fontWeight: 500 }}>Plato del día</span>
+                          </>
+                        ) : (
+                          <>
+                            <span style={{ fontSize: '12px', color: 'var(--theme-text-subtle)', textDecoration: 'line-through' }}>${formatoPrecio(plato.precio)}</span>
+                            <span style={{ fontSize: '13px', fontWeight: 500, color: color }}>${formatoPrecio(platoDia.precioEspecial)}</span>
+                            <span style={{ fontSize: '10px', color: 'white', background: color, padding: '2px 6px', borderRadius: '8px', fontWeight: 500 }}>Plato del día</span>
+                          </>
+                        )
+                      ) : (
+                        <span style={{
+                          fontSize: '13px',
+                          fontWeight: 500,
+                          color: 'var(--theme-text)',
+                        }}>
+                          {plato.variantes && plato.variantes.length > 0 ? 'desde ' : ''}${plato.precio.toLocaleString('es-CO')}
+                        </span>
+                      )}
                       {config?.calificaciones_activo && plato.resenas > 0 && (
                         <span style={{ fontSize: '10px', color: '#F2A623' }}>
                           ★ {plato.estrellas} <span style={{ color: 'var(--theme-text-subtle)' }}>({plato.resenas})</span>
@@ -2015,12 +2068,13 @@ export default function MenuPublicoPage() {
                     {plato.disponible
                       ? (plato.variantes && plato.variantes.length > 0
                           ? null // Card click abre el modal; sin Qty inline para platos con variantes
-                          : <Qty cartKey={plato.id} />)
+                          : <Qty cartKey={esEstePlatoElDia ? makeCartKey(plato.id, undefined, 'dia') : plato.id} />)
                       : <span style={{ fontSize: '10px', color: 'var(--color-danger)', fontWeight: 500 }}>Agotado</span>}
                   </div>
                 </div>
               </div>
-            ))}
+              )
+            })}
           </div>
         ))}
 
