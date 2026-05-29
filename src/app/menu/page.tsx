@@ -124,6 +124,7 @@ export default function MiMenuPage() {
     rowsToDelete: { id: string; nombre: string }[];
     combosCount: number;
     destacadosCount: number;
+    promosCount: number;
     onConfirm: () => void;
     onCancel: () => void;
   } | null>(null)
@@ -1237,19 +1238,22 @@ export default function MiMenuPage() {
     if (rowsToDelete.length > 0) {
       const idsToDelete = rowsToDelete.map(r => r.id)
       const supabase = createClient()
-      const [combos, dia, ganador] = await Promise.all([
+      const [combos, dia, ganador, promos] = await Promise.all([
         supabase.from('combo_platos').select('*', { count: 'exact', head: true }).in('variante_id', idsToDelete),
         supabase.from('plato_del_dia').select('*', { count: 'exact', head: true }).in('variante_id', idsToDelete),
         supabase.from('plato_ganador').select('*', { count: 'exact', head: true }).in('variante_id', idsToDelete),
+        supabase.from('promo_platos').select('*', { count: 'exact', head: true }).in('variante_id', idsToDelete),
       ])
       const combosCount = combos.count || 0
       const destacadosCount = (dia.count || 0) + (ganador.count || 0)
-      const refCount = combosCount + destacadosCount
+      const promosCount = promos.count || 0
+      const refCount = combosCount + destacadosCount + promosCount
       if (refCount > 0) {
         setCascadeWarning({
           rowsToDelete: rowsToDelete.map(r => ({ id: r.id, nombre: r.nombre })),
           combosCount,
           destacadosCount,
+          promosCount,
           onConfirm: () => {
             doSavePlatoEdit(platoId, categoriaId, precioParaUpdate, rowsToInsert, rowsToUpdate, rowsToDelete)
           },

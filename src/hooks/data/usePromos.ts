@@ -13,6 +13,10 @@ export interface PromoPublica {
   dias: DiaSemana[]
   platos: string[]
   platosIds: string[]
+  // raw per-plato variante lock carry (NULL = todas las variantes). The public
+  // modal resolves variante name + price inline from in-memory categorias via
+  // precioEfectivo(), so no enriched shape is needed here.
+  promoPlatos: { plato_id: string; variante_id: string | null }[]
 }
 
 export interface PromoAdmin {
@@ -24,14 +28,14 @@ export interface PromoAdmin {
   valor: number | null
   dias: DiaSemana[]
   activo: boolean
-  promo_platos: { plato_id: string; platos?: { nombre: string } | null }[]
+  promo_platos: { plato_id: string; variante_id: string | null; platos?: { nombre: string } | null }[]
 }
 
 async function fetchPromosPublic(restauranteId: string): Promise<PromoPublica[]> {
   const supabase = createClient()
   const { data } = await supabase
     .from('promos')
-    .select('*, promo_platos(plato_id, platos(nombre))')
+    .select('*, promo_platos(plato_id, variante_id, platos(nombre))')
     .eq('restaurante_id', restauranteId)
     .eq('activo', true)
     .order('created_at', { ascending: false })
@@ -46,6 +50,10 @@ async function fetchPromosPublic(restauranteId: string): Promise<PromoPublica[]>
     dias: (p.dias ?? []) as DiaSemana[],
     platos: (p.promo_platos ?? []).map((pp: any) => pp.platos?.nombre || 'Plato'),
     platosIds: (p.promo_platos ?? []).map((pp: any) => pp.plato_id),
+    promoPlatos: (p.promo_platos ?? []).map((pp: any) => ({
+      plato_id: pp.plato_id,
+      variante_id: pp.variante_id ?? null,
+    })),
   }))
 }
 
@@ -53,7 +61,7 @@ async function fetchPromosAdmin(restauranteId: string): Promise<PromoAdmin[]> {
   const supabase = createClient()
   const { data } = await supabase
     .from('promos')
-    .select('*, promo_platos(plato_id, platos(nombre))')
+    .select('*, promo_platos(plato_id, variante_id, platos(nombre))')
     .eq('restaurante_id', restauranteId)
     .order('created_at', { ascending: false })
   return (data ?? []) as PromoAdmin[]

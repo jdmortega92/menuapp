@@ -151,6 +151,7 @@ export interface PromoPlato {
   id: string
   promo_id: string
   plato_id: string
+  variante_id?: string | null  // nullable FK to plato_variantes (NULL = aplica a todas las variantes)
 }
 
 export type DiaSemana = 'lun' | 'mar' | 'mie' | 'jue' | 'vie' | 'sab' | 'dom'
