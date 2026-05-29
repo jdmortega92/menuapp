@@ -328,6 +328,23 @@ export default function MenuPublicoPage() {
     ? categoriasPorHorario.map((cat) => ({ ...cat, platos: cat.platos.filter((p) => p.nombre.toLowerCase().includes(busqueda.toLowerCase()) || p.descripcion?.toLowerCase().includes(busqueda.toLowerCase())) })).filter((cat) => cat.platos.length > 0)
     : categoriasPorHorario
 
+  // F8.7 — Hide platos that are currently being shown as featured (plato del día / ganador)
+  // from the regular listing. Gated on the SAME visibility condition as the featured cards
+  // so the plato never disappears entirely (e.g. outside día horario, the featured card
+  // unmounts and the listing card reappears).
+  const idsOcultarEnListado = new Set<string>()
+  if (esProPublico && config?.plato_dia_activo && platoDiaVisible && !busqueda.trim() && platoDia) {
+    idsOcultarEnListado.add(platoDia.id)
+  }
+  if (esProPublico && config?.plato_ganador_activo && platoGanadorVisible && !busqueda.trim() && platoGanador) {
+    idsOcultarEnListado.add(platoGanador.id)
+  }
+  const categoriasListado = idsOcultarEnListado.size > 0
+    ? categoriasFiltradas
+        .map((cat: any) => ({ ...cat, platos: cat.platos.filter((p: any) => !idsOcultarEnListado.has(p.id)) }))
+        .filter((cat: any) => cat.platos.length > 0)
+    : categoriasFiltradas
+
   function agregarAlPedido(cartKey: string) {
     // Si el plato tiene promo 2x1, sumar de 2 en 2 (lleva 4, paga 2)
     const esPromo2x1 = preciosPromo[cartKey]?.etiqueta === '2x1'
@@ -1912,7 +1929,7 @@ export default function MenuPublicoPage() {
           )
         })()}
         {/* Categorías y platos */}
-        {categoriasFiltradas.map((cat: any) => (
+        {categoriasListado.map((cat: any) => (
           <div key={cat.id} id={cat.id} style={{ padding: '0 16px', marginBottom: '14px' }}>
             <div style={{
               fontSize: '14px',
