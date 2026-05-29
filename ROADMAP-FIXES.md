@@ -2,7 +2,7 @@
 
 > **Audience**: Claude Code (Opus) working on the MenuApp codebase.
 > **Owner**: Julian.
-> **Last updated**: 2026-05-28.
+> **Last updated**: 2026-05-29.
 > **Stack**: Next.js 16 (App Router) + TypeScript + Tailwind + Supabase + Vercel.
 
 ---
@@ -489,6 +489,29 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
 ```
 
 ## Items
+
+### F8.8-prep ✅ Eliminación del tipo de promo precio_especial — CLOSED
+- **Closed**: 2026-05-29.
+- **Goal**: reducir los tipos de promo a dos (dos_por_uno y descuento), eliminando precio_especial por completo. Decisión de producto: descuento (proporcional) se conserva porque funciona con platos variantizados; precio_especial (fijo) no diferencia Mediana de Grande y fue justo lo que F8.6 tuvo que bloquear.
+- **DB cleanup (manual, Supabase SQL Editor)**: borradas 13 filas precio_especial (todas del restaurante de prueba mi-restaurante-prueba / c8a8c0d2…b856bf) más sus filas en promo_platos. Orden junction-primero para evitar violación de FK. Verificado: 0 precio_especial restantes en toda la tabla, 0 promo_platos huérfanas.
+- **Investigación previa**: mapeo de los 16 puntos de contacto en 3 archivos antes de tocar código. Clave: distinguir el tipo de promo precio_especial (eliminado) de la columna/estado precio_especial / precioEspecial del Plato del Día (intacta, feature distinta de F8.7).
+- **Cambios por archivo**:
+  - src/types/index.ts: TipoPromo pierde 'precio_especial' (queda dos_por_uno | descuento | gratis).
+  - src/app/menu/page.tsx: eliminado el botón de tipo, el input condicional de valor, la rama force-variante de validarPromo (lógica muerta de F8.6), el flag filaConError + su styling de borde rojo + el tieneVariantes huérfano, la rama del preview IIFE, y el badge de la card admin colapsado a 2-way.
+  - src/app/[slug]/page.tsx: simplificado el filtro promosVisibles, eliminada la rama de agregarAlPedido (+ comentario interim F8.4b D4), badge del modal y precio por fila colapsados a 2-way, eliminada la línea de helper text.
+  - src/hooks/data/usePromos.ts: sin cambios (pasa tipo opaco, hereda el narrowing del type).
+- **Smoke test (verde)**: form admin muestra solo 2x1 y % Descuento; crear/editar dos_por_uno y descuento OK; descuento con plato variantizado verifica matemática (Mediana 20k a 16k, Grande 30k a 24k); carrito y badges correctos en público; console limpio (errors AND warnings).
+- **Methodology note**: el commit casi se hace con el body malformado por flechas Unicode en PowerShell; el subject entró bien. Para futuros commits con body largo, usar texto PowerShell-safe (sin flechas ni símbolos especiales).
+- **Where**: src/types/index.ts (TipoPromo), src/app/menu/page.tsx (validarPromo + form promo), src/app/[slug]/page.tsx (modal + cart promo).
+- **Commits**: refactor e235ef2.
+
+### BL.18 🟢 Literal 'gratis' muerto en TipoPromo
+- **Found**: 2026-05-29 durante la investigación de la poda de precio_especial.
+- **Symptom**: TipoPromo incluye 'gratis' pero no se encontró ninguna referencia en menu/page.tsx, [slug]/page.tsx ni usePromos.ts. Parece tipo muerto nunca implementado.
+- **Steps to reproduce**: grep 'gratis' en el código de promos → sin consumidores.
+- **Where (suspected)**: src/types/index.ts (TipoPromo union).
+- **Acceptance criteria**: investigar si 'gratis' se usa en algún lado no auditado (seeds, migraciones, otros componentes). Si está muerto confirmado, removerlo de la union. NO se tocó en la poda de precio_especial para mantener el batch enfocado.
+- **Priority**: 🟢 medium-low — limpieza, no afecta funcionalidad.
 
 ### F8.7 ✅ Variantes de platos — Sesión 7 (variante selector para plato del día y plato ganador) — CLOSED
 - **Closed**: 2026-05-27.
