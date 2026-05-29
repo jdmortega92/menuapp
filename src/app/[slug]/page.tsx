@@ -300,7 +300,7 @@ export default function MenuPublicoPage() {
   // Filtrar promos: solo mostrar si TODOS sus platos son visibles Y la promo es válida
   const promosVisibles = promosPublico.filter((promo: any) => {
     // Excluir promos con datos inválidos (valor null/undefined cuando se requiere)
-    const requiereValor = promo.tipo === 'descuento' || promo.tipo === 'precio_especial'
+    const requiereValor = promo.tipo === 'descuento'
     if (requiereValor && (promo.valor === null || promo.valor === undefined || promo.valor === 0)) {
       return false
     }
@@ -1717,10 +1717,6 @@ export default function MenuPublicoPage() {
                 const precioDesc = Math.round(base * (1 - (promoDetalle.valor || 0) / 100))
                 nuevoPedido[key] = (nuevoPedido[key] || 0) + 1
                 nuevosPrecios[key] = { precioUnitario: precioDesc, etiqueta: `${promoDetalle.valor}% OFF` }
-              } else if (promoDetalle.tipo === 'precio_especial') {
-                // Interim F8.4b D4: valor fijo sin importar la variante. F8.6 lo bloqueará en admin.
-                nuevoPedido[key] = (nuevoPedido[key] || 0) + 1
-                nuevosPrecios[key] = { precioUnitario: promoDetalle.valor, etiqueta: 'Precio especial' }
               }
             })
 
@@ -1761,7 +1757,7 @@ export default function MenuPublicoPage() {
                     borderRadius: '10px',
                     flexShrink: 0,
                   }}>
-                    {promoDetalle.tipo === 'dos_por_uno' ? '2x1' : promoDetalle.tipo === 'descuento' ? `${promoDetalle.valor}% OFF` : `$${parseInt(promoDetalle.valor || '0').toLocaleString('es-CO')}`}
+                    {promoDetalle.tipo === 'dos_por_uno' ? '2x1' : `${promoDetalle.valor}% OFF`}
                   </span>
                 </div>
                 <span onClick={() => setPromoDetalle(null)} style={{
@@ -1790,7 +1786,6 @@ export default function MenuPublicoPage() {
                 <div style={{ fontSize: '13px', color: 'var(--theme-text-muted)', marginBottom: '12px' }}>
                   {promoDetalle.tipo === 'dos_por_uno' && 'Selecciona un plato y lleva 2 por el precio de 1'}
                   {promoDetalle.tipo === 'descuento' && `Selecciona los platos con ${promoDetalle.valor}% de descuento`}
-                  {promoDetalle.tipo === 'precio_especial' && `Platos a precio especial de $${parseInt(promoDetalle.valor || '0').toLocaleString('es-CO')}`}
                 </div>
 
                 {platosPromo.map((plato: any) => {
@@ -1859,15 +1854,10 @@ export default function MenuPublicoPage() {
                                 <span style={{ fontSize: '13px', fontWeight: 500, color: color }}>${precioEfectivoPlato.toLocaleString('es-CO')}</span>
                                 <span style={{ fontSize: '10px', color: 'var(--color-green)', fontWeight: 500 }}>× 2 unidades</span>
                               </>
-                            ) : promoDetalle.tipo === 'descuento' ? (
-                              <>
-                                <span style={{ fontSize: '12px', color: 'var(--theme-text-subtle)', textDecoration: 'line-through' }}>${precioEfectivoPlato.toLocaleString('es-CO')}</span>
-                                <span style={{ fontSize: '13px', fontWeight: 500, color: color }}>${Math.round(precioEfectivoPlato * (1 - (promoDetalle.valor || 0) / 100)).toLocaleString('es-CO')}</span>
-                              </>
                             ) : (
                               <>
                                 <span style={{ fontSize: '12px', color: 'var(--theme-text-subtle)', textDecoration: 'line-through' }}>${precioEfectivoPlato.toLocaleString('es-CO')}</span>
-                                <span style={{ fontSize: '13px', fontWeight: 500, color: color }}>${parseInt(promoDetalle.valor || '0').toLocaleString('es-CO')}</span>
+                                <span style={{ fontSize: '13px', fontWeight: 500, color: color }}>${Math.round(precioEfectivoPlato * (1 - (promoDetalle.valor || 0) / 100)).toLocaleString('es-CO')}</span>
                               </>
                             )}
                           </div>

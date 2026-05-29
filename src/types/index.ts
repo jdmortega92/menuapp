@@ -131,7 +131,7 @@ export interface ComboPlato {
   platos?: { nombre: string; precio: number }
 }
 
-export type TipoPromo = 'dos_por_uno' | 'descuento' | 'precio_especial' | 'gratis'
+export type TipoPromo = 'dos_por_uno' | 'descuento' | 'gratis'
 
 export interface Promo {
   id: string

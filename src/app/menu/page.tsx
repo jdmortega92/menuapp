@@ -369,23 +369,10 @@ export default function MiMenuPage() {
     if (state.dias.length === 0) e.dias = 'Selecciona al menos un día'
     if (state.platoIds.length === 0) {
       e.platos = 'Selecciona al menos un plato'
-    } else if (state.tipo === 'precio_especial') {
-      // F8.6 — block precio_especial with variantized platos:
-      // fixed valor doesn't differentiate Mediana vs Grande.
-      const tieneVariantizado = state.platoIds.some(id => {
-        const p = todosPlatos.find(x => x.id === id)
-        return p?.variantes?.length
-      })
-      if (tieneVariantizado) {
-        e.platos = 'Las promos de precio especial no admiten platos con variantes. Elimina el plato o cambia el tipo de promo.'
-      }
     }
     if (state.tipo === 'descuento') {
       const v = parseInt(state.valor)
       if (!state.valor || isNaN(v) || v < 1 || v > 100) e.valor = 'Ingresa un porcentaje entre 1 y 100'
-    } else if (state.tipo === 'precio_especial') {
-      const v = parseInt(state.valor)
-      if (!state.valor || isNaN(v) || v <= 0) e.valor = 'El precio especial debe ser mayor a 0'
     }
     return e
   }
@@ -2595,7 +2582,6 @@ export default function MiMenuPage() {
                       {[
                         { id: 'dos_por_uno', label: '2x1' },
                         { id: 'descuento', label: '% Descuento' },
-                        { id: 'precio_especial', label: 'Precio especial' },
                       ].map(t => (
                         <div key={t.id} onClick={() => {
                           setNuevaPromo({ ...nuevaPromo, tipo: t.id, valor: '' })
@@ -2622,16 +2608,7 @@ export default function MiMenuPage() {
                           borderColor: intentoPromo && touchedPromo.valor && errores.valor ? 'var(--color-danger)' : undefined,
                         }} />
                     )}
-                    {nuevaPromo.tipo === 'precio_especial' && (
-                      <input className="input" type="number" placeholder="Precio especial" value={nuevaPromo.valor}
-                        onChange={(e) => setNuevaPromo({ ...nuevaPromo, valor: e.target.value })}
-                        onBlur={() => setTouchedPromo(prev => ({ ...prev, valor: true }))}
-                        style={{
-                          marginBottom: intentoPromo && touchedPromo.valor && errores.valor ? '4px' : '8px',
-                          borderColor: intentoPromo && touchedPromo.valor && errores.valor ? 'var(--color-danger)' : undefined,
-                        }} />
-                    )}
-                    {intentoPromo && touchedPromo.valor && errores.valor && (nuevaPromo.tipo === 'descuento' || nuevaPromo.tipo === 'precio_especial') && (
+                    {intentoPromo && touchedPromo.valor && errores.valor && nuevaPromo.tipo === 'descuento' && (
                       <div style={{ fontSize: '11px', color: 'var(--color-danger)', marginBottom: '8px' }}>
                         {errores.valor}
                       </div>
@@ -2651,13 +2628,6 @@ export default function MiMenuPage() {
                     <div style={{ maxHeight: '160px', overflowY: 'auto', marginBottom: '10px', border: '1px solid var(--border-light)', borderRadius: '8px' }}>
                       {platosFiltradosPromo.map(p => {
                         const isSelected = nuevaPromo.platoIds.includes(p.id)
-                        const tieneVariantes = !!p.variantes && p.variantes.length > 0
-                        // F8.6 — flag invalid combination on this row
-                        const filaConError =
-                          intentoPromo &&
-                          nuevaPromo.tipo === 'precio_especial' &&
-                          isSelected &&
-                          tieneVariantes
                         return (
                         <div key={p.id} onClick={() => {
                           const sel = nuevaPromo.platoIds.includes(p.id)
@@ -2668,15 +2638,7 @@ export default function MiMenuPage() {
                         }} style={{
                           padding: '8px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                           borderBottom: '1px solid var(--border-light)', cursor: 'pointer',
-                          background: filaConError
-                            ? 'var(--color-danger-light)'
-                            : isSelected ? 'var(--color-info-light)' : 'transparent',
-                          ...(filaConError && {
-                            borderTop: '1px solid var(--color-danger)',
-                            borderRight: '1px solid var(--color-danger)',
-                            borderBottom: '1px solid var(--color-danger)',
-                            borderLeft: '1px solid var(--color-danger)',
-                          }),
+                          background: isSelected ? 'var(--color-info-light)' : 'transparent',
                         }}>
                           <div>
                           <span style={{ fontSize: '12px' }}>{p.nombre}</span>
@@ -2755,14 +2717,6 @@ export default function MiMenuPage() {
                                 const valorNum = parseInt(nuevaPromo.valor)
                                 final = Math.round(original * (1 - valorNum / 100))
                                 detalle = `-${valorNum}%`
-                              } else if (nuevaPromo.tipo === 'precio_especial') {
-                                final = parseInt(nuevaPromo.valor)
-                                const ahorro = original - final
-                                detalle = ahorro > 0
-                                  ? `ahorro $${ahorro.toLocaleString('es-CO')}`
-                                  : ahorro < 0
-                                    ? `+$${Math.abs(ahorro).toLocaleString('es-CO')}`
-                                    : 'sin cambio'
                               }
 
                               return (
@@ -2831,7 +2785,7 @@ export default function MiMenuPage() {
                           <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '4px' }}>Aplica en: {promo.platos.join(', ')}</div>
                         )}
                         <div style={{ display: 'flex', gap: '6px', marginTop: '6px', flexWrap: 'wrap' }}>
-                          <span className="badge badge-warning">{promo.tipo === 'dos_por_uno' ? '2x1' : promo.tipo === 'descuento' ? `${promo.valor}% off` : `$${parseInt(promo.valor || '0').toLocaleString('es-CO')}`}</span>
+                          <span className="badge badge-warning">{promo.tipo === 'dos_por_uno' ? '2x1' : `${promo.valor}% off`}</span>
                           <span className="badge badge-neutral">{promo.dias.join(', ')}</span>
                         </div>
                       </div>
