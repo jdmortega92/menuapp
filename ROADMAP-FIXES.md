@@ -2,7 +2,7 @@
 
 > **Audience**: Claude Code (Opus) working on the MenuApp codebase.
 > **Owner**: Julian.
-> **Last updated**: 2026-05-13.
+> **Last updated**: 2026-05-28.
 > **Stack**: Next.js 16 (App Router) + TypeScript + Tailwind + Supabase + Vercel.
 
 ---
@@ -512,21 +512,90 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
     muestran 'nombre · variante' + precio de variante; la de día
     muestra precio tachado + precio_especial. El modal pre-selecciona
     la variante locked; el descuento del día solo aplica si la
-    variante seleccionada coincide con la locked. Cart key composite
-    (heredado de F8.4a). Fallback 'desde $X' preservado para rows
-    legacy sin lock.
+    variante seleccionada coincide con la locked. Cart key vía
+    makeCartKey/parseCartKey con un 3er segmento "source" opcional
+    que namespacea día/ganador (cb391da) — el composite de 2 args
+    heredado de F8.4a quedó superado. Fallback 'desde $X' preservado
+    para rows legacy sin lock.
 - **Plan gating**: Pro-only (heredado de la superficie de render).
 - **Methodology lesson — schema drift en una 4ta capa de consumer**:
   la detección de schema drift falló en una 4ta capa de consumer no
   auditada (la Vista Previa del admin). Había DOS consumers del
   precio — el público + el preview admin. Cazado en smoke test,
   fixeado en el mismo batch antes del commit.
-- **Commits**: feat 91ec57e.
+- **Commits**: feat 91ec57e, docs 5533be9, fix cb391da, feat 6316fa0, feat 9b39352.
 - **Follow-ups en backlog (no bloquean)**:
   - E1: el error 'Variante seleccionada inválida' del validator no
     tiene UI render → posible silent fail (verificar con devtools).
   - L1/L2: backward compat de rows legacy con variante_id NULL
     (verificar manual en Supabase Dashboard).
+
+### F8.7-fix ✅ Cart-key namespacing para plato del día y ganador — CLOSED
+- **Closed**: 2026-05-28.
+- **Root bug**: el plato del día sin variante usaba platoDia.id pelado
+  como cart key, idéntico al de la card normal del mismo plato →
+  colisión. El "+1" caía en la card equivocada y los precios se
+  mezclaban (last-writer-wins en preciosPromo).
+- **Fix**: extendido makeCartKey/parseCartKey con un 3er segmento
+  "source" opcional. Día/ganador generan keys tipo id____dia o
+  id__varianteId__dia. Empty-middle parsea correctamente a
+  varianteId: undefined. Combos (UUID sin __) y promos (keys
+  intactas) no se tocaron — backward-compat byte-idéntico cuando
+  source se omite.
+- **Cambios atómicos en el mismo commit**: reemplazo del "+" custom
+  del plato del día por <Qty> estándar; agregarAlPedido día-aware
+  (detecta source === 'dia', registra precioEspecial en preciosPromo
+  idempotentemente, sobrevive remove-to-zero/re-add); hoist de
+  esPlatoDelDiaPrecio arriba de cartKey en el modal para que key y
+  precio nunca diverjan; truncation line-clamp:1 en día y sorpréndeme
+  descripcion, clamp:2 en ganador descripcionEspecial; reposición del
+  <Qty> del día al nivel del precio.
+- **Methodology lesson**: el cambio de DOM del <Qty> se intentó ANTES
+  del namespacing y rompió el carrito (sumaba el plato normal en vez
+  del día); después del namespacing fue inocuo. No tocar capas
+  dependientes hasta resolver la dependencia subyacente.
+- **Where**: src/app/[slug]/page.tsx — makeCartKey/parseCartKey,
+  agregarAlPedido, modal cartKey/esPlatoDelDiaPrecio.
+- **Commits**: fix cb391da.
+
+### F8.7-fix ✅ Esconder día/ganador del listado normal cuando están destacados — CLOSED
+- **Closed**: 2026-05-28.
+- **Goal**: si el plato del día (o ganador) se está mostrando en su
+  card destacada, el mismo plato no aparece duplicado en el listado
+  normal.
+- **Safety gate**: la condición de ocultamiento matchea EXACTAMENTE la
+  condición de visibilidad de la card destacada (esProPublico &&
+  plato_dia_activo && platoDiaVisible && !busqueda.trim()). Previene el
+  edge "fuera de horario": la card destacada se desmonta fuera de
+  horario, y si también lo escondiéramos del listado por la sola
+  config, el plato quedaría invisible en el menú entero.
+- **.filter(c => c.platos.length > 0)** para no dejar headers de
+  categorías vacías.
+- **NO se tocaron**: categorias base, categoriasPorHorario,
+  platosVisiblesIds, pool de Sorpréndeme, validez de combos/promos,
+  cleanup warning (leen de fuentes distintas a categoriasFiltradas).
+- **Where**: src/app/[slug]/page.tsx — idsOcultarEnListado,
+  categoriasListado.
+- **Commits**: feat 6316fa0.
+
+### F8.7-fix ✅ Precio + badge de día en cards de búsqueda y Sorpréndeme — CLOSED
+- **Closed**: 2026-05-28.
+- **Bug expuesto por el entry anterior**: al esconder del listado, el
+  plato seguía visible vía búsqueda (que desactiva el ocultamiento con
+  !busqueda.trim()) y vía Sorpréndeme, mostrando precio normal sin
+  badge — contradictorio con el descuento ya visto.
+- **Fix**: detección por plato (esEstePlatoElDia) en ambos surfaces.
+  Card muestra "nombre · variante" (si hay variante locked), precio
+  tachado + precio_especial + pill "Plato del día". Qty inline (solo
+  no-variantizados) usa cart key sourced 'dia' → agrega al precio
+  especial. Variantizados con lock: precio tachado de la variante +
+  pill, sin Qty inline (delega al modal). Variantizados sin lock:
+  "desde $X" + pill, sin Qty inline.
+- **Ganador NO se tocó**: no tiene precio especial → no hay
+  contradicción de precio. Mantenerlo afuera evitó scope creep.
+- **Where**: src/app/[slug]/page.tsx — cards de búsqueda (listado) y
+  filas de Sorpréndeme.
+- **Commits**: feat 9b39352.
 
 ### UI-BUGS ✅ Description handling — multi-surface fix — CLOSED
 - **Closed**: 2026-05-23.
