@@ -1443,7 +1443,20 @@ export default function MenuPublicoPage() {
                       color: 'var(--theme-text-muted)',
                       marginTop: '6px',
                     }}>
-                      Aplica en: {promo.platos.join(', ')}
+                      Aplica en: {(() => {
+                        // Resolve variante names from the lock carry (promoPlatos); NULL = plato name only.
+                        const pps = promo.promoPlatos
+                        if (!pps || pps.length === 0) return promo.platos.join(', ')
+                        return pps.map((pp: any) => {
+                          const plato = todosLosPlatos.find((x: any) => x.id === pp.plato_id)
+                          const nombre = plato?.nombre || 'Plato'
+                          if (pp.variante_id && (plato as any)?.variantes?.length) {
+                            const v = (plato as any).variantes.find((vv: any) => vv.id === pp.variante_id)
+                            if (v) return `${nombre} (${v.nombre})`
+                          }
+                          return nombre
+                        }).join(', ')
+                      })()}
                     </div>
                   )}
                   <div style={{
@@ -1791,10 +1804,17 @@ export default function MenuPublicoPage() {
                 {platosPromo.map((plato: any) => {
                   const seleccionado = algunaKeyEsDePlato(promoSeleccion, plato.id)
                   const tieneVariantes = plato.variantes && plato.variantes.length > 0
+                  // Admin lock for this plato (variante_id from promoPlatos; null = todas las variantes).
+                  const ppLock = (promoDetalle.promoPlatos ?? []).find((pp: any) => pp.plato_id === plato.id)
+                  const varianteLock: string | null = ppLock?.variante_id ?? null
+                  const lockVariante = varianteLock && tieneVariantes
+                    ? plato.variantes.find((v: any) => v.id === varianteLock)
+                    : null
                   const keyDePlato = obtenerKeyDePlato(promoSeleccion, plato.id)
+                  // When locked, the price preview reflects the locked variante even before selection.
                   const varianteIdSeleccionada = keyDePlato
                     ? parseCartKey(keyDePlato).varianteId
-                    : undefined
+                    : (varianteLock ?? undefined)
                   const precioEfectivoPlato = precioEfectivo(plato, varianteIdSeleccionada)
                   const maxSeleccion = promoDetalle.tipo === 'dos_por_uno' ? 1 : platosPromo.length
                   const puedeSeleccionar = seleccionado || promoSeleccion.length < maxSeleccion
@@ -1804,9 +1824,10 @@ export default function MenuPublicoPage() {
                       if (keyDePlato) {
                         setPromoSeleccion(promoSeleccion.filter(k => k !== keyDePlato))
                       } else if (puedeSeleccionar) {
-                        const newKey = tieneVariantes
-                          ? makeCartKey(plato.id, plato.variantes[0].id)
-                          : plato.id
+                        // Locked → fixed key to the locked variante; else current behavior (auto-pick variantes[0]).
+                        const newKey = varianteLock
+                          ? makeCartKey(plato.id, varianteLock)
+                          : (tieneVariantes ? makeCartKey(plato.id, plato.variantes[0].id) : plato.id)
                         if (promoDetalle.tipo === 'dos_por_uno') {
                           setPromoSeleccion([newKey])
                         } else {
@@ -1845,7 +1866,7 @@ export default function MenuPublicoPage() {
                             fontWeight: 500,
                             color: 'var(--theme-text)',
                           }}>
-                            {plato.nombre}
+                            {plato.nombre}{lockVariante ? ` (${lockVariante.nombre})` : ''}
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
                             {promoDetalle.tipo === 'dos_por_uno' ? (
@@ -1876,7 +1897,7 @@ export default function MenuPublicoPage() {
                         {seleccionado && <span style={{ color: 'white', fontSize: '14px' }}>✓</span>}
                       </div>
                       </div>
-                      {seleccionado && tieneVariantes && (
+                      {seleccionado && tieneVariantes && !varianteLock && (
                         <div style={{
                           marginTop: '10px',
                           paddingTop: '10px',

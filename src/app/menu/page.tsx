@@ -51,6 +51,13 @@ type ComboItem = {
   variante_id: string | null
 }
 
+// Promo item shape for admin form state. Unlike ComboItem, the variante lock is
+// OPTIONAL: variante_id === null means "todas las variantes" (no force-variante).
+type PromoItem = {
+  plato_id: string
+  variante_id: string | null
+}
+
 export default function MiMenuPage() {
   const router = useRouter()
   const { usuario, restaurante: rest, cargando: cargandoAuth } = useAuth()
@@ -154,7 +161,7 @@ export default function MiMenuPage() {
   const [busquedaPlatosCombo, setBusquedaPlatosCombo] = useState('')
   const [guardandoCombo, setGuardandoCombo] = useState(false)
   const [guardadoCombo, setGuardadoCombo] = useState(false)
-  const [nuevaPromo, setNuevaPromo] = useState({ nombre: '', descripcion: '', tipo: '', valor: '', dias: [] as string[], platoIds: [] as string[] })
+  const [nuevaPromo, setNuevaPromo] = useState({ nombre: '', descripcion: '', tipo: '', valor: '', dias: [] as string[], platoIds: [] as PromoItem[] })
   const [intentoPromo, setIntentoPromo] = useState(false)
   const [touchedPromo, setTouchedPromo] = useState<Record<string, boolean>>({})
   const [editandoPromoId, setEditandoPromoId] = useState<string | null>(null)
@@ -363,7 +370,7 @@ export default function MiMenuPage() {
     await invalidateAll('plato-del-dia')
   }
 
-  function validarPromo(state: { nombre: string; descripcion: string; tipo: string; valor: string; dias: string[]; platoIds: string[] }): Record<string, string> {
+  function validarPromo(state: { nombre: string; descripcion: string; tipo: string; valor: string; dias: string[]; platoIds: PromoItem[] }): Record<string, string> {
     const e: Record<string, string> = {}
     if (!state.nombre.trim()) e.nombre = 'El nombre es obligatorio'
     if (!state.tipo) e.tipo = 'Selecciona el tipo de promoción'
@@ -401,7 +408,7 @@ export default function MiMenuPage() {
     // Step 2: insert junction rows
     if (nuevaPromo.platoIds.length > 0) {
       const { error: ppError } = await supabase.from('promo_platos').insert(
-        nuevaPromo.platoIds.map(platoId => ({ promo_id: promoData.id, plato_id: platoId }))
+        nuevaPromo.platoIds.map(item => ({ promo_id: promoData.id, plato_id: item.plato_id, variante_id: item.variante_id }))
       )
       if (ppError) {
         await supabase.from('promos').delete().eq('id', promoData.id)
@@ -427,7 +434,7 @@ export default function MiMenuPage() {
     setGuardadoPromo(true)
     setTimeout(() => {
       setGuardadoPromo(false)
-      setNuevaPromo({ nombre: '', descripcion: '', tipo: '', valor: '', dias: [], platoIds: [] })
+      setNuevaPromo({ nombre: '', descripcion: '', tipo: '', valor: '', dias: [], platoIds: [] as PromoItem[] })
       setIntentoPromo(false)
       setTouchedPromo({})
       setMostrarFormPromo(false)
@@ -463,7 +470,7 @@ export default function MiMenuPage() {
     // Step 3: insert new junction rows
     if (nuevaPromo.platoIds.length > 0) {
       const { error: ppError } = await supabase.from('promo_platos').insert(
-        nuevaPromo.platoIds.map(platoId => ({ promo_id: editandoPromoId, plato_id: platoId }))
+        nuevaPromo.platoIds.map(item => ({ promo_id: editandoPromoId, plato_id: item.plato_id, variante_id: item.variante_id }))
       )
       if (ppError) {
         setGuardandoPromo(false)
@@ -488,7 +495,7 @@ export default function MiMenuPage() {
     setGuardadoPromo(true)
     setTimeout(() => {
       setGuardadoPromo(false)
-      setNuevaPromo({ nombre: '', descripcion: '', tipo: '', valor: '', dias: [], platoIds: [] })
+      setNuevaPromo({ nombre: '', descripcion: '', tipo: '', valor: '', dias: [], platoIds: [] as PromoItem[] })
       setIntentoPromo(false)
       setTouchedPromo({})
       setMostrarFormPromo(false)
@@ -647,9 +654,19 @@ export default function MiMenuPage() {
       activo: p.activo,
       platos: p.promo_platos?.map((pp: any) => {
         const plato = catsAndPlatos.platos.find((pl: any) => pl.id === pp.plato_id)
-        return plato?.nombre || 'Plato'
+        const nombre = plato?.nombre || 'Plato'
+        if (pp.variante_id && plato?.variantes?.length) {
+          const v = plato.variantes.find((x: any) => x.id === pp.variante_id)
+          if (v) return `${nombre} (${v.nombre})`
+        }
+        return nombre
       }) || [],
       platosIds: p.promo_platos?.map((pp: any) => pp.plato_id) || [],
+      // raw lock carry for edit-pop rehydration (mirror ComboAdmin.combo_platos)
+      promoPlatos: p.promo_platos?.map((pp: any) => ({
+        plato_id: pp.plato_id,
+        variante_id: pp.variante_id ?? null,
+      })) || [],
     }))
   }, [promosSwr, catsAndPlatos])
 
@@ -2533,12 +2550,12 @@ export default function MiMenuPage() {
                     <div style={{ fontSize: '32px', marginBottom: '8px' }}>🏷️</div>
                     <div style={{ fontSize: '14px', fontWeight: 500, marginBottom: '4px' }}>Sin promociones</div>
                     <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '16px' }}>Crea ofertas para atraer más clientes</div>
-                    <button onClick={() => { setEditandoPromoId(null); setNuevaPromo({ nombre: '', descripcion: '', tipo: '', valor: '', dias: [], platoIds: [] }); setBusquedaPlatosPromo(''); setMostrarFormPromo(true); setIntentoPromo(false); setTouchedPromo({}) }} className="btn-primary" style={{ padding: '10px 20px', fontSize: '13px' }}>+ Crear promo</button>
+                    <button onClick={() => { setEditandoPromoId(null); setNuevaPromo({ nombre: '', descripcion: '', tipo: '', valor: '', dias: [], platoIds: [] as PromoItem[] }); setBusquedaPlatosPromo(''); setMostrarFormPromo(true); setIntentoPromo(false); setTouchedPromo({}) }} className="btn-primary" style={{ padding: '10px 20px', fontSize: '13px' }}>+ Crear promo</button>
                   </div>
                 ) : (
                   <>
                     {!mostrarFormPromo && (
-                      <button onClick={() => { setEditandoPromoId(null); setNuevaPromo({ nombre: '', descripcion: '', tipo: '', valor: '', dias: [], platoIds: [] }); setBusquedaPlatosPromo(''); setMostrarFormPromo(true); setIntentoPromo(false); setTouchedPromo({}) }} className="btn-primary" style={{ padding: '8px 14px', fontSize: '13px', marginBottom: '14px' }}>+ Crear promo</button>
+                      <button onClick={() => { setEditandoPromoId(null); setNuevaPromo({ nombre: '', descripcion: '', tipo: '', valor: '', dias: [], platoIds: [] as PromoItem[] }); setBusquedaPlatosPromo(''); setMostrarFormPromo(true); setIntentoPromo(false); setTouchedPromo({}) }} className="btn-primary" style={{ padding: '8px 14px', fontSize: '13px', marginBottom: '14px' }}>+ Crear promo</button>
                     )}
                   </>
                 )}
@@ -2631,27 +2648,75 @@ export default function MiMenuPage() {
                     )}
                     <div style={{ maxHeight: '160px', overflowY: 'auto', marginBottom: '10px', border: '1px solid var(--border-light)', borderRadius: '8px' }}>
                       {platosFiltradosPromo.map(p => {
-                        const isSelected = nuevaPromo.platoIds.includes(p.id)
+                        const currentItem = nuevaPromo.platoIds.find((i: PromoItem) => i.plato_id === p.id)
+                        const isSelected = !!currentItem
+                        const tieneVariantes = !!p.variantes && p.variantes.length > 0
+                        // Display price reflects the locked variante if one is set; otherwise base price.
+                        const precioMostrar = (() => {
+                          if (currentItem?.variante_id) {
+                            const v = p.variantes?.find(x => x.id === currentItem.variante_id)
+                            if (v) return v.precio
+                          }
+                          return p.precio
+                        })()
                         return (
                         <div key={p.id} onClick={() => {
-                          const sel = nuevaPromo.platoIds.includes(p.id)
-                            ? nuevaPromo.platoIds.filter(id => id !== p.id)
-                            : [...nuevaPromo.platoIds, p.id]
+                          const yaSeleccionado = nuevaPromo.platoIds.some((i: PromoItem) => i.plato_id === p.id)
+                          // On select, default variante_id to null = "todas las variantes" (OPTIONAL lock,
+                          // unlike combos which auto-pick variantes[0]).
+                          const sel: PromoItem[] = yaSeleccionado
+                            ? nuevaPromo.platoIds.filter((i: PromoItem) => i.plato_id !== p.id)
+                            : [...nuevaPromo.platoIds, { plato_id: p.id, variante_id: null }]
                           setNuevaPromo({ ...nuevaPromo, platoIds: sel })
                           setTouchedPromo(prev => ({ ...prev, platos: true }))
                         }} style={{
-                          padding: '8px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                          padding: '8px 10px',
                           borderBottom: '1px solid var(--border-light)', cursor: 'pointer',
                           background: isSelected ? 'var(--color-info-light)' : 'transparent',
                         }}>
-                          <div>
-                          <span style={{ fontSize: '12px' }}>{p.nombre}</span>
-                          {(() => { const h = getHorarioPlato(p.id); return h ? <span style={{ fontSize: '9px', color: 'var(--color-warning)', marginLeft: '4px' }}>⏰ {formato12h(h.hora_inicio)}–{formato12h(h.hora_fin)}</span> : null })()}
-                        </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>${p.precio.toLocaleString('es-CO')}</span>
-                            {nuevaPromo.platoIds.includes(p.id) && <span style={{ color: 'var(--color-info)', fontSize: '12px' }}>✓</span>}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div>
+                              <span style={{ fontSize: '12px' }}>{p.nombre}</span>
+                              {(() => { const h = getHorarioPlato(p.id); return h ? <span style={{ fontSize: '9px', color: 'var(--color-warning)', marginLeft: '4px' }}>⏰ {formato12h(h.hora_inicio)}–{formato12h(h.hora_fin)}</span> : null })()}
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>${precioMostrar.toLocaleString('es-CO')}</span>
+                              {isSelected && <span style={{ color: 'var(--color-info)', fontSize: '12px' }}>✓</span>}
+                            </div>
                           </div>
+                          {isSelected && tieneVariantes && (
+                            <div onClick={(e) => e.stopPropagation()} style={{ marginTop: '6px' }}>
+                              <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginBottom: '4px' }}>
+                                Variante:
+                              </div>
+                              <Select
+                                value={currentItem?.variante_id ?? ''}
+                                onChange={(v) => {
+                                  // Empty string = "todas las variantes" → store as null.
+                                  const sel = nuevaPromo.platoIds.map((item: PromoItem) =>
+                                    item.plato_id === p.id ? { ...item, variante_id: (v as string) || null } : item
+                                  )
+                                  setNuevaPromo({ ...nuevaPromo, platoIds: sel })
+                                }}
+                                options={[
+                                  { value: '', label: <span>Todas las variantes</span>, searchText: 'todas las variantes' },
+                                  ...(p.variantes ?? []).map((v: any) => ({
+                                    value: v.id,
+                                    label: (
+                                      <span>
+                                        {v.nombre}
+                                        <span style={{ color: 'var(--text-tertiary)' }}>
+                                          {' '}— ${v.precio.toLocaleString('es-CO')}
+                                        </span>
+                                      </span>
+                                    ),
+                                    searchText: v.nombre,
+                                  })),
+                                ]}
+                                placeholder="Todas las variantes"
+                              />
+                            </div>
+                          )}
                         </div>
                         )
                       })}
@@ -2694,8 +2759,19 @@ export default function MiMenuPage() {
                       if (!tipoSet || !valorSet || !hasPlatos) return null
 
                       const platosSeleccionados = nuevaPromo.platoIds
-                        .map(id => todosPlatos.find(p => p.id === id))
-                        .filter(Boolean) as typeof todosPlatos
+                        .map(item => {
+                          const plato = todosPlatos.find(p => p.id === item.plato_id)
+                          if (!plato) return null
+                          // Locked variante drives both the preview price and the name suffix.
+                          let precioBase = plato.precio
+                          let varianteNombre: string | null = null
+                          if (item.variante_id) {
+                            const v = plato.variantes?.find(x => x.id === item.variante_id)
+                            if (v) { precioBase = v.precio; varianteNombre = v.nombre }
+                          }
+                          return { plato, precioBase, varianteNombre }
+                        })
+                        .filter(Boolean) as { plato: typeof todosPlatos[number]; precioBase: number; varianteNombre: string | null }[]
 
                       return (
                         <div style={{
@@ -2712,8 +2788,8 @@ export default function MiMenuPage() {
                               Compra 2 lleva 1 gratis (ahorro 50% en el segundo)
                             </div>
                           ) : (
-                            platosSeleccionados.map(plato => {
-                              const original = plato.precio
+                            platosSeleccionados.map(({ plato, precioBase, varianteNombre }) => {
+                              const original = precioBase
                               let final = 0
                               let detalle = ''
 
@@ -2734,7 +2810,7 @@ export default function MiMenuPage() {
                                   gap: '8px',
                                 }}>
                                   <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                    {plato.nombre}:
+                                    {plato.nombre}{varianteNombre ? ` (${varianteNombre})` : ''}:
                                   </span>
                                   <span style={{ flexShrink: 0 }}>
                                     <span style={{ textDecoration: 'line-through', color: 'var(--text-tertiary)', fontSize: '11px' }}>
@@ -2756,7 +2832,7 @@ export default function MiMenuPage() {
                       )
                     })()}
                     {nuevaPromo.platoIds.length > 0 && (() => {
-                      const platosConHorario = nuevaPromo.platoIds.map(id => ({ id, horario: getHorarioPlato(id) })).filter(p => p.horario)
+                      const platosConHorario = nuevaPromo.platoIds.map(item => ({ id: item.plato_id, horario: getHorarioPlato(item.plato_id) })).filter(p => p.horario)
                       if (platosConHorario.length === 0) return null
                       const horarios = platosConHorario.map(p => `${p.horario!.hora_inicio}–${p.horario!.hora_fin}`)
                       return (
@@ -2773,7 +2849,7 @@ export default function MiMenuPage() {
                           cursor: valido ? 'pointer' : 'default',
                           ...(valido ? {} : { transform: 'none', boxShadow: 'none' }),
                         }}>{guardandoPromo ? 'Guardando...' : guardadoPromo ? '✓ Guardado' : editandoPromoId ? 'Guardar cambios' : 'Crear'}</button>
-                      <button onClick={() => { setMostrarFormPromo(false); setIntentoPromo(false); setTouchedPromo({}); setNuevaPromo({ nombre: '', descripcion: '', tipo: '', valor: '', dias: [], platoIds: [] }); setBusquedaPlatosPromo(''); setEditandoPromoId(null) }} className="btn-outline" style={{ flex: 1, padding: '10px', fontSize: '13px' }}>Cancelar</button>
+                      <button onClick={() => { setMostrarFormPromo(false); setIntentoPromo(false); setTouchedPromo({}); setNuevaPromo({ nombre: '', descripcion: '', tipo: '', valor: '', dias: [], platoIds: [] as PromoItem[] }); setBusquedaPlatosPromo(''); setEditandoPromoId(null) }} className="btn-outline" style={{ flex: 1, padding: '10px', fontSize: '13px' }}>Cancelar</button>
                     </div>
                   </div>
                   )
@@ -2802,7 +2878,12 @@ export default function MiMenuPage() {
                           <div style={{ width: '16px', height: '16px', borderRadius: '50%', background: 'white', position: 'absolute', top: '2px', left: promo.activo ? '18px' : '2px', transition: 'left 0.2s' }} />
                         </div>
                         <span onClick={() => {
-                          const platoIds = promo.platosIds || []
+                          // Rehydrate from the raw promoPlatos carry (with variante_id), not the
+                          // lossy platosIds — mirrors combo edit-pop reading combo.combo_platos.
+                          const platoIds: PromoItem[] = (promo.promoPlatos ?? []).map((pp: any) => ({
+                            plato_id: pp.plato_id,
+                            variante_id: pp.variante_id ?? null,
+                          }))
                           setNuevaPromo({
                             nombre: promo.nombre,
                             descripcion: promo.descripcion || '',
