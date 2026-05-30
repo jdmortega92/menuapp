@@ -490,6 +490,20 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
 
 ## Items
 
+### F8.8 PIEZA 2 ✅ Variante locking en promos (lock opcional por plato) — CLOSED
+- **Closed**: 2026-05-29.
+- **Goal**: el admin puede lockear opcionalmente el descuento de una promo a una variante específica por plato, o dejar "Todas las variantes" (variante_id NULL) que aplica a todas. Patrón espejo de combos (F8.5b) pero con semántica de lock OPCIONAL, no forzado.
+- **Decisión de producto**: confirmada contra competencia (Deal POS, Shopify, Lightspeed) — el admin decide la variante, no el cliente. A diferencia de combos, el lock es opcional: "Todas las variantes" es válido y es el default. Sin force-variante en validarPromo.
+- **DB (migración manual aplicada, Supabase SQL Editor)**: ALTER TABLE promo_platos ADD COLUMN variante_id uuid NULL REFERENCES plato_variantes(id) ON DELETE CASCADE. Verificada idéntica a combo_platos (mismo tipo, misma FK rule CASCADE confirmada por query de constraints). Aditiva y forward-compatible: filas existentes quedan NULL = todas las variantes.
+- **Cambios por capa**:
+  - Fundación (commit 6989e09): PromoPlato gana variante_id; usePromos ambos SELECT traen variante_id; PromoPublica.promoPlatos y PromoAdmin.promo_platos cargan el lock crudo para edit-pop; cascade check de borrado de variante suma 4to count (promo_platos). Sin shape enriquecido (el modal resuelve precio inline desde categorias en memoria).
+  - Admin form (commit a99d7a7): nuevaPromo.platoIds migrado de string array a PromoItem objetos (~16 sitios incluidos 5 reset literals); Select inline por plato con "Todas las variantes" como primera opción y default; toggle default NULL (no variantes[0], a diferencia de combos); preview y card admin muestran "(Variante)" cuando hay lock; edit-pop rehidrata desde promoPlatos crudo.
+  - Público (commit a99d7a7): modal con branching — si hay lock, sin radios, variante pre-seleccionada con precio/key fijos; si NULL, comportamiento F8.4b intacto (cliente elige). Card "Aplica en: Pizza (Grande)" cuando hay lock. agregarPromoAlPedido sin cambios (keys ya cargan la variante; precioEfectivo resuelve el precio en ambos casos, locked y elegido por el cliente).
+- **Implementación en 2 prompts**: fundación (tipos + hook + cascade count) primero para mantener TS verde, luego admin form + UI pública. Cada paso cerró con npx tsc --noEmit en cero errores.
+- **Edge de borrado de variante**: una promo lockeada a una variante luego borrada queda con variante_id dangling; el modal lo guarda (lockVariante resuelve a null → fallback a todas-variantes) y ON DELETE CASCADE en promo_platos.variante_id lo deja NULL a nivel DB. Seguro por ambos lados.
+- **Where**: src/types/index.ts (PromoPlato.variante_id), src/hooks/data/usePromos.ts (SELECT + PromoPublica/PromoAdmin), src/app/menu/page.tsx (PromoItem, validarPromo, form promo, cascade count), src/app/[slug]/page.tsx (modal promo + card "Aplica en").
+- **Commits**: fundación 6989e09, feat a99d7a7.
+
 ### F8.8-prep ✅ Eliminación del tipo de promo precio_especial — CLOSED
 - **Closed**: 2026-05-29.
 - **Goal**: reducir los tipos de promo a dos (dos_por_uno y descuento), eliminando precio_especial por completo. Decisión de producto: descuento (proporcional) se conserva porque funciona con platos variantizados; precio_especial (fijo) no diferencia Mediana de Grande y fue justo lo que F8.6 tuvo que bloquear.
