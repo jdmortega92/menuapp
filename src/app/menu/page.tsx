@@ -370,6 +370,52 @@ export default function MiMenuPage() {
     await invalidateAll('plato-del-dia')
   }
 
+  // Dos promos entran en conflicto si comparten ≥1 plato Y ≥1 día Y ≥1 variante de ese plato.
+  // variante_id null (todas las variantes) cruza CUALQUIER variante específica y cruza otro null;
+  // dos variantes específicas cruzan solo si son iguales. El TIPO de promo no importa; solo
+  // cuentan las promos ACTIVAS. Devuelve el nombre de la primera promo en conflicto, o null.
+  // Devuelve un descriptor por cada (plato, variante) del NUEVO promo que choca con alguna
+  // promo activa existente. platoNombre + varianteNombre (null = todas las variantes) + el
+  // nombre de la promo en conflicto, para construir un mensaje específico. Array vacío = sin
+  // conflictos. Reglas: solo promos ACTIVAS, excluye editandoPromoId, requiere cruce de días,
+  // y cruce de variante (a==null || b==null || a===b). Sin early-return: recorre todos los platos.
+  function detectarConflictoPromo(
+    state: { dias: string[]; platoIds: PromoItem[] },
+    promosExistentes: any[],
+    excludeId: string | null,
+  ): { platoNombre: string; varianteNombre: string | null; promoNombre: string }[] {
+    const variantesCruzan = (a: string | null, b: string | null) =>
+      a == null || b == null || a === b
+    const conflictos: { platoNombre: string; varianteNombre: string | null; promoNombre: string }[] = []
+    const vistos = new Set<string>()
+    for (const a of state.platoIds) {
+      for (const p of promosExistentes) {
+        // Excluir la promo en edición (no choca consigo misma) y las inactivas.
+        if (p.id === excludeId || !p.activo) continue
+        // Los días deben intersecar.
+        if (!state.dias.some((d) => (p.dias || []).includes(d))) continue
+        // ¿Algún promoPlato de p cruza este (plato, variante) del nuevo promo?
+        const cruza = (p.promoPlatos || []).some((b: any) =>
+          b.plato_id === a.plato_id && variantesCruzan(a.variante_id, b.variante_id ?? null)
+        )
+        if (!cruza) continue
+        // Dedupe: un descriptor por (plato+variante del nuevo, promo en conflicto).
+        const key = `${a.plato_id}|${a.variante_id ?? ''}|${p.id}`
+        if (vistos.has(key)) continue
+        vistos.add(key)
+        // Resolver nombres con el lookup canónico del form (todosPlatos), igual que el
+        // derive `promos` arma "Pizza (Grande)".
+        const plato = todosPlatos.find((x) => x.id === a.plato_id)
+        const platoNombre = plato?.nombre || 'Plato'
+        const varianteNombre = a.variante_id
+          ? (plato?.variantes?.find((v: any) => v.id === a.variante_id)?.nombre ?? null)
+          : null
+        conflictos.push({ platoNombre, varianteNombre, promoNombre: p.nombre || 'otra promo' })
+      }
+    }
+    return conflictos
+  }
+
   function validarPromo(state: { nombre: string; descripcion: string; tipo: string; valor: string; dias: string[]; platoIds: PromoItem[] }): Record<string, string> {
     const e: Record<string, string> = {}
     if (!state.nombre.trim()) e.nombre = 'El nombre es obligatorio'
@@ -381,6 +427,24 @@ export default function MiMenuPage() {
     if (state.tipo === 'descuento') {
       const v = parseInt(state.valor)
       if (!state.valor || isNaN(v) || v < 1 || v > 100) e.valor = 'Ingresa un porcentaje entre 1 y 100'
+    }
+    // Conflicto: solo chequear cuando hay platos y días seleccionados (no en form vacío,
+    // para que el error de conflicto no aparezca junto a "selecciona un plato/día").
+    // `promos` y `editandoPromoId` se leen del closure del componente.
+    if (state.platoIds.length > 0 && state.dias.length > 0) {
+      const conflictos = detectarConflictoPromo(state, promos, editandoPromoId)
+      if (conflictos.length > 0) {
+        if (conflictos.length === 1) {
+          const c = conflictos[0]
+          const nombre = `${c.platoNombre}${c.varianteNombre ? ` (${c.varianteNombre})` : ''}`
+          e.conflicto = `${nombre} ya está en la promo activa "${c.promoNombre}" en días que se cruzan. Cambia el día, la variante, o quita ese plato.`
+        } else {
+          const lista = conflictos
+            .map((c) => `${c.platoNombre}${c.varianteNombre ? ` (${c.varianteNombre})` : ''} → "${c.promoNombre}"`)
+            .join('; ')
+          e.conflicto = `Estos platos ya están en promos activas en días que se cruzan: ${lista}. Cambia el día, la variante, o quítalos.`
+        }
+      }
     }
     return e
   }
@@ -2841,6 +2905,11 @@ export default function MiMenuPage() {
                         </div>
                       )
                     })()}
+                    {intentoPromo && !guardandoPromo && !guardadoPromo && errores.conflicto && (
+                      <div style={{ fontSize: '11px', color: 'var(--color-danger)', background: 'var(--color-danger-light)', padding: '8px 10px', borderRadius: '6px', marginBottom: '8px' }}>
+                        {errores.conflicto}
+                      </div>
+                    )}
                     <div style={{ display: 'flex', gap: '8px' }}>
                       <button onClick={editandoPromoId ? actualizarPromo : agregarPromo} disabled={guardandoPromo || guardadoPromo} className="btn-primary"
                         style={{
