@@ -490,6 +490,19 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
 
 ## Items
 
+### F8.8 PIEZA 3a ✅ Validación de conflictos entre promos (admin) — CLOSED
+- **Closed**: 2026-05-29.
+- **Goal**: impedir que el admin cree o edite una promo que entre en conflicto con otra promo activa. Primer sub-trabajo de PIEZA 3 (la validación va ANTES de la card pública, para que la card asuma dato sin conflictos). Decisión de producto de Julian: en vez de resolver el solapamiento en la card (mayor descuento gana, etc.), se previene en el admin.
+- **Regla de conflicto (confirmada)**: dos promos chocan si comparten >=1 plato Y >=1 día Y >=1 variante de ese plato. variante_id NULL (todas las variantes) cruza CUALQUIER variante específica y cruza otro NULL; dos variantes específicas cruzan solo si son iguales. El TIPO de promo (2x1 vs descuento) NO importa. Solo cuentan las promos ACTIVAS.
+- **Casos de referencia**: 20% Grande lun + 15% Mediana lun = NO chocan (variantes distintas); 20% Grande lun + 2x1 Grande lun = chocan (tipo no importa); 20% Grande lun + 30% Grande mar = NO chocan (días distintos); Todas-variantes lun + Grande lun = chocan (NULL cruza cualquiera); Todas lun + Todas mar = NO chocan.
+- **Implementación (pura client-side, sin DB/types/hook)**: helper detectarConflictoPromo en menu/page.tsx que lee `promos` y `editandoPromoId` del closure. validarPromo agrega e.conflicto. CRÍTICO: edit mode excluye editandoPromoId para que una promo no choque consigo misma. El mensaje nombra cada plato en conflicto (con su variante si está lockeada) + la promo con la que choca, listando TODOS los conflictos, no solo el primero. Nombres resueltos vía el lookup canónico todosPlatos (igual que el derive promos arma "Pizza (Grande)").
+- **Ghost-flash fix**: el banner se gateó con !guardandoPromo && !guardadoPromo. Causa: al guardar, el refetch hace que la promo recién creada aparezca en la lista y, durante la ventana de ~1200ms del "Guardado", se detecta "chocando consigo misma" (en create mode editandoPromoId es null). El gate suprime el banner solo en esa ventana, sin afectar la validación normal ni el bloqueo del botón.
+- **Limpieza de datos previa**: antes de implementar, se detectaron 43 pares en conflicto en la base (query de diagnóstico), casi todos promas de testing acumuladas (F8.4b, F8.6, Smoke Test, INVALID). Se borraron 7 promas de testing (junction-primero: promo_platos, luego promos), conservando 4 limpias para smoke. La validación es forward-only: no toca conflictos preexistentes, solo previene nuevos.
+- **Smoke test (verde)**: conflicto singular y plural (mensaje lista todos los platos); tipo no importa (2x1 choca con descuento); días/variantes distintos no chocan; edición sin cambios guarda sin auto-conflicto (self-exclusion OK); ghost-flash ya no aparece al guardar válido; conflicto real se muestra y se queda.
+- **Where**: src/app/menu/page.tsx (detectarConflictoPromo, validarPromo, banner de conflicto).
+- **Commits**: feat 45045bb.
+- **Sigue**: 3b (card pública con descuento, solo descuento; 2x1 en fase posterior).
+
 ### F8.8 PIEZA 2 ✅ Variante locking en promos (lock opcional por plato) — CLOSED
 - **Closed**: 2026-05-29.
 - **Goal**: el admin puede lockear opcionalmente el descuento de una promo a una variante específica por plato, o dejar "Todas las variantes" (variante_id NULL) que aplica a todas. Patrón espejo de combos (F8.5b) pero con semántica de lock OPCIONAL, no forzado.
