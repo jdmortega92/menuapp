@@ -308,6 +308,60 @@ export default function MenuPublicoPage() {
     return promo.platosIds?.every((id: string) => platosVisiblesIds.has(id))
   })
 
+  // PIEZA 3b-i — Índice de descuentos activos para DISPLAY público.
+  // CHOKE POINT de gating: si el restaurante no es Pro o tiene promos desactivadas,
+  // el índice queda VACÍO → effDiscount() devuelve 0 en todas partes → cada superficie
+  // (tarjeta, modal) cae naturalmente a "sin descuento". Solo se indexan promos tipo
+  // 'descuento' (dos_por_uno se ignora aquí). promoPlatos: { plato_id, variante_id }[].
+  const descuentoIndex = useMemo(() => {
+    const idx = new Map<string, { varianteId: string | null; valor: number; promoNombre: string }[]>()
+    if (!(esProPublico && config?.promos_activo)) return idx
+    promosVisibles
+      .filter((p: any) => p.tipo === 'descuento')
+      .forEach((promo: any) => {
+        (promo.promoPlatos ?? []).forEach((pp: any) => {
+          const arr = idx.get(pp.plato_id) ?? []
+          arr.push({ varianteId: pp.variante_id ?? null, valor: promo.valor, promoNombre: promo.nombre })
+          idx.set(pp.plato_id, arr)
+        })
+      })
+    return idx
+  }, [promosVisibles, esProPublico, config?.promos_activo])
+
+  // % de descuento efectivo para un (plato, variante). Una entrada aplica si su
+  // varianteId coincide con la variante pedida, o si es null (aplica a TODAS las
+  // variantes). Defensivo: si varias aplican, toma el MAX valor (3a garantiza ≤1
+  // por plato+variante+día). Devuelve 0 si no hay descuento (o índice vacío).
+  function effDiscount(platoId: string, varianteId: string | null): number {
+    const entries = descuentoIndex.get(platoId)
+    if (!entries || entries.length === 0) return 0
+    let max = 0
+    for (const e of entries) {
+      if (e.varianteId === varianteId || e.varianteId === null) {
+        if (e.valor > max) max = e.valor
+      }
+    }
+    return max
+  }
+
+  // Info para el pill de la tarjeta: min/max % aplicables sobre el plato (sobre sus
+  // variantes con descuento, o el descuento único si no tiene variantes).
+  function discountInfoCard(plato: any): { min: number; max: number; applies: boolean } {
+    const tieneVar = plato.variantes && plato.variantes.length > 0
+    const valores: number[] = []
+    if (tieneVar) {
+      for (const v of plato.variantes) {
+        const d = effDiscount(plato.id, v.id)
+        if (d > 0) valores.push(d)
+      }
+    } else {
+      const d = effDiscount(plato.id, null)
+      if (d > 0) valores.push(d)
+    }
+    if (valores.length === 0) return { min: 0, max: 0, applies: false }
+    return { min: Math.min(...valores), max: Math.max(...valores), applies: true }
+  }
+
   // Plato del día: respeta su propia ventana horaria
   const platoDiaEnHorario = isCurrentlyVisible({
     horaInicio: platoDia?.horaInicio,
@@ -2061,15 +2115,41 @@ export default function MenuPublicoPage() {
                             <span style={{ fontSize: '10px', color: 'white', background: color, padding: '2px 6px', borderRadius: '8px', fontWeight: 500 }}>Plato del día</span>
                           </>
                         )
-                      ) : (
-                        <span style={{
-                          fontSize: '13px',
-                          fontWeight: 500,
-                          color: 'var(--theme-text)',
-                        }}>
-                          {plato.variantes && plato.variantes.length > 0 ? 'desde ' : ''}${plato.precio.toLocaleString('es-CO')}
-                        </span>
-                      )}
+                      ) : (() => {
+                        // PIEZA 3b-i — descuento en tarjeta. Día tiene PRECEDENCIA: este
+                        // bloque solo corre en la rama `else` de esEstePlatoElDia, así que
+                        // día y promo nunca se apilan en la tarjeta.
+                        const info = discountInfoCard(plato)
+                        if (!info.applies) {
+                          // sin descuento aplicable (o índice vacío / no-Pro) → exacto como hoy
+                          return (
+                            <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--theme-text)' }}>
+                              {platoTieneVariantes ? 'desde ' : ''}${plato.precio.toLocaleString('es-CO')}
+                            </span>
+                          )
+                        }
+                        const pillText = info.min === info.max ? `${info.max}% OFF` : `hasta ${info.max}% OFF`
+                        if (platoTieneVariantes) {
+                          // "desde $Y" con Y = min sobre variantes de precio*(1-eff/100). Sin tachón.
+                          const minDesc = Math.min(...plato.variantes.map((v: any) => v.precio * (1 - effDiscount(plato.id, v.id) / 100)))
+                          return (
+                            <>
+                              <span style={{ fontSize: '13px', fontWeight: 500, color: color }}>desde ${formatoPrecio(Math.round(minDesc))}</span>
+                              <span style={{ fontSize: '10px', color: 'white', background: color, padding: '2px 6px', borderRadius: '8px', fontWeight: 500 }}>{pillText}</span>
+                            </>
+                          )
+                        }
+                        // sin variantes: tachado original + precio con descuento + pill
+                        const disc = effDiscount(plato.id, null)
+                        const precioDesc = Math.round(plato.precio * (1 - disc / 100))
+                        return (
+                          <>
+                            <span style={{ fontSize: '12px', color: 'var(--theme-text-subtle)', textDecoration: 'line-through' }}>${formatoPrecio(plato.precio)}</span>
+                            <span style={{ fontSize: '13px', fontWeight: 500, color: color }}>${formatoPrecio(precioDesc)}</span>
+                            <span style={{ fontSize: '10px', color: 'white', background: color, padding: '2px 6px', borderRadius: '8px', fontWeight: 500 }}>{pillText}</span>
+                          </>
+                        )
+                      })()}
                       {config?.calificaciones_activo && plato.resenas > 0 && (
                         <span style={{ fontSize: '10px', color: '#F2A623' }}>
                           ★ {plato.estrellas} <span style={{ color: 'var(--theme-text-subtle)' }}>({plato.resenas})</span>
@@ -2614,9 +2694,27 @@ export default function MenuPublicoPage() {
                             />
                             <span style={{ fontSize: '14px', color: 'var(--theme-text)' }}>{v.nombre}</span>
                           </div>
-                          <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--theme-text)' }}>
-                            ${v.precio.toLocaleString('es-CO')}
-                          </span>
+                          {(() => {
+                            // PIEZA 3b-i — descuento por variante en el modal. Día tiene
+                            // precedencia: si este plato se muestra como plato del día,
+                            // no apilamos descuento de promo (effDiscount → 0).
+                            const dVar = esPlatoDelDiaModal ? 0 : effDiscount(plato.id, v.id)
+                            if (dVar > 0) {
+                              const pd = Math.round(v.precio * (1 - dVar / 100))
+                              return (
+                                <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <span style={{ fontSize: '12px', color: 'var(--theme-text-subtle)', textDecoration: 'line-through' }}>${formatoPrecio(v.precio)}</span>
+                                  <span style={{ fontSize: '14px', fontWeight: 600, color: color }}>${formatoPrecio(pd)}</span>
+                                  <span style={{ fontSize: '10px', color: color, fontWeight: 500 }}>{dVar}% OFF</span>
+                                </span>
+                              )
+                            }
+                            return (
+                              <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--theme-text)' }}>
+                                ${v.precio.toLocaleString('es-CO')}
+                              </span>
+                            )
+                          })()}
                         </label>
                       ))}
                     </div>
@@ -2658,6 +2756,20 @@ export default function MenuPublicoPage() {
                   }
                   // D4: con variantes (sin lock o variante no coincide), mostrar el precio de la variante seleccionada
                   if (tieneVariantes) {
+                    // PIEZA 3b-i — reflejar el descuento de la variante SELECCIONADA.
+                    // Día tiene precedencia (effDiscount → 0 si el plato es plato del día).
+                    const base = varianteActual ? varianteActual.precio : plato.precio
+                    const dSel = esPlatoDelDiaModal ? 0 : effDiscount(plato.id, varianteSeleccionadaId)
+                    if (dSel > 0) {
+                      const pd = Math.round(base * (1 - dSel / 100))
+                      return (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+                          <span style={{ fontSize: '16px', color: 'var(--theme-text-subtle)', textDecoration: 'line-through' }}>${formatoPrecio(base)}</span>
+                          <span style={{ fontSize: '22px', fontWeight: 500, color: color }}>${formatoPrecio(pd)}</span>
+                          <span style={{ fontSize: '11px', color: 'white', background: color, padding: '3px 8px', borderRadius: '10px', fontWeight: 500 }}>{dSel}% OFF</span>
+                        </div>
+                      )
+                    }
                     return (
                       <div style={{
                         fontSize: '22px',
@@ -2665,7 +2777,7 @@ export default function MenuPublicoPage() {
                         marginBottom: '16px',
                         color: 'var(--theme-text)',
                       }}>
-                        ${formatoPrecio(varianteActual ? varianteActual.precio : plato.precio)}
+                        ${formatoPrecio(base)}
                       </div>
                     )
                   }
@@ -2698,6 +2810,21 @@ export default function MenuPublicoPage() {
                         </span>
                       </div>
                     )
+                  }
+                  // PIEZA 3b-i — plato SIN variantes y SIN día: reflejar descuento si aplica.
+                  // (Las ramas de día ya retornaron arriba, así que aquí esPlatoDelDiaModal es false.)
+                  {
+                    const dNo = effDiscount(plato.id, null)
+                    if (dNo > 0) {
+                      const pd = Math.round(plato.precio * (1 - dNo / 100))
+                      return (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+                          <span style={{ fontSize: '16px', color: 'var(--theme-text-subtle)', textDecoration: 'line-through' }}>${formatoPrecio(plato.precio)}</span>
+                          <span style={{ fontSize: '22px', fontWeight: 500, color: color }}>${formatoPrecio(pd)}</span>
+                          <span style={{ fontSize: '11px', color: 'white', background: color, padding: '3px 8px', borderRadius: '10px', fontWeight: 500 }}>{dNo}% OFF</span>
+                        </div>
+                      )
+                    }
                   }
                   return (
                     <div style={{
