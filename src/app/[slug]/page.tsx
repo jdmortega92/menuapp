@@ -351,6 +351,42 @@ export default function MenuPublicoPage() {
     return { min: Math.min(...valores), max: Math.max(...valores), applies: true }
   }
 
+  // PIEZA 3c-i — Índice de promos 2x1 activas para DISPLAY público. Paralelo y
+  // separado de descuentoIndex: el "valor" de un 2x1 no es un porcentaje sino un
+  // mecanismo, así que no se fuerza en la forma numérica del descuento. Mismo CHOKE
+  // POINT de gating: vacío si no es Pro / promos off → has2x1() falso en todas partes.
+  const promo2x1Index = useMemo(() => {
+    const idx = new Map<string, { varianteId: string | null }[]>()
+    if (!(esProPublico && config?.promos_activo)) return idx
+    promosVisibles
+      .filter((p: any) => p.tipo === 'dos_por_uno')
+      .forEach((promo: any) => {
+        (promo.promoPlatos ?? []).forEach((pp: any) => {
+          const arr = idx.get(pp.plato_id) ?? []
+          arr.push({ varianteId: pp.variante_id ?? null })
+          idx.set(pp.plato_id, arr)
+        })
+      })
+    return idx
+  }, [promosVisibles, esProPublico, config?.promos_activo])
+
+  // ¿El (plato, variante) tiene un 2x1 activo? Una entrada aplica si su varianteId
+  // coincide con la variante pedida, o si es null (aplica a TODAS las variantes).
+  // Mirror de la lógica de matching de effDiscount. Falso si el índice está vacío.
+  function has2x1(platoId: string, varianteId: string | null): boolean {
+    const entries = promo2x1Index.get(platoId)
+    if (!entries || entries.length === 0) return false
+    return entries.some(e => e.varianteId === varianteId || e.varianteId === null)
+  }
+
+  // ¿El plato tiene algún 2x1 aplicable (en cualquier variante, o null si no tiene)?
+  // Para la lógica de pill de la tarjeta.
+  function has2x1Card(plato: any): boolean {
+    const tieneVar = plato.variantes && plato.variantes.length > 0
+    if (tieneVar) return plato.variantes.some((v: any) => has2x1(plato.id, v.id))
+    return has2x1(plato.id, null)
+  }
+
   // Plato del día: respeta su propia ventana horaria
   const platoDiaEnHorario = isCurrentlyVisible({
     horaInicio: platoDia?.horaInicio,
@@ -1783,8 +1819,36 @@ export default function MenuPublicoPage() {
                         // bloque solo corre en la rama `else` de esEstePlatoElDia, así que
                         // día y promo nunca se apilan en la tarjeta.
                         const info = discountInfoCard(plato)
-                        if (!info.applies) {
-                          // sin descuento aplicable (o índice vacío / no-Pro) → exacto como hoy
+                        const hasDescuento = info.applies
+                        // PIEZA 3c-i — 2x1 en tarjeta (mismo bloque, día ya tiene precedencia).
+                        const has2x1Any = has2x1Card(plato)
+                        // MIXTO: distintas variantes con tipos distintos (3a permite Grande 2x1 +
+                        // Mediana 20%). Pill genérico "Ofertas", precio plano (no se puede tachar
+                        // de forma significativa cuando los tipos se mezclan).
+                        if (hasDescuento && has2x1Any) {
+                          return (
+                            <>
+                              <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--theme-text)' }}>
+                                {platoTieneVariantes ? 'desde ' : ''}${plato.precio.toLocaleString('es-CO')}
+                              </span>
+                              <span style={{ fontSize: '10px', color: 'white', background: color, padding: '2px 6px', borderRadius: '8px', fontWeight: 500 }}>Ofertas</span>
+                            </>
+                          )
+                        }
+                        // SOLO 2x1 (sin descuento): precio normal SIN tachón + pill "2x1" + texto.
+                        if (has2x1Any) {
+                          return (
+                            <>
+                              <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--theme-text)' }}>
+                                {platoTieneVariantes ? 'desde ' : ''}${plato.precio.toLocaleString('es-CO')}
+                              </span>
+                              <span style={{ fontSize: '10px', color: 'white', background: color, padding: '2px 6px', borderRadius: '8px', fontWeight: 500 }}>2x1</span>
+                              <span style={{ fontSize: '10px', color: color, fontWeight: 500 }}>Lleva 2, paga 1</span>
+                            </>
+                          )
+                        }
+                        if (!hasDescuento) {
+                          // sin promo aplicable (o índice vacío / no-Pro) → exacto como hoy
                           return (
                             <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--theme-text)' }}>
                               {platoTieneVariantes ? 'desde ' : ''}${plato.precio.toLocaleString('es-CO')}
@@ -2372,6 +2436,17 @@ export default function MenuPublicoPage() {
                                 </span>
                               )
                             }
+                            // PIEZA 3c-i — 2x1 por variante (3a garantiza que no coexiste con
+                            // descuento en la misma variante). Precio plano + badge "2x1".
+                            const is2x1Var = esPlatoDelDiaModal ? false : has2x1(plato.id, v.id)
+                            if (is2x1Var) {
+                              return (
+                                <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--theme-text)' }}>${formatoPrecio(v.precio)}</span>
+                                  <span style={{ fontSize: '10px', color: color, fontWeight: 500 }}>2x1</span>
+                                </span>
+                              )
+                            }
                             return (
                               <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--theme-text)' }}>
                                 ${v.precio.toLocaleString('es-CO')}
@@ -2433,6 +2508,17 @@ export default function MenuPublicoPage() {
                         </div>
                       )
                     }
+                    // PIEZA 3c-i — 2x1 de la variante seleccionada (3a: no coexiste con descuento).
+                    const sel2x1 = esPlatoDelDiaModal ? false : has2x1(plato.id, varianteSeleccionadaId)
+                    if (sel2x1) {
+                      return (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+                          <span style={{ fontSize: '22px', fontWeight: 500, color: 'var(--theme-text)' }}>${formatoPrecio(base)}</span>
+                          <span style={{ fontSize: '11px', color: 'white', background: color, padding: '3px 8px', borderRadius: '10px', fontWeight: 500 }}>2x1</span>
+                          <span style={{ fontSize: '11px', color: color, fontWeight: 500 }}>Lleva 2, paga 1</span>
+                        </div>
+                      )
+                    }
                     return (
                       <div style={{
                         fontSize: '22px',
@@ -2485,6 +2571,16 @@ export default function MenuPublicoPage() {
                           <span style={{ fontSize: '16px', color: 'var(--theme-text-subtle)', textDecoration: 'line-through' }}>${formatoPrecio(plato.precio)}</span>
                           <span style={{ fontSize: '22px', fontWeight: 500, color: color }}>${formatoPrecio(pd)}</span>
                           <span style={{ fontSize: '11px', color: 'white', background: color, padding: '3px 8px', borderRadius: '10px', fontWeight: 500 }}>{dNo}% OFF</span>
+                        </div>
+                      )
+                    }
+                    // PIEZA 3c-i — plato SIN variantes con 2x1: precio plano + badge "2x1".
+                    if (has2x1(plato.id, null)) {
+                      return (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+                          <span style={{ fontSize: '22px', fontWeight: 500, color: 'var(--theme-text)' }}>${formatoPrecio(plato.precio)}</span>
+                          <span style={{ fontSize: '11px', color: 'white', background: color, padding: '3px 8px', borderRadius: '10px', fontWeight: 500 }}>2x1</span>
+                          <span style={{ fontSize: '11px', color: color, fontWeight: 500 }}>Lleva 2, paga 1</span>
                         </div>
                       )
                     }
