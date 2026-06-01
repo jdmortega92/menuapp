@@ -405,12 +405,28 @@ export default function MenuPublicoPage() {
     const incremento = esPromo2x1 ? 2 : 1
     setPedido({ ...pedido, [cartKey]: (pedido[cartKey] || 0) + incremento })
     // F8.7: si la key es de plato del día, registrar el precio especial (idempotente).
+    // PIEZA 3b-ii-A: si no es plato del día pero el plato/variante tiene un descuento
+    // activo, registrar el precio con descuento. MUTUAMENTE EXCLUYENTE: día gana sobre
+    // promo (los items de día llevan source==='dia' y nunca deben sobrescribirse).
     const parsed = parseCartKey(cartKey)
     if (parsed.source === 'dia' && platoDia && parsed.platoId === platoDia.id) {
       setPreciosPromo({
         ...preciosPromo,
         [cartKey]: { precioUnitario: platoDia.precioEspecial, etiqueta: 'Plato del día' }
       })
+    } else {
+      const pct = effDiscount(parsed.platoId, parsed.varianteId ?? null)
+      if (pct > 0) {
+        const plato = todosLosPlatos.find((p: any) => p.id === parsed.platoId)
+        if (plato) {
+          const base = precioEfectivo(plato, parsed.varianteId)
+          const precioDesc = Math.round(base * (1 - pct / 100))
+          setPreciosPromo({
+            ...preciosPromo,
+            [cartKey]: { precioUnitario: precioDesc, etiqueta: `${pct}% OFF` }
+          })
+        }
+      }
     }
   }
 
