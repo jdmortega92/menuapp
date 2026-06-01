@@ -2989,6 +2989,15 @@ export default function MiMenuPage() {
                 platoId: platoGanadorConfig.platoId,
               }, variantesActualesDia)
               const valido = Object.keys(errores).length === 0
+              // Nota contextual (informativa, NO bloquea guardado): el plato del día es
+              // de un solo día (hoy), así que el cruce con promos solo puede ocurrir hoy.
+              // Mapear "hoy" (offset Colombia, igual que guardarPlatoDia) a código de día
+              // y comprobar si el plato tiene alguna promo descuento ACTIVA ese día.
+              const codigoHoy = ['dom', 'lun', 'mar', 'mie', 'jue', 'vie', 'sab'][new Date(Date.now() - 5 * 60 * 60 * 1000).getDay()]
+              const platoDiaTienePromoHoy = !!platoDiaConfig.platoId && promos.some(p =>
+                p.activo && p.tipo === 'descuento' &&
+                (p.dias || []).includes(codigoHoy) &&
+                (p.promoPlatos || []).some((pp: any) => pp.plato_id === platoDiaConfig.platoId))
               return (
               <div style={{ padding: '14px 20px' }}>
                 <div className="card" style={{ padding: '14px', marginBottom: '14px' }}>
@@ -3037,6 +3046,11 @@ export default function MiMenuPage() {
                       </div>
                     )
                   })()}
+                  {platoDiaTienePromoHoy && (
+                    <div style={{ fontSize: '11px', color: 'var(--color-warning)', background: 'var(--color-warning-light)', padding: '8px 10px', borderRadius: '6px', marginBottom: '8px' }}>
+                      ⚠ Este plato tiene promociones activas hoy. El precio del Plato del día tendrá prioridad mientras esté activo.
+                    </div>
+                  )}
                   {(() => {
                     const platoSel = todosPlatos.find(p => p.id === platoDiaConfig.platoId)
                     const variantes = platoSel?.variantes ?? []
