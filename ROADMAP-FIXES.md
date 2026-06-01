@@ -2,7 +2,7 @@
 
 > **Audience**: Claude Code (Opus) working on the MenuApp codebase.
 > **Owner**: Julian.
-> **Last updated**: 2026-05-29.
+> **Last updated**: 2026-06-01.
 > **Stack**: Next.js 16 (App Router) + TypeScript + Tailwind + Supabase + Vercel.
 
 ---
@@ -490,6 +490,18 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
 
 ## Items
 
+### F8.8 PIEZA 3b ✅ Descuentos en la card pública (display + carrito + remoción) — CLOSED
+- **Closed**: 2026-06-01.
+- **Goal**: mover las promos de descuento de la sección "Promos" separada (con su propio modal) a la tarjeta del plato y el modal de detalle, integrándolas donde el cliente realmente mira. Solo descuento en esta fase (2x1 queda para 3c). Solo plan Pro.
+- **Decisión de producto clave (Julian)**: aprovechar la lógica de conflictos de 3a. Como dos promos lockeadas a variantes distintas NO chocan, un mismo plato puede tener descuentos DISTINTOS por variante (ej. Grande 30%, Mediana 20%) el mismo día. La card recolecta todas las promos de descuento activas del plato y el modal las desglosa por variante. La card no debía desaprovechar esa lógica ya construida.
+- **Sub-paso 3b-i (display, commit 2a689c0)**: descuentoIndex (Map plato_id → promos de descuento activas, gateado en el origen por esProPublico && config.promos_activo → no-Pro no ve nada) + helpers effDiscount y discountInfoCard. Tarjeta: tachado + precio con descuento + pill ("X% OFF", o "hasta X% OFF" cuando las variantes tienen descuentos distintos); variantizados muestran "desde $Y" descontado. Modal: desglose por variante (cada una con su tachado/descontado/%). Día tiene PRECEDENCIA sobre promo en ambas superficies. Carrito intacto en este sub-paso (a propósito). Sorprendeme card no tocada (superficie separada).
+- **Advertencia Plato del Día (admin, commit 07c9e64)**: nota contextual inteligente — cuando el admin marca como Plato del Día un plato que ya tiene una promo de descuento activa HOY, aparece una nota explicando que el precio del Plato del Día tiene prioridad. Plato del Día es de un solo día (hoy), así que el cruce solo puede ocurrir hoy; mapea "hoy" a código de día con el mismo offset Colombia -5h del guardado. Booleano derivado, sin estado/fetch nuevo, no bloquea guardado. Solo descuento (2x1 excluido porque es invisible al público esta fase). Texto general (no nombra la promo) para cubrir el caso de varias promos.
+- **Sub-paso 3b-ii-A (carrito, commit 3d15ba9)**: agregarAlPedido index-aware. Ramas mutuamente excluyentes: día primero (gana siempre), si no, busca effDiscount del plato+variante y escribe preciosPromo[cartKey] = { precioUnitario: round(base*(1-pct/100)), etiqueta: 'X% OFF' } usando el mismo effDiscount/precioEfectivo del display → precio del carrito == precio mostrado. quitarDelPedido ya limpia la entrada al llegar a cero. Total/bandeja/WhatsApp leen preciosPromo y recogen el descuento automático. Combos no afectados. Verificado punta a punta incluyendo el mensaje de WhatsApp.
+- **Sub-paso 3b-ii-B (remoción, commit ad92daa)**: removida la UI vieja — chip de Promos, sección Promociones, modal de promo, estados (mostrarPromos/promoDetalle/promoSeleccion), handler agregarPromoAlPedido, y helpers huérfanos (algunaKeyEsDePlato, obtenerKeyDePlato, platosPromo). +3/-356. Conservados: promosVisibles/promosPublico, descuentoIndex/effDiscount/discountInfoCard, precioEfectivo, preciosPromo, agregarAlPedido/quitarDelPedido y el special-casing 2x1 (reusado en 3c). tsc verde, grep de símbolos borrados vacío.
+- **Where**: src/app/[slug]/page.tsx (display, carrito, remoción); src/app/menu/page.tsx (advertencia Plato del Día).
+- **Commits**: 2a689c0, 07c9e64, 3d15ba9, ad92daa.
+- **Sigue**: 3c (2x1 en la card; los 2x1 quedan invisibles al público hasta entonces). En 3c, extender la advertencia de Plato del Día para que también cubra 2x1.
+
 ### F8.8 PIEZA 3a ✅ Validación de conflictos entre promos (admin) — CLOSED
 - **Closed**: 2026-05-29.
 - **Goal**: impedir que el admin cree o edite una promo que entre en conflicto con otra promo activa. Primer sub-trabajo de PIEZA 3 (la validación va ANTES de la card pública, para que la card asuma dato sin conflictos). Decisión de producto de Julian: en vez de resolver el solapamiento en la card (mayor descuento gana, etc.), se previene en el admin.
@@ -501,7 +513,7 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
 - **Smoke test (verde)**: conflicto singular y plural (mensaje lista todos los platos); tipo no importa (2x1 choca con descuento); días/variantes distintos no chocan; edición sin cambios guarda sin auto-conflicto (self-exclusion OK); ghost-flash ya no aparece al guardar válido; conflicto real se muestra y se queda.
 - **Where**: src/app/menu/page.tsx (detectarConflictoPromo, validarPromo, banner de conflicto).
 - **Commits**: feat 45045bb.
-- **Sigue**: 3b (card pública con descuento, solo descuento; 2x1 en fase posterior).
+- **Sigue**: 3b (card pública con descuento, solo descuento; 2x1 en fase posterior). 3b CERRADO en ad92daa.
 
 ### F8.8 PIEZA 2 ✅ Variante locking en promos (lock opcional por plato) — CLOSED
 - **Closed**: 2026-05-29.
