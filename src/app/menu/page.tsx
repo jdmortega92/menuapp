@@ -3568,10 +3568,26 @@ export default function MiMenuPage() {
               ))}
             </ul>
 
-            <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '10px' }}>
-              Vinculadas a {cascadeWarning.combosCount} {cascadeWarning.combosCount === 1 ? 'combo' : 'combos'} y{' '}
-              {cascadeWarning.destacadosCount} {cascadeWarning.destacadosCount === 1 ? 'destacado' : 'destacados'}.
-            </div>
+            {(() => {
+              // Frase dinámica: solo incluye los tipos con count > 0, con singular/plural
+              // por sustantivo y unión en español (a, b y c → coma + "y" antes del último).
+              const clausulas = [
+                { n: cascadeWarning.combosCount, sing: 'combo', plur: 'combos' },
+                { n: cascadeWarning.destacadosCount, sing: 'destacado', plur: 'destacados' },
+                { n: cascadeWarning.promosCount, sing: 'promo', plur: 'promos' },
+              ]
+                .filter(c => c.n > 0)
+                .map(c => `${c.n} ${c.n === 1 ? c.sing : c.plur}`)
+              if (clausulas.length === 0) return null
+              const texto = clausulas.length === 1
+                ? clausulas[0]
+                : `${clausulas.slice(0, -1).join(', ')} y ${clausulas[clausulas.length - 1]}`
+              return (
+                <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '10px' }}>
+                  Vinculadas a {texto}.
+                </div>
+              )
+            })()}
 
             <div style={{ fontSize: '12px', color: 'var(--color-danger)', marginBottom: '16px' }}>
               Si continuás, esas vinculaciones se eliminarán automáticamente.
