@@ -559,7 +559,10 @@ export default function MenuPublicoPage() {
       productos: itemsPedido.map(i => ({
         nombre: i.variante ? `${i.plato.nombre} (${i.variante.nombre})` : i.plato.nombre,
         cantidad: i.cantidad,
-        precio: i.variante ? i.variante.precio : i.plato.precio,
+        // Precio efectivamente cobrado (promo-aware): misma expresión que la línea del
+        // mensaje de WhatsApp, para que sum(precio*cantidad) coincida con total.
+        precio: i.promo ? i.promo.precioUnitario : (i.variante ? i.variante.precio : i.plato.precio),
+        etiqueta: i.promo ? i.promo.etiqueta : null,
       })),
     }).then(({ error }: any) => {
 
