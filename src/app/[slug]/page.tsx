@@ -2758,11 +2758,25 @@ export default function MenuPublicoPage() {
                     }}>+</div>
                   </div>
                   {(() => {
-                    // F8.7: discount aplica cuando (a) plato sin variantes, o (b) plato con variantes
-                    // Y variante lockeada coincide con la seleccionada (esPlatoDelDiaPrecio hoisted arriba).
-                    const precioParaCalcular = (esPlatoDelDiaPrecio && platoDia)
-                      ? platoDia.precioEspecial
-                      : (varianteActual ? varianteActual.precio : plato.precio)
+                    // PIEZA 3c (label promo-aware): la etiqueta REFLEJA lo que cobra
+                    // agregarAlPedido, con el MISMO orden y gates del carrito:
+                    // día (esPlatoDelDiaPrecio) → descuento → 2x1 → plano.
+                    const base = varianteActual ? varianteActual.precio : plato.precio
+                    const pct = effDiscount(plato.id, varianteSeleccionadaId ?? null)
+                    let label: string
+                    if (esPlatoDelDiaPrecio && platoDia) {
+                      label = `Agregar $${formatoPrecio(cantidadMostrar * platoDia.precioEspecial)}`
+                    } else if (pct > 0) {
+                      const precioDesc = Math.round(base * (1 - pct / 100))
+                      label = `Agregar $${formatoPrecio(cantidadMostrar * precioDesc)}`
+                    } else if (has2x1(plato.id, varianteSeleccionadaId ?? null)) {
+                      // 2x1: precio plano (lo que se paga por las 2 unidades que entran en
+                      // el primer add) + sufijo. NO multiplicar por cantidadMostrar (sobre-
+                      // estimaría si ya hay qty 2/4 en el carrito).
+                      label = `Agregar $${formatoPrecio(base)} · 2x1`
+                    } else {
+                      label = `Agregar $${formatoPrecio(cantidadMostrar * base)}`
+                    }
                     return (
                       <div onClick={() => {
                         if (cantidadActual === 0) {
@@ -2781,7 +2795,7 @@ export default function MenuPublicoPage() {
                         fontWeight: 500,
                         cursor: 'pointer',
                       }}>
-                        Agregar ${formatoPrecio(cantidadMostrar * precioParaCalcular)}
+                        {label}
                       </div>
                     )
                   })()}
