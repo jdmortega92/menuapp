@@ -425,32 +425,41 @@ export default function MenuPublicoPage() {
     : categoriasFiltradas
 
   function agregarAlPedido(cartKey: string) {
-    // Si el plato tiene promo 2x1, sumar de 2 en 2 (lleva 4, paga 2)
-    const esPromo2x1 = preciosPromo[cartKey]?.etiqueta === '2x1'
-    const incremento = esPromo2x1 ? 2 : 1
+    // PIEZA 3c-ii: parsear ANTES del incremento para poder consultar el índice 2x1.
+    // En el PRIMER add de un 2x1 la entrada de preciosPromo aún no existe (se escribe
+    // más abajo en esta misma fn), así que el incremento debe derivarse del ÍNDICE
+    // (has2x1), no solo de la entrada → primer add ya suma de a 2 (qty par desde el inicio).
+    const parsed = parseCartKey(cartKey)
+    const es2x1 = preciosPromo[cartKey]?.etiqueta === '2x1' || has2x1(parsed.platoId, parsed.varianteId ?? null)
+    const incremento = es2x1 ? 2 : 1
     setPedido({ ...pedido, [cartKey]: (pedido[cartKey] || 0) + incremento })
     // F8.7: si la key es de plato del día, registrar el precio especial (idempotente).
     // PIEZA 3b-ii-A: si no es plato del día pero el plato/variante tiene un descuento
-    // activo, registrar el precio con descuento. MUTUAMENTE EXCLUYENTE: día gana sobre
-    // promo (los items de día llevan source==='dia' y nunca deben sobrescribirse).
-    const parsed = parseCartKey(cartKey)
+    // activo, registrar el precio con descuento. PIEZA 3c-ii: si no, y tiene 2x1, registrar
+    // precioUnitario = round(base/2) (lleva 2 paga 1). MUTUAMENTE EXCLUYENTE y ordenado:
+    // día → descuento → 2x1. Día gana siempre (los items de día llevan source==='dia' y
+    // nunca deben sobrescribirse); 3a garantiza que descuento y 2x1 no coexisten por variante.
     if (parsed.source === 'dia' && platoDia && parsed.platoId === platoDia.id) {
       setPreciosPromo({
         ...preciosPromo,
         [cartKey]: { precioUnitario: platoDia.precioEspecial, etiqueta: 'Plato del día' }
       })
     } else {
+      const plato = todosLosPlatos.find((p: any) => p.id === parsed.platoId)
       const pct = effDiscount(parsed.platoId, parsed.varianteId ?? null)
-      if (pct > 0) {
-        const plato = todosLosPlatos.find((p: any) => p.id === parsed.platoId)
-        if (plato) {
-          const base = precioEfectivo(plato, parsed.varianteId)
-          const precioDesc = Math.round(base * (1 - pct / 100))
-          setPreciosPromo({
-            ...preciosPromo,
-            [cartKey]: { precioUnitario: precioDesc, etiqueta: `${pct}% OFF` }
-          })
-        }
+      if (pct > 0 && plato) {
+        const base = precioEfectivo(plato, parsed.varianteId)
+        const precioDesc = Math.round(base * (1 - pct / 100))
+        setPreciosPromo({
+          ...preciosPromo,
+          [cartKey]: { precioUnitario: precioDesc, etiqueta: `${pct}% OFF` }
+        })
+      } else if (has2x1(parsed.platoId, parsed.varianteId ?? null) && plato) {
+        const base = precioEfectivo(plato, parsed.varianteId)
+        setPreciosPromo({
+          ...preciosPromo,
+          [cartKey]: { precioUnitario: Math.round(base / 2), etiqueta: '2x1' }
+        })
       }
     }
   }

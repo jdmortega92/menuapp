@@ -2995,7 +2995,7 @@ export default function MiMenuPage() {
               // y comprobar si el plato tiene alguna promo descuento ACTIVA ese día.
               const codigoHoy = ['dom', 'lun', 'mar', 'mie', 'jue', 'vie', 'sab'][new Date(Date.now() - 5 * 60 * 60 * 1000).getDay()]
               const platoDiaTienePromoHoy = !!platoDiaConfig.platoId && promos.some(p =>
-                p.activo && p.tipo === 'descuento' &&
+                p.activo && (p.tipo === 'descuento' || p.tipo === 'dos_por_uno') &&
                 (p.dias || []).includes(codigoHoy) &&
                 (p.promoPlatos || []).some((pp: any) => pp.plato_id === platoDiaConfig.platoId))
               return (
