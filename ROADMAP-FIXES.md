@@ -866,7 +866,7 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
   - Empty-state for non-variante platos: render nothing
     (presence/absence of dropdown IS the variante indicator).
   - Search input unchanged (no match against variante names).
-  - Cascade warning copy NOT enriched in F8.5b (defer to F8.8).
+  - Cascade warning copy enriquecido — RESUELTO (commit b5bb0f2): el modal de borrado de variante computaba promosCount (y gateaba el aviso vía refCount) pero solo renderizaba combos y destacados → borrar una variante referenciada SOLO por promos mostraba el engañoso "Vinculadas a 0 combos y 0 destacados". Ahora la frase se arma dinámicamente solo con las cláusulas con count > 0, con singular/plural por sustantivo y unión española natural (a; a y b; a, b y c), así un borrado solo-promos lee "Vinculadas a 1 promo". Solo display; flujo delete/save intacto. (Pendiente aparte, no relacionado: "legacy combo badge in admin list", línea siguiente.)
   - Legacy combo badge in admin list NOT added (defer to F8.7/F8.8).
   - Force-variante error copy: banner + per-row red border.
   - Implementation order: types → 6 reset literals (locking
