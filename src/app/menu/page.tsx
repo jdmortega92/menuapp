@@ -162,6 +162,16 @@ export default function MiMenuPage() {
     esGanadorActual: boolean;
     onConfirm: () => void;
   } | null>(null)
+  const [categoriaDeleteWarning, setCategoriaDeleteWarning] = useState<{
+    categoriaId: string;
+    nombre: string;
+    platosCount: number;
+    combosCount: number;
+    promosCount: number;
+    esDiaActual: boolean;
+    esGanadorActual: boolean;
+    onConfirm: () => void;
+  } | null>(null)
   const [intentoEditPlato, setIntentoEditPlato] = useState(false)
   const [touchedEditPlato, setTouchedEditPlato] = useState<Record<string, boolean>>({})
   const [guardandoEditPlato, setGuardandoEditPlato] = useState(false)
@@ -1813,7 +1823,21 @@ export default function MiMenuPage() {
                         setMenuCategoria(null)
                       }}
                         style={{ padding: '10px 14px', fontSize: '13px', cursor: 'pointer', borderBottom: '1px solid var(--border-light)' }}>Horario de visibilidad</div>
-                      <div onClick={() => eliminarCategoria(cat.id)}
+                      <div onClick={() => {
+                        const categoryPlatoIds = cat.platos.map(p => p.id)
+                        const combosCount = combos.filter(c => c.platosIds.some((id: string) => categoryPlatoIds.includes(id))).length
+                        const promosCount = promos.filter(p => p.activo && p.platosIds.some((id: string) => categoryPlatoIds.includes(id))).length
+                        const esDiaActual = platoDiaActivo && categoryPlatoIds.includes(platoDiaConfig.platoId)
+                        const esGanadorActual = platoGanadorActivo && categoryPlatoIds.includes(platoGanadorConfig.platoId)
+                        setMenuCategoria(null)
+                        setCategoriaDeleteWarning({
+                          categoriaId: cat.id,
+                          nombre: cat.nombre,
+                          platosCount: cat.platos.length,
+                          combosCount, promosCount, esDiaActual, esGanadorActual,
+                          onConfirm: () => eliminarCategoria(cat.id),
+                        })
+                      }}
                         style={{ padding: '10px 14px', fontSize: '13px', color: 'var(--color-danger)', cursor: 'pointer' }}>Eliminar categoría</div>
                     </div>
                   </>
@@ -3931,6 +3955,77 @@ export default function MiMenuPage() {
                 </button>
                 <button
                   onClick={() => setPlatoDeleteWarning(null)}
+                  className="btn-outline"
+                  style={{ flex: 1, padding: '10px', fontSize: '13px' }}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </Modal>
+          )
+        })()}
+
+        {categoriaDeleteWarning && (() => {
+          const { platosCount, combosCount, promosCount, esDiaActual, esGanadorActual } = categoriaDeleteWarning
+          const tieneRefs = combosCount > 0 || promosCount > 0 || esDiaActual || esGanadorActual
+          const textoVinc = construirTextoVinculaciones([
+            { n: combosCount, sing: 'combo', plur: 'combos' },
+            { n: promosCount, sing: 'promo', plur: 'promos' },
+          ])
+          return (
+            <Modal
+              isOpen={!!categoriaDeleteWarning}
+              onClose={() => setCategoriaDeleteWarning(null)}
+              title="¿Estás seguro de eliminar esta categoría?"
+              maxWidth={460}
+            >
+              <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '12px' }}>
+                {categoriaDeleteWarning.nombre || '(sin nombre)'}
+              </div>
+
+              {platosCount > 0 && (
+                <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '10px' }}>
+                  Se eliminarán {platosCount} {platosCount === 1 ? 'plato' : 'platos'}.
+                </div>
+              )}
+
+              {textoVinc && (
+                <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '10px' }}>
+                  Vinculada a {textoVinc}.
+                </div>
+              )}
+
+              {esDiaActual && (
+                <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--color-danger)', marginBottom: '8px' }}>
+                  Es tu Plato del Día actual — el destacado quedará vacío.
+                </div>
+              )}
+              {esGanadorActual && (
+                <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--color-danger)', marginBottom: '8px' }}>
+                  Es tu Plato Ganador actual — el destacado quedará vacío.
+                </div>
+              )}
+
+              <div style={{ fontSize: '12px', color: 'var(--color-danger)', marginBottom: '16px' }}>
+                {tieneRefs
+                  ? 'Si continuás, la categoría, sus platos y esas vinculaciones se eliminarán automáticamente. Esta acción no se puede deshacer.'
+                  : 'Esta acción no se puede deshacer.'}
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  onClick={() => {
+                    const cb = categoriaDeleteWarning.onConfirm
+                    setCategoriaDeleteWarning(null)
+                    cb()
+                  }}
+                  className="btn-primary"
+                  style={{ flex: 1, padding: '10px', fontSize: '13px', background: 'var(--color-danger)', borderColor: 'var(--color-danger)' }}
+                >
+                  Sí, eliminar
+                </button>
+                <button
+                  onClick={() => setCategoriaDeleteWarning(null)}
                   className="btn-outline"
                   style={{ flex: 1, padding: '10px', fontSize: '13px' }}
                 >
