@@ -1112,7 +1112,30 @@ export default function MiMenuPage() {
   }
   async function eliminarCategoria(id: string) {
     const supabase = createClient()
-    await supabase.from('platos').delete().eq('categoria_id', id)
+    const cat = categorias.find(c => c.id === id)
+    const platosIds = cat ? cat.platos.map(p => p.id) : []
+    const eraGanador = platoGanadorActivo && platosIds.includes(platoGanadorConfig.platoId)
+    const eraDia = platoDiaActivo && platosIds.includes(platoDiaConfig.platoId)
+    // plato_ganador.plato_id es NO ACTION (no cascada): si alguno de los platos de la
+    // categoría es el ganador actual, hay que borrar su fila ANTES, o el DELETE de platos
+    // fallaría por violación de FK. combo_platos / promo_platos / plato_del_dia SÍ son CASCADE.
+    if (eraGanador) await supabase.from('plato_ganador').delete().eq('plato_id', platoGanadorConfig.platoId)
+    const { error } = await supabase.from('platos').delete().eq('categoria_id', id)
+    if (error) {
+      alert('No se pudo eliminar la categoría. Intentá de nuevo.')
+      return
+    }
+    // Refrescar estado local de los destacados si la categoría borrada los ocupaba.
+    if (eraGanador) {
+      setPlatoGanadorActivo(false)
+      setPlatoGanadorConfig({ platoId: '', varianteId: '', titulo: 'Recomendado del chef', descripcion: '' })
+      await invalidateAll('plato-ganador')
+    }
+    if (eraDia) {
+      setPlatoDiaActivo(false)
+      setPlatoDiaConfig({ platoId: '', varianteId: '', precioEspecial: '', horaInicio: '11:00', horaFin: '15:00' })
+      await invalidateAll('plato-del-dia')
+    }
     await supabase.from('categorias').delete().eq('id', id)
     await mutateCategoriasYPlatos()
     // El borrado en cascada de los platos pudo dejar promos sin platos.
