@@ -127,7 +127,9 @@ export default function MiMenuPage() {
     precio: string;
     descripcion: string;
     hasVariantes: boolean;
-    variantes: { id?: string; nombre: string; precio: string }[];
+    // _pendingDelete: variante persistida marcada para quitar al guardar (sigue visible,
+    // tachada, con Undo). Solo aplica a variantes con id; las frescas se quitan directo.
+    variantes: { id?: string; nombre: string; precio: string; _pendingDelete?: boolean }[];
   }>({
     nombre: '',
     precio: '',
@@ -1142,17 +1144,23 @@ export default function MiMenuPage() {
     nombre: string;
     precio: string;
     hasVariantes?: boolean;
-    variantes?: { nombre: string; precio: string }[];
+    variantes?: { nombre: string; precio: string; _pendingDelete?: boolean }[];
   }): Record<string, string> {
     const e: Record<string, string> = {}
     if (!state.nombre.trim()) e.nombre = 'El nombre es obligatorio'
 
     if (state.hasVariantes) {
       const variantes = state.variantes || []
-      if (variantes.length < 2) {
+      // Solo cuentan/validan las variantes que SOBREVIVEN (las marcadas para quitar
+      // no bloquean el guardado por sus campos, y no cuentan para el mínimo de 2).
+      const sobreviven = variantes.filter(v => !v._pendingDelete)
+      if (sobreviven.length < 2) {
         e.variantes = 'Necesitas al menos 2 variantes'
       } else {
+        // Validar por índice ORIGINAL (las filas marcadas siguen en el array, los
+        // estilos de error están keyed por índice de render).
         variantes.forEach((v, i) => {
+          if (v._pendingDelete) return
           if (!v.nombre.trim()) {
             e[`variante_${i}_nombre`] = 'Nombre obligatorio'
           }
@@ -1321,7 +1329,8 @@ export default function MiMenuPage() {
 
     let precioParaUpdate: number
     if (editPlato.hasVariantes) {
-      const precios = editPlato.variantes.map(v => parseInt(v.precio))
+      // El "desde $X" del plato = min sobre las variantes que SOBREVIVEN (no marcadas).
+      const precios = editPlato.variantes.filter(v => !v._pendingDelete).map(v => parseInt(v.precio))
       precioParaUpdate = Math.min(...precios)
     } else {
       precioParaUpdate = parseInt(editPlato.precio)
@@ -1332,29 +1341,34 @@ export default function MiMenuPage() {
     let rowsToDelete: { id: string; nombre: string; precio: number; orden: number }[] = []
 
     if (editPlato.hasVariantes) {
-      const formIds = new Set(
-        editPlato.variantes.filter(v => v.id).map(v => v.id!)
-      )
-
-      rowsToInsert = editPlato.variantes
+      // Variantes que sobreviven al guardado (no marcadas para quitar), en orden de
+      // render. El _idx (→ orden) se asigna sobre ESTA lista filtrada para que el orden
+      // quede contiguo, sin huecos dejados por las filas marcadas (que siguen en el array
+      // de edición pero no se persisten).
+      const sobrevivientes = editPlato.variantes
+        .filter(v => !v._pendingDelete)
         .map((v, idx) => ({ ...v, _idx: idx }))
-        .filter(v => !v.id)
 
+      // formIds = ids que SE CONSERVAN. Excluye las marcadas → caen en rowsToDelete abajo.
+      const formIds = new Set(sobrevivientes.filter(v => v.id).map(v => v.id!))
+
+      rowsToInsert = sobrevivientes.filter(v => !v.id)
+
+      // Persistida que ya no está en el form (incluye las marcadas _pendingDelete, pues
+      // quedaron fuera de formIds) → borrar. Una sola derivación, sin doble conteo.
       rowsToDelete = originalVariantes.filter(o => !formIds.has(o.id))
 
-      rowsToUpdate = editPlato.variantes
-        .map((v, idx) => ({ ...v, _idx: idx }))
-        .filter(v => {
-          if (!v.id) return false
-          const orig = originalVariantes.find(o => o.id === v.id)
-          if (!orig) return false
-          const precioInt = parseInt(v.precio)
-          return (
-            v.nombre.trim() !== orig.nombre ||
-            precioInt !== orig.precio ||
-            v._idx !== orig.orden
-          )
-        })
+      rowsToUpdate = sobrevivientes.filter(v => {
+        if (!v.id) return false
+        const orig = originalVariantes.find(o => o.id === v.id)
+        if (!orig) return false
+        const precioInt = parseInt(v.precio)
+        return (
+          v.nombre.trim() !== orig.nombre ||
+          precioInt !== orig.precio ||
+          v._idx !== orig.orden
+        )
+      })
     } else {
       // Toggle OFF — delete ALL original variantes regardless of in-memory state
       rowsToInsert = []
@@ -2160,12 +2174,28 @@ export default function MiMenuPage() {
                               </div>
                             )}
 
-                            {editPlato.variantes.map((v, i) => (
-                              <div key={v.id ?? `new-${i}`} style={{ display: 'flex', gap: '6px', marginBottom: '8px', alignItems: 'flex-start' }}>
+                            {editPlato.variantes.map((v, i) => {
+                              const pending = !!v._pendingDelete
+                              const esUltima = i === editPlato.variantes.length - 1
+                              // Referencias en memoria (solo se muestran si la fila está marcada).
+                              const combosRef = pending && v.id ? combos.filter(c => (c.combo_platos || []).some((cp: any) => cp.variante_id === v.id)).length : 0
+                              const promosRef = pending && v.id ? promos.filter(p => p.activo && (p.promoPlatos || []).some((pp: any) => pp.variante_id === v.id)).length : 0
+                              const esDiaVar = pending && !!v.id && platoDiaActivo && platoDiaConfig.varianteId === v.id
+                              const esGanadorVar = pending && !!v.id && platoGanadorActivo && platoGanadorConfig.varianteId === v.id
+                              const textoRefs = pending
+                                ? construirTextoVinculaciones([
+                                    { n: combosRef, sing: 'combo', plur: 'combos' },
+                                    { n: promosRef, sing: 'promo', plur: 'promos' },
+                                  ])
+                                : null
+                              return (
+                              <div key={v.id ?? `new-${i}`} style={{ marginBottom: '8px' }}>
+                                <div style={{ display: 'flex', gap: '6px', alignItems: 'flex-start', opacity: pending ? 0.55 : 1 }}>
                                 <input
                                   type="text"
                                   placeholder="Ej: Pequeña"
                                   value={v.nombre}
+                                  disabled={pending}
                                   onChange={(e) => {
                                     const nuevas = [...editPlato.variantes]
                                     nuevas[i] = { ...nuevas[i], nombre: e.target.value }
@@ -2179,6 +2209,7 @@ export default function MiMenuPage() {
                                     fontSize: '13px',
                                     background: 'var(--bg-secondary)',
                                     color: 'var(--text-primary)',
+                                    textDecoration: pending ? 'line-through' : 'none',
                                   }}
                                 />
 
@@ -2186,6 +2217,7 @@ export default function MiMenuPage() {
                                   type="number"
                                   placeholder="$0"
                                   value={v.precio}
+                                  disabled={pending}
                                   onChange={(e) => {
                                     const nuevas = [...editPlato.variantes]
                                     nuevas[i] = { ...nuevas[i], precio: e.target.value }
@@ -2199,14 +2231,15 @@ export default function MiMenuPage() {
                                     fontSize: '13px',
                                     background: 'var(--bg-secondary)',
                                     color: 'var(--text-primary)',
+                                    textDecoration: pending ? 'line-through' : 'none',
                                   }}
                                 />
 
                                 <button
                                   type="button"
-                                  disabled={i === 0}
+                                  disabled={pending || i === 0}
                                   onClick={() => {
-                                    if (i === 0) return
+                                    if (pending || i === 0) return
                                     const nuevas = [...editPlato.variantes]
                                     ;[nuevas[i - 1], nuevas[i]] = [nuevas[i], nuevas[i - 1]]
                                     setEditPlato({ ...editPlato, variantes: nuevas })
@@ -2216,8 +2249,8 @@ export default function MiMenuPage() {
                                     background: 'transparent',
                                     border: '1px solid var(--border-light)',
                                     borderRadius: '4px',
-                                    cursor: i === 0 ? 'not-allowed' : 'pointer',
-                                    opacity: i === 0 ? 0.4 : 1,
+                                    cursor: (pending || i === 0) ? 'not-allowed' : 'pointer',
+                                    opacity: (pending || i === 0) ? 0.4 : 1,
                                     fontSize: '11px',
                                     color: 'var(--text-primary)',
                                   }}
@@ -2228,9 +2261,9 @@ export default function MiMenuPage() {
 
                                 <button
                                   type="button"
-                                  disabled={i === editPlato.variantes.length - 1}
+                                  disabled={pending || esUltima}
                                   onClick={() => {
-                                    if (i === editPlato.variantes.length - 1) return
+                                    if (pending || esUltima) return
                                     const nuevas = [...editPlato.variantes]
                                     ;[nuevas[i], nuevas[i + 1]] = [nuevas[i + 1], nuevas[i]]
                                     setEditPlato({ ...editPlato, variantes: nuevas })
@@ -2240,8 +2273,8 @@ export default function MiMenuPage() {
                                     background: 'transparent',
                                     border: '1px solid var(--border-light)',
                                     borderRadius: '4px',
-                                    cursor: i === editPlato.variantes.length - 1 ? 'not-allowed' : 'pointer',
-                                    opacity: i === editPlato.variantes.length - 1 ? 0.4 : 1,
+                                    cursor: (pending || esUltima) ? 'not-allowed' : 'pointer',
+                                    opacity: (pending || esUltima) ? 0.4 : 1,
                                     fontSize: '11px',
                                     color: 'var(--text-primary)',
                                   }}
@@ -2250,29 +2283,97 @@ export default function MiMenuPage() {
                                   ▼
                                 </button>
 
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setEditPlato({
-                                      ...editPlato,
-                                      variantes: editPlato.variantes.filter((_, idx) => idx !== i),
-                                    })
-                                  }}
-                                  style={{
-                                    padding: '4px 8px',
-                                    background: 'transparent',
-                                    border: '1px solid var(--color-danger)',
-                                    borderRadius: '4px',
-                                    cursor: 'pointer',
-                                    color: 'var(--color-danger)',
-                                    fontSize: '12px',
-                                  }}
-                                  aria-label="Eliminar variante"
-                                >
-                                  ✕
-                                </button>
+                                {pending ? (
+                                  // El botón Deshacer se movió debajo (junto a la nota). Spacer
+                                  // invisible que clona la caja del ✕ para que las columnas ▲▼
+                                  // queden alineadas con las filas no marcadas. Es un <span> (no
+                                  // focusable) → no necesita aria-hidden y no puede retener foco,
+                                  // así se evita el warning "Blocked aria-hidden … retained focus".
+                                  <span
+                                    aria-hidden="true"
+                                    style={{
+                                      display: 'inline-block',
+                                      boxSizing: 'border-box',
+                                      padding: '4px 8px',
+                                      border: '1px solid transparent',
+                                      borderRadius: '4px',
+                                      fontSize: '12px',
+                                      visibility: 'hidden',
+                                    }}
+                                  >
+                                    ✕
+                                  </span>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (v.id) {
+                                        // Persistida → marcar para quitar (sigue visible, tachada).
+                                        const nuevas = editPlato.variantes.map((x, idx) => idx === i ? { ...x, _pendingDelete: true } : x)
+                                        setEditPlato({ ...editPlato, variantes: nuevas })
+                                      } else {
+                                        // Fresca (sin id, nunca guardada) → quitar directo.
+                                        setEditPlato({ ...editPlato, variantes: editPlato.variantes.filter((_, idx) => idx !== i) })
+                                      }
+                                    }}
+                                    style={{
+                                      padding: '4px 8px',
+                                      background: 'transparent',
+                                      border: '1px solid var(--color-danger)',
+                                      borderRadius: '4px',
+                                      cursor: 'pointer',
+                                      color: 'var(--color-danger)',
+                                      fontSize: '12px',
+                                    }}
+                                    aria-label="Eliminar variante"
+                                  >
+                                    ✕
+                                  </button>
+                                )}
+                                </div>
+                                {pending && (
+                                  <div style={{ marginTop: '3px', marginLeft: '2px' }}>
+                                    {esDiaVar && (
+                                      <div style={{ fontSize: '12px', color: 'var(--color-danger)', fontWeight: 500 }}>
+                                        Es tu Plato del Día actual — se quitará al guardar.
+                                      </div>
+                                    )}
+                                    {esGanadorVar && (
+                                      <div style={{ fontSize: '12px', color: 'var(--color-danger)', fontWeight: 500 }}>
+                                        Es tu Plato Ganador actual — se quitará al guardar.
+                                      </div>
+                                    )}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '2px' }}>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const nuevas = editPlato.variantes.map((x, idx) => idx === i ? { ...x, _pendingDelete: false } : x)
+                                          setEditPlato({ ...editPlato, variantes: nuevas })
+                                        }}
+                                        style={{
+                                          padding: '4px 8px',
+                                          background: 'transparent',
+                                          border: '1px solid var(--color-danger)',
+                                          borderRadius: '4px',
+                                          cursor: 'pointer',
+                                          color: 'var(--color-danger)',
+                                          fontSize: '12px',
+                                          whiteSpace: 'nowrap',
+                                          flexShrink: 0,
+                                        }}
+                                        aria-label="Deshacer quitar variante"
+                                      >
+                                        ↩ Deshacer
+                                      </button>
+                                      <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
+                                        Se quitará al guardar.{textoRefs ? ` Está en ${textoRefs}.` : ''}
+                                      </span>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
-                            ))}
+                              )
+                            })}
 
                             <button
                               type="button"
