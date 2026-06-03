@@ -567,11 +567,24 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
 - **Where**: src/types/index.ts (TipoPromo), src/app/menu/page.tsx (validarPromo + form promo), src/app/[slug]/page.tsx (modal + cart promo).
 - **Commits**: refactor e235ef2.
 
-### BL.19 🟡 Bug ganador NO ACTION en eliminarCategoria — PENDIENTE
+### BL.19 ✅ Bug ganador NO ACTION en eliminarCategoria — RESUELTO
 - **[PENDIENTE] Bug ganador NO ACTION en eliminarCategoria**: eliminarCategoria (~L1115) borra los platos de la categoría directo, sin el cleanup de plato_ganador que se agregó a eliminarPlato. Si una categoría contiene el plato que es el ganador actual, el delete podría chocar con la FK plato_ganador (NO ACTION) y fallar en silencio (mismo bug que se arregló en eliminarPlato en commit 3565fd6). Fix: replicar en eliminarCategoria el patrón de eliminarPlato — detectar si algún plato de la categoría es el ganador actual, borrar la fila de plato_ganador primero, chequear el error, resetear estado local. Detectado al cablear limpiarPromosVacias (7e093f0).
 - **Found**: 2026-06-01.
 - **Where (suspected)**: src/app/menu/page.tsx (eliminarCategoria ~L1115).
 - **Priority**: 🟡 high.
+- **Resuelto**: 2026-06-01 (commit b924188). eliminarCategoria ahora computa los plato ids de la categoría en memoria, detecta si el ganador (o día) actual está entre ellos, borra la fila de plato_ganador ANTES del delete de platos (evita el bloqueo NO ACTION), chequea el error del delete y hace early-return antes de borrar la categoría o resetear estado, y resetea el estado local de ganador/día con los mismos literales que eliminarPlato. limpiarPromosVacias sigue al final. Espejo del fix de eliminarPlato (3565fd6).
+
+### BL.20 🟡 Sin confirmación al borrar categoría — PENDIENTE
+- **[PENDIENTE] eliminarCategoria borra directo, sin modal de confirmación**: el borrado de categoría se dispara directo desde el menú de la categoría (~L1793, onClick eliminarCategoria(cat.id)) sin ningún "¿estás seguro?". Una categoría arrastra TODOS sus platos (y posiblemente el ganador, el día, promos, combos), así que un misclick es mucho más destructivo que borrar un solo plato. Confirmado por Julian desde el uso real. Fix sugerido: un modal de confirmación como el de borrado de plato (platoDeleteWarning), enumerando lo que se va a borrar (N platos, y referencias afectadas). Reusar el patrón del modal de plato y el helper construirTextoVinculaciones.
+- **Found**: 2026-06-01 (investigación BL.19 + reporte de Julian).
+- **Where**: src/app/menu/page.tsx (eliminarCategoria ~L1113, trigger ~L1793).
+- **Priority**: 🟡 high (Julian lo señaló como importante).
+
+### BL.21 🟢 Combos vacíos sin limpiar tras cascada — PENDIENTE
+- **[PENDIENTE] No hay limpieza de combos vacíos (simétrico a limpiarPromosVacias)**: cuando un borrado de plato/variante/categoría deja un combo sin platos (combo_platos cascadea en plato_id/variante_id), el combo queda vacío y colgando. Existe limpiarPromosVacias para promos pero NO un limpiarCombosVacios equivalente. Fix sugerido: replicar el patrón de limpiarPromosVacias para combos (recuento por restaurante, borrar los de junction vacío reusando eliminarCombo, banner). Detectado al investigar BL.19.
+- **Found**: 2026-06-01 (investigación BL.19).
+- **Where**: src/app/menu/page.tsx.
+- **Priority**: 🟢 normal.
 
 ### BL.18 🟢 Literal 'gratis' muerto en TipoPromo
 - **Found**: 2026-05-29 durante la investigación de la poda de precio_especial.
