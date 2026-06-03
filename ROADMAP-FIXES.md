@@ -490,6 +490,17 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
 
 ## Items
 
+### F8.8 Mejoras de borrado en el admin (aviso de plato, mark-for-removal de variantes, auto-borrado de promos vacías) — CLOSED
+- **Closed**: 2026-06-01.
+- **Goal**: cerrar los huecos de UX y correctitud en los borrados del admin que surgieron al terminar PIEZA 3. Tres piezas + un fix de FK.
+- **Aviso de borrado de plato (commit 3565fd6)**: eliminarPlato borraba directo, sin confirmación, y se tragaba el error. Ahora SIEMPRE muestra un modal de confirmación (tapa el misclick) que enumera combos y promos ACTIVAS afectadas (vía helper compartido construirTextoVinculaciones) y una línea destacada cuando el plato es el Plato del Día o Ganador actual. Verificación FK (information_schema): combo_platos, promo_platos y plato_del_dia cascadean en plato_id, pero plato_ganador es NO ACTION → borrar el ganador actual fallaba en silencio (error tragado). eliminarPlato ahora borra la fila de plato_ganador primero (idempotente), chequea el error del delete de platos y aborta con aviso, y resetea el estado local de día/ganador. Conteos en memoria (sin queries).
+- **Mark-for-removal + undo de variantes (commit ec27c4b)**: dar ✕ a una variante guardada ya no la hace desaparecer (lo que hacía creer que se borró permanentemente). Ahora la marca como pendiente: queda visible, tachada, con inputs y flechas deshabilitados, y debajo un botón Deshacer junto a una nota ("Se quitará al guardar" + referencias + línea destacada si es día/ganador). Una variante nueva sin guardar se quita directo. El borrado real sigue al guardar (modelo cancel-safe intacto), y el modal de cascade al guardar sigue disparando. El diff de guardado deriva "sobrevivientes" (no marcadas) como fuente única de inserts/updates/orden-contiguo/min-price (una variante tachada barata ya no arrastra el "desde"). Validación cuenta solo sobrevivientes para el mínimo de 2 y saltea las marcadas. Spacer no-focusable para evitar warning de aria-hidden. Solo el form de edición; el de creación intacto.
+- **Auto-borrado de promos vacías + banner (commit 7e093f0)**: cuando un borrado de plato/variante/categoría deja una promo sin platos (cascade), la promo vacía se auto-elimina. Helper central limpiarPromosVacias (recuenta promos por restaurante_id, borra las de junction vacío reusando eliminarPromo, un solo refetch), llamado IMPERATIVAMENTE desde eliminarPlato/doSavePlatoEdit/eliminarCategoria — NUNCA desde un efecto global (eso dispararía en la ventana de junction-vacío transitorio de actualizarPromo y borraría una promo en edición). Limpieza oportunista (también barre vacías legacy), maneja múltiples a la vez. Banner efímero genérico nuevo (mostrarAviso(string): fixed bottom-center, auto-descarta 3.5s, ✕ manual, reusable) anuncia las promos borradas.
+- **Decisiones de producto (Julian)**: modal de plato siempre (incluso sin referencias); borrado permitido tras confirmar; línea destacada para día/ganador actual. Variante: patrón marcar+deshacer (no modal al ✕), fila bloqueada, modal al guardar se mantiene. Promo vacía: auto-eliminar + toast/banner nombrando la promo, limpieza oportunista.
+- **FK verificadas (information_schema)**: combo_platos.plato_id CASCADE, plato_del_dia.plato_id CASCADE, promo_platos.plato_id CASCADE, plato_ganador.plato_id NO ACTION.
+- **Where**: src/app/menu/page.tsx.
+- **Commits**: 3565fd6, ec27c4b, 7e093f0.
+
 ### F8.8 PIEZA 3c ✅ 2x1 en la card pública + label de botón promo-aware — CLOSED
 - **Closed**: 2026-06-01.
 - **Goal**: hacer visibles y funcionales las promos 2x1 (dos_por_uno) en el menú público, espejando lo que 3b hizo para descuento. Cierra el arco de promos (PIEZA 3 completa). Solo plan Pro.
@@ -555,6 +566,12 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
 - **Methodology note**: el commit casi se hace con el body malformado por flechas Unicode en PowerShell; el subject entró bien. Para futuros commits con body largo, usar texto PowerShell-safe (sin flechas ni símbolos especiales).
 - **Where**: src/types/index.ts (TipoPromo), src/app/menu/page.tsx (validarPromo + form promo), src/app/[slug]/page.tsx (modal + cart promo).
 - **Commits**: refactor e235ef2.
+
+### BL.19 🟡 Bug ganador NO ACTION en eliminarCategoria — PENDIENTE
+- **[PENDIENTE] Bug ganador NO ACTION en eliminarCategoria**: eliminarCategoria (~L1115) borra los platos de la categoría directo, sin el cleanup de plato_ganador que se agregó a eliminarPlato. Si una categoría contiene el plato que es el ganador actual, el delete podría chocar con la FK plato_ganador (NO ACTION) y fallar en silencio (mismo bug que se arregló en eliminarPlato en commit 3565fd6). Fix: replicar en eliminarCategoria el patrón de eliminarPlato — detectar si algún plato de la categoría es el ganador actual, borrar la fila de plato_ganador primero, chequear el error, resetear estado local. Detectado al cablear limpiarPromosVacias (7e093f0).
+- **Found**: 2026-06-01.
+- **Where (suspected)**: src/app/menu/page.tsx (eliminarCategoria ~L1115).
+- **Priority**: 🟡 high.
 
 ### BL.18 🟢 Literal 'gratis' muerto en TipoPromo
 - **Found**: 2026-05-29 durante la investigación de la poda de precio_especial.
@@ -867,7 +884,7 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
     (presence/absence of dropdown IS the variante indicator).
   - Search input unchanged (no match against variante names).
   - Cascade warning copy enriquecido — RESUELTO (commit b5bb0f2): el modal de borrado de variante computaba promosCount (y gateaba el aviso vía refCount) pero solo renderizaba combos y destacados → borrar una variante referenciada SOLO por promos mostraba el engañoso "Vinculadas a 0 combos y 0 destacados". Ahora la frase se arma dinámicamente solo con las cláusulas con count > 0, con singular/plural por sustantivo y unión española natural (a; a y b; a, b y c), así un borrado solo-promos lee "Vinculadas a 1 promo". Solo display; flujo delete/save intacto. (Pendiente aparte, no relacionado: "legacy combo badge in admin list", línea siguiente.)
-  - Legacy combo badge in admin list NOT added (defer to F8.7/F8.8).
+  - Legacy combo badge in admin list — WONTFIX: un combo legacy (combo_platos.variante_id NULL para un plato que ahora tiene variantes) ya queda guardado por validarCombo, que bloquea el guardado y pide elegir variante en el momento exacto del riesgo. La población de combos legacy es ~cero pre-lanzamiento tras las limpiezas de datos (F8.5b→PIEZA 3). Un badge solo pre-anunciaría un estado ya guardado al editar. En su lugar se atacó el hueco real (borrado de plato sin aviso) — ver el aviso de borrado de plato (entrada aparte).
   - Force-variante error copy: banner + per-row red border.
   - Implementation order: types → 6 reset literals (locking
     step) → consumers → UI. TS stays green between steps.
