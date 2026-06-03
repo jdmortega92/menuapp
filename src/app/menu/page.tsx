@@ -37,6 +37,20 @@ function formatDiasShort(dias: string[]): string {
   return dias.map(d => map[d] || d).join(', ')
 }
 
+// Arma una frase de vinculaciones a partir de cláusulas con count > 0, con
+// singular/plural por sustantivo y unión española natural (a; a y b; a, b y c).
+// Devuelve null si no hay ninguna cláusula con count > 0. Compartido por el modal
+// de borrado de variante y el de borrado de plato.
+function construirTextoVinculaciones(clausulas: { n: number; sing: string; plur: string }[]): string | null {
+  const partes = clausulas
+    .filter(c => c.n > 0)
+    .map(c => `${c.n} ${c.n === 1 ? c.sing : c.plur}`)
+  if (partes.length === 0) return null
+  return partes.length === 1
+    ? partes[0]
+    : `${partes.slice(0, -1).join(', ')} y ${partes[partes.length - 1]}`
+}
+
 interface Plato {
   id: string; nombre: string; precio: number; descripcion: string; disponible: boolean; foto_url: string | null
   variantes?: Variante[]
@@ -134,6 +148,17 @@ export default function MiMenuPage() {
     promosCount: number;
     onConfirm: () => void;
     onCancel: () => void;
+  } | null>(null)
+  // Confirmación de borrado de PLATO completo (siempre se muestra; enumera referencias).
+  const [platoDeleteWarning, setPlatoDeleteWarning] = useState<{
+    categoriaId: string;
+    platoId: string;
+    nombre: string;
+    combosCount: number;
+    promosCount: number;
+    esDiaActual: boolean;
+    esGanadorActual: boolean;
+    onConfirm: () => void;
   } | null>(null)
   const [intentoEditPlato, setIntentoEditPlato] = useState(false)
   const [touchedEditPlato, setTouchedEditPlato] = useState<Record<string, boolean>>({})
@@ -1259,7 +1284,28 @@ export default function MiMenuPage() {
   }
   async function eliminarPlato(categoriaId: string, platoId: string) {
     const supabase = createClient()
-    await supabase.from('platos').delete().eq('id', platoId)
+    const eraGanador = platoGanadorActivo && platoGanadorConfig.platoId === platoId
+    const eraDia = platoDiaActivo && platoDiaConfig.platoId === platoId
+    // plato_ganador.plato_id es NO ACTION (no cascada): hay que borrar la fila ANTES,
+    // o el DELETE de platos fallaría por violación de FK. Idempotente (no-op si no existe).
+    // combo_platos / promo_platos / plato_del_dia SÍ son CASCADE → se limpian solos.
+    await supabase.from('plato_ganador').delete().eq('plato_id', platoId)
+    const { error } = await supabase.from('platos').delete().eq('id', platoId)
+    if (error) {
+      alert('No se pudo eliminar el plato. Intentá de nuevo.')
+      return
+    }
+    // Refrescar estado local de los destacados si el plato borrado los ocupaba.
+    if (eraGanador) {
+      setPlatoGanadorActivo(false)
+      setPlatoGanadorConfig({ platoId: '', varianteId: '', titulo: 'Recomendado del chef', descripcion: '' })
+      await invalidateAll('plato-ganador')
+    }
+    if (eraDia) {
+      setPlatoDiaActivo(false)
+      setPlatoDiaConfig({ platoId: '', varianteId: '', precioEspecial: '', horaInicio: '11:00', horaFin: '15:00' })
+      await invalidateAll('plato-del-dia')
+    }
     await mutateCategoriasYPlatos()
     if (platoExpandido === platoId) {
       setPlatoExpandido(null)
@@ -1991,7 +2037,25 @@ export default function MiMenuPage() {
                               style={{ fontSize: '11px', color: 'var(--color-info)', cursor: 'pointer', marginLeft: '4px' }}>
                               {plato.disponible ? 'Agotar' : 'Activar'}
                             </span>
-                            <span onClick={(e) => { e.stopPropagation(); eliminarPlato(cat.id, plato.id) }}
+                            <span onClick={(e) => {
+                              e.stopPropagation()
+                              // Conteos EN MEMORIA (sin queries): combos/promos por platosIds,
+                              // día/ganador por la config local. Promos: solo ACTIVAS.
+                              const combosCount = combos.filter(c => c.platosIds.includes(plato.id)).length
+                              const promosCount = promos.filter(p => p.activo && p.platosIds.includes(plato.id)).length
+                              const esDiaActual = platoDiaActivo && platoDiaConfig.platoId === plato.id
+                              const esGanadorActual = platoGanadorActivo && platoGanadorConfig.platoId === plato.id
+                              setPlatoDeleteWarning({
+                                categoriaId: cat.id,
+                                platoId: plato.id,
+                                nombre: plato.nombre,
+                                combosCount,
+                                promosCount,
+                                esDiaActual,
+                                esGanadorActual,
+                                onConfirm: () => eliminarPlato(cat.id, plato.id),
+                              })
+                            }}
                               style={{ fontSize: '11px', color: 'var(--color-danger)', cursor: 'pointer' }}>✕</span>
                           </div>
                         </div>
@@ -3569,19 +3633,13 @@ export default function MiMenuPage() {
             </ul>
 
             {(() => {
-              // Frase dinámica: solo incluye los tipos con count > 0, con singular/plural
-              // por sustantivo y unión en español (a, b y c → coma + "y" antes del último).
-              const clausulas = [
+              // Frase dinámica (helper compartido): solo cláusulas con count > 0.
+              const texto = construirTextoVinculaciones([
                 { n: cascadeWarning.combosCount, sing: 'combo', plur: 'combos' },
                 { n: cascadeWarning.destacadosCount, sing: 'destacado', plur: 'destacados' },
                 { n: cascadeWarning.promosCount, sing: 'promo', plur: 'promos' },
-              ]
-                .filter(c => c.n > 0)
-                .map(c => `${c.n} ${c.n === 1 ? c.sing : c.plur}`)
-              if (clausulas.length === 0) return null
-              const texto = clausulas.length === 1
-                ? clausulas[0]
-                : `${clausulas.slice(0, -1).join(', ')} y ${clausulas[clausulas.length - 1]}`
+              ])
+              if (texto === null) return null
               return (
                 <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '10px' }}>
                   Vinculadas a {texto}.
@@ -3619,6 +3677,72 @@ export default function MiMenuPage() {
             </div>
           </Modal>
         )}
+
+        {/* Modal confirmación de borrado de PLATO completo */}
+        {platoDeleteWarning && (() => {
+          const { combosCount, promosCount, esDiaActual, esGanadorActual } = platoDeleteWarning
+          const tieneRefs = combosCount > 0 || promosCount > 0 || esDiaActual || esGanadorActual
+          const textoVinc = construirTextoVinculaciones([
+            { n: combosCount, sing: 'combo', plur: 'combos' },
+            { n: promosCount, sing: 'promo', plur: 'promos' },
+          ])
+          return (
+            <Modal
+              isOpen={!!platoDeleteWarning}
+              onClose={() => setPlatoDeleteWarning(null)}
+              title="¿Eliminar este plato?"
+              maxWidth={460}
+            >
+              <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '12px' }}>
+                {platoDeleteWarning.nombre || '(sin nombre)'}
+              </div>
+
+              {textoVinc && (
+                <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '10px' }}>
+                  Vinculado a {textoVinc}.
+                </div>
+              )}
+
+              {esDiaActual && (
+                <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--color-danger)', marginBottom: '8px' }}>
+                  Es tu Plato del Día actual — el destacado quedará vacío.
+                </div>
+              )}
+              {esGanadorActual && (
+                <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--color-danger)', marginBottom: '8px' }}>
+                  Es tu Plato Ganador actual — el destacado quedará vacío.
+                </div>
+              )}
+
+              <div style={{ fontSize: '12px', color: 'var(--color-danger)', marginBottom: '16px' }}>
+                {tieneRefs
+                  ? 'Si continuás, el plato y esas vinculaciones se eliminarán automáticamente. Esta acción no se puede deshacer.'
+                  : 'Esta acción no se puede deshacer.'}
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  onClick={() => {
+                    const cb = platoDeleteWarning.onConfirm
+                    setPlatoDeleteWarning(null)
+                    cb()
+                  }}
+                  className="btn-primary"
+                  style={{ flex: 1, padding: '10px', fontSize: '13px', background: 'var(--color-danger)', borderColor: 'var(--color-danger)' }}
+                >
+                  Sí, eliminar
+                </button>
+                <button
+                  onClick={() => setPlatoDeleteWarning(null)}
+                  className="btn-outline"
+                  style={{ flex: 1, padding: '10px', fontSize: '13px' }}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </Modal>
+          )
+        })()}
 
         {/* Modal recorte de imagen */}
         {cropModal && (
