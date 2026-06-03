@@ -195,6 +195,12 @@ export default function MiMenuPage() {
   const [busquedaPlatosPromo, setBusquedaPlatosPromo] = useState('')
   const [guardandoPromo, setGuardandoPromo] = useState(false)
   const [guardadoPromo, setGuardadoPromo] = useState(false)
+  // Aviso efímero genérico (banner auto-descartable). mostrarAviso(cualquier string).
+  const [aviso, setAviso] = useState<string | null>(null)
+  function mostrarAviso(msg: string) {
+    setAviso(msg)
+    setTimeout(() => setAviso(null), 3500)
+  }
   const [platoDiaConfig, setPlatoDiaConfig] = useState({ platoId: '', varianteId: '', precioEspecial: '', horaInicio: '11:00', horaFin: '15:00' })
   const [guardandoPlatoDia, setGuardandoPlatoDia] = useState(false)
   const [guardadoPlatoDia, setGuardadoPlatoDia] = useState(false)
@@ -622,6 +628,36 @@ export default function MiMenuPage() {
     await supabase.from('promo_platos').delete().eq('promo_id', id)
     await supabase.from('promos').delete().eq('id', id)
     await invalidateAll('promos')
+  }
+
+  // Auto-borra promos que quedaron SIN platos (junction vacío) tras una cascada de
+  // borrado de plato/variante/categoría. Imperativo: se llama desde los handlers de
+  // borrado, NUNCA desde un efecto global (eso dispararía durante la ventana de junction
+  // vacío transitorio de actualizarPromo y borraría una promo en edición).
+  async function limpiarPromosVacias() {
+    if (!rest?.id) return
+    const supabase = createClient()
+    // Recuento: cada promo con sus filas de junction (length 0 = vacía).
+    const { data, error } = await supabase
+      .from('promos')
+      .select('id, nombre, promo_platos(id)')
+      .eq('restaurante_id', rest.id)
+    if (error || !data) return
+    const vacias = (data as any[]).filter(p => (p.promo_platos?.length ?? 0) === 0)
+    if (vacias.length === 0) return
+    // Borrar cada promo vacía reusando la lógica de eliminarPromo (junction → promo),
+    // SIN invalidar por promo; un solo refetch al final.
+    for (const p of vacias) {
+      await supabase.from('promo_platos').delete().eq('promo_id', p.id)
+      await supabase.from('promos').delete().eq('id', p.id)
+    }
+    await invalidateAll('promos')
+    const nombres = vacias.map(p => `"${p.nombre || 'Sin nombre'}"`)
+    mostrarAviso(
+      vacias.length === 1
+        ? `La promo ${nombres[0]} quedó sin platos y se eliminó.`
+        : `Se eliminaron ${vacias.length} promos que quedaron sin platos: ${nombres.join(', ')}.`
+    )
   }
 
   const MAX_DESC = 150
@@ -1079,6 +1115,8 @@ export default function MiMenuPage() {
     await supabase.from('platos').delete().eq('categoria_id', id)
     await supabase.from('categorias').delete().eq('id', id)
     await mutateCategoriasYPlatos()
+    // El borrado en cascada de los platos pudo dejar promos sin platos.
+    await limpiarPromosVacias()
     setMenuCategoria(null)
   }
   async function renombrarCategoria(id: string) {
@@ -1315,6 +1353,8 @@ export default function MiMenuPage() {
       await invalidateAll('plato-del-dia')
     }
     await mutateCategoriasYPlatos()
+    // El borrado en cascada de promo_platos pudo dejar promos sin platos.
+    await limpiarPromosVacias()
     if (platoExpandido === platoId) {
       setPlatoExpandido(null)
       setOriginalVariantes([])
@@ -1482,6 +1522,10 @@ export default function MiMenuPage() {
     }
 
     await mutateCategoriasYPlatos()
+    // Si se borraron variantes, su cascada en promo_platos pudo dejar promos sin platos.
+    if (rowsToDelete.length > 0) {
+      await limpiarPromosVacias()
+    }
 
     setGuardandoEditPlato(false)
     setGuardadoEditPlato(true)
@@ -3777,6 +3821,35 @@ export default function MiMenuPage() {
               </button>
             </div>
           </Modal>
+        )}
+
+        {/* Aviso efímero genérico (banner auto-descartable, reusable vía mostrarAviso) */}
+        {aviso && (
+          <div style={{
+            position: 'fixed',
+            bottom: '20px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 200,
+            maxWidth: '90vw',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            padding: '12px 16px',
+            background: 'var(--bg-secondary)',
+            border: '1px solid var(--border-light)',
+            borderRadius: '8px',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
+            fontSize: '13px',
+            color: 'var(--text-primary)',
+          }}>
+            <span>{aviso}</span>
+            <span
+              onClick={() => setAviso(null)}
+              style={{ cursor: 'pointer', color: 'var(--text-tertiary)', fontSize: '14px', lineHeight: 1, flexShrink: 0 }}
+              aria-label="Cerrar aviso"
+            >✕</span>
+          </div>
         )}
 
         {/* Modal confirmación de borrado de PLATO completo */}
