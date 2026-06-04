@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import type { CSSProperties, InputHTMLAttributes, ChangeEvent, FocusEvent, MutableRefObject } from 'react'
 import { useRouter } from 'next/navigation'
 import { mutate as globalMutate } from 'swr'
 import { useAuth } from '@/hooks'
@@ -70,6 +71,85 @@ type ComboItem = {
 type PromoItem = {
   plato_id: string
   variante_id: string | null
+}
+
+// ── CampoTexto — input de texto con borrador local (confirma al padre en blur) ──
+// Mantiene su valor en estado LOCAL: cada tecla re-renderiza SÓLO este componente, no el
+// árbol gigante de la página. Confirma hacia arriba con onCommit al perder el foco.
+// Re-sincroniza desde `value` cuando cambia desde afuera (reset/seed/reorder) SIN pisar lo
+// que se está tecleando. Soporta un contador de caracteres interno (showCounter + maxLength)
+// que vive del estado local, así el contador queda en vivo sin re-renderizar al padre.
+// Genérico: sin lógica de dominio — reutilizable en combos/promos/categorías.
+type CampoTextoProps = {
+  value: string
+  onCommit: (val: string) => void
+  flushRegistry?: MutableRefObject<Set<() => void>>
+  onBlur?: (e: FocusEvent<HTMLInputElement>) => void
+  showCounter?: boolean
+  maxLength?: number
+  warnAt?: number
+  style?: CSSProperties
+} & Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'onBlur' | 'style' | 'maxLength'>
+
+function CampoTexto({
+  value, onCommit, flushRegistry, onBlur,
+  showCounter = false, maxLength, warnAt, style, ...rest
+}: CampoTextoProps) {
+  const [local, setLocal] = useState(value ?? '')
+  const focusedRef = useRef(false)
+  // Snapshot vivo para el flush: lee siempre lo último sin re-registrar el listener.
+  const latestRef = useRef({ local, value, onCommit })
+  latestRef.current = { local, value, onCommit }
+
+  // Re-sync desde el padre SÓLO si no estamos editando (no pisa el tecleo en curso).
+  useEffect(() => {
+    if (!focusedRef.current) setLocal(value ?? '')
+  }, [value])
+
+  // Registro de flush: confirma el borrador pendiente ante un guardado sin blur previo.
+  useEffect(() => {
+    if (!flushRegistry) return
+    const set = flushRegistry.current
+    const flush = () => {
+      const cur = latestRef.current
+      if (cur.local !== cur.value) cur.onCommit(cur.local)
+    }
+    set.add(flush)
+    return () => { set.delete(flush) }
+  }, [flushRegistry])
+
+  function handleChange(e: ChangeEvent<HTMLInputElement>) {
+    const v = e.target.value
+    if (typeof maxLength === 'number' && v.length > maxLength) return
+    setLocal(v)
+  }
+  function handleBlur(e: FocusEvent<HTMLInputElement>) {
+    focusedRef.current = false
+    if (local !== value) onCommit(local)
+    onBlur?.(e)
+  }
+
+  return (
+    <>
+      <input
+        {...rest}
+        value={local}
+        onChange={handleChange}
+        onFocus={() => { focusedRef.current = true }}
+        onBlur={handleBlur}
+        style={style}
+      />
+      {showCounter && typeof maxLength === 'number' && (
+        <span style={{
+          position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)',
+          fontSize: '10px',
+          color: local.length > (warnAt ?? maxLength - 20) ? 'var(--color-warning)' : 'var(--text-tertiary)',
+        }}>
+          {local.length}/{maxLength}
+        </span>
+      )}
+    </>
+  )
 }
 
 export default function MiMenuPage() {
@@ -143,6 +223,39 @@ export default function MiMenuPage() {
     precio: number;
     orden: number;
   }[]>([])
+  // ── Infra de inputs con borrador local (CampoTexto) — anti-lag de tecleo ──
+  // Registro de flush: cada CampoTexto montado registra una función que confirma su borrador
+  // pendiente. Los handlers de guardado llaman flushCampos() antes de validar, para no perder
+  // la última edición si el usuario teclea y da Guardar sin que dispare el blur.
+  const camposFlushRef = useRef<Set<() => void>>(new Set())
+  function flushCampos() { camposFlushRef.current.forEach(f => f()) }
+  // Espejos en ref de los borradores de plato. Se sincronizan con el estado en cada render y
+  // se actualizan SINCRÓNICAMENTE al confirmar (commit), para que el guardado lea el valor
+  // recién tecleado aunque setState aún no se haya aplicado (setState es asíncrono).
+  const nuevoPlatoRef = useRef(nuevoPlato)
+  nuevoPlatoRef.current = nuevoPlato
+  const editPlatoRef = useRef(editPlato)
+  editPlatoRef.current = editPlato
+  function commitNuevoPlato(patch: Partial<typeof nuevoPlato>) {
+    const next = { ...nuevoPlatoRef.current, ...patch }
+    nuevoPlatoRef.current = next
+    setNuevoPlato(next)
+  }
+  function commitNuevoVariante(i: number, patch: Partial<{ nombre: string; precio: string }>) {
+    const variantes = [...nuevoPlatoRef.current.variantes]
+    variantes[i] = { ...variantes[i], ...patch }
+    commitNuevoPlato({ variantes })
+  }
+  function commitEditPlato(patch: Partial<typeof editPlato>) {
+    const next = { ...editPlatoRef.current, ...patch }
+    editPlatoRef.current = next
+    setEditPlato(next)
+  }
+  function commitEditVariante(i: number, patch: Partial<{ nombre: string; precio: string }>) {
+    const variantes = [...editPlatoRef.current.variantes]
+    variantes[i] = { ...variantes[i], ...patch }
+    commitEditPlato({ variantes })
+  }
   const [cascadeWarning, setCascadeWarning] = useState<{
     rowsToDelete: { id: string; nombre: string }[];
     combosCount: number;
@@ -1299,6 +1412,9 @@ export default function MiMenuPage() {
     return e
   }
   async function agregarPlato(categoriaId: string) {
+    // Confirmar borradores pendientes (tecleo sin blur) y leer el snapshot sincrónico.
+    flushCampos()
+    const nuevoPlato = nuevoPlatoRef.current
     setIntentoPlato(true)
     setTouchedPlato({ nombre: true, precio: true })
 
@@ -1443,6 +1559,9 @@ export default function MiMenuPage() {
     }
   }
   async function guardarEdicionPlato(categoriaId: string, platoId: string) {
+    // Confirmar borradores pendientes (tecleo sin blur) y leer el snapshot sincrónico.
+    flushCampos()
+    const editPlato = editPlatoRef.current
     setIntentoEditPlato(true)
     setTouchedEditPlato({ nombre: true, precio: true })
 
@@ -1537,6 +1656,9 @@ export default function MiMenuPage() {
     rowsToUpdate: { id?: string; nombre: string; precio: string; _idx: number }[],
     rowsToDelete: { id: string; nombre: string; precio: number; orden: number }[],
   ) {
+    // Snapshot sincrónico: nombre/descripcion/hasVariantes vienen del borrador confirmado
+    // (guardarEdicionPlato ya llamó flushCampos antes de invocar esta función).
+    const editPlato = editPlatoRef.current
     setGuardandoEditPlato(true)
     const supabase = createClient()
 
@@ -1745,7 +1867,7 @@ export default function MiMenuPage() {
               <div style={{ padding: '0 20px', marginBottom: '14px' }}>
                 <div className="card" style={{ padding: '14px' }}>
                   <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '10px' }}>Nueva categoría</div>
-                  <input className="input" placeholder="Ej: Postres" value={nuevaCategoria}
+                  <input className="input" placeholder="Ej: Postres" value={nuevaCategoria} maxLength={40}
                     onChange={(e) => setNuevaCategoria(e.target.value)} autoFocus
                     onBlur={() => setTouchedCategoria(prev => ({ ...prev, nombre: true }))}
                     onKeyDown={(e) => e.key === 'Enter' && agregarCategoria()}
@@ -1793,7 +1915,7 @@ export default function MiMenuPage() {
                   return (
                   <div style={{ marginBottom: '10px' }}>
                     <div style={{ display: 'flex', gap: '8px' }}>
-                      <input className="input" value={nombreEditCategoria} onChange={(e) => setNombreEditCategoria(e.target.value)}
+                      <input className="input" value={nombreEditCategoria} maxLength={40} onChange={(e) => setNombreEditCategoria(e.target.value)}
                         autoFocus
                         onBlur={() => setTouchedRename(prev => ({ ...prev, nombre: true }))}
                         onKeyDown={(e) => e.key === 'Enter' && renombrarCategoria(cat.id)}
@@ -1899,8 +2021,11 @@ export default function MiMenuPage() {
                   return (
                   <div className="card" style={{ padding: '14px', marginBottom: '8px' }}>
                     <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '10px' }}>Nuevo plato en {cat.nombre}</div>
-                    <input className="input" placeholder="Nombre del plato" value={nuevoPlato.nombre}
-                      onChange={(e) => setNuevoPlato({ ...nuevoPlato, nombre: e.target.value })} autoFocus
+                    <CampoTexto className="input" placeholder="Nombre del plato" autoFocus
+                      value={nuevoPlato.nombre}
+                      onCommit={(val) => commitNuevoPlato({ nombre: val })}
+                      flushRegistry={camposFlushRef}
+                      maxLength={60}
                       onBlur={() => setTouchedPlato(prev => ({ ...prev, nombre: true }))}
                       style={{
                         marginBottom: intentoPlato && touchedPlato.nombre && errores.nombre ? '4px' : '8px',
@@ -1913,8 +2038,10 @@ export default function MiMenuPage() {
                     )}
                     {!nuevoPlato.hasVariantes && (
                       <>
-                        <input className="input" type="number" placeholder="Precio (ej: 18000)" value={nuevoPlato.precio}
-                          onChange={(e) => setNuevoPlato({ ...nuevoPlato, precio: e.target.value })}
+                        <CampoTexto className="input" type="number" inputMode="numeric" placeholder="Precio (ej: 18000)"
+                          value={nuevoPlato.precio}
+                          onCommit={(val) => commitNuevoPlato({ precio: val })}
+                          flushRegistry={camposFlushRef}
                           onBlur={() => setTouchedPlato(prev => ({ ...prev, precio: true }))}
                           style={{
                             marginBottom: intentoPlato && touchedPlato.precio && errores.precio ? '4px' : '8px',
@@ -1928,13 +2055,12 @@ export default function MiMenuPage() {
                       </>
                     )}
                     <div style={{ position: 'relative', marginBottom: '10px' }}>
-                      <input className="input" placeholder="Descripción (opcional)" value={nuevoPlato.descripcion}
-                        onChange={(e) => { if (e.target.value.length <= MAX_DESC) setNuevoPlato({ ...nuevoPlato, descripcion: e.target.value }) }}
+                      <CampoTexto className="input" placeholder="Descripción (opcional)"
+                        value={nuevoPlato.descripcion}
+                        onCommit={(val) => commitNuevoPlato({ descripcion: val })}
+                        flushRegistry={camposFlushRef}
+                        showCounter maxLength={MAX_DESC}
                         style={{ paddingRight: '50px' }} />
-                      <span style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)',
-                        fontSize: '10px', color: nuevoPlato.descripcion.length > MAX_DESC - 20 ? 'var(--color-warning)' : 'var(--text-tertiary)' }}>
-                        {nuevoPlato.descripcion.length}/{MAX_DESC}
-                      </span>
                     </div>
 
                     {/* Toggle hasVariantes */}
@@ -1964,15 +2090,13 @@ export default function MiMenuPage() {
 
                         {nuevoPlato.variantes.map((v, i) => (
                           <div key={i} style={{ display: 'flex', gap: '6px', marginBottom: '8px', alignItems: 'flex-start' }}>
-                            <input
+                            <CampoTexto
                               type="text"
                               placeholder="Ej: Pequeña"
                               value={v.nombre}
-                              onChange={(e) => {
-                                const nuevas = [...nuevoPlato.variantes]
-                                nuevas[i] = { ...nuevas[i], nombre: e.target.value }
-                                setNuevoPlato({ ...nuevoPlato, variantes: nuevas })
-                              }}
+                              maxLength={30}
+                              onCommit={(val) => commitNuevoVariante(i, { nombre: val })}
+                              flushRegistry={camposFlushRef}
                               style={{
                                 flex: 1,
                                 padding: '6px 8px',
@@ -1984,15 +2108,13 @@ export default function MiMenuPage() {
                               }}
                             />
 
-                            <input
+                            <CampoTexto
                               type="number"
+                              inputMode="numeric"
                               placeholder="$0"
                               value={v.precio}
-                              onChange={(e) => {
-                                const nuevas = [...nuevoPlato.variantes]
-                                nuevas[i] = { ...nuevas[i], precio: e.target.value }
-                                setNuevoPlato({ ...nuevoPlato, variantes: nuevas })
-                              }}
+                              onCommit={(val) => commitNuevoVariante(i, { precio: val })}
+                              flushRegistry={camposFlushRef}
                               style={{
                                 width: '90px',
                                 padding: '6px 8px',
@@ -2236,8 +2358,11 @@ export default function MiMenuPage() {
                         paddingTop: '14px', animation: 'fadeInUp 0.2s ease',
                       }}>
                         <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '10px' }}>Editar plato</div>
-                        <input className="input" placeholder="Nombre" value={editPlato.nombre}
-                          onChange={(e) => setEditPlato({ ...editPlato, nombre: e.target.value })}
+                        <CampoTexto className="input" placeholder="Nombre"
+                          value={editPlato.nombre}
+                          onCommit={(val) => commitEditPlato({ nombre: val })}
+                          flushRegistry={camposFlushRef}
+                          maxLength={60}
                           onBlur={() => setTouchedEditPlato(prev => ({ ...prev, nombre: true }))}
                           style={{
                             marginBottom: intentoEditPlato && touchedEditPlato.nombre && errores.nombre ? '4px' : '8px',
@@ -2250,8 +2375,10 @@ export default function MiMenuPage() {
                         )}
                         {!editPlato.hasVariantes && (
                           <>
-                            <input className="input" type="number" placeholder="Precio" value={editPlato.precio}
-                              onChange={(e) => setEditPlato({ ...editPlato, precio: e.target.value })}
+                            <CampoTexto className="input" type="number" inputMode="numeric" placeholder="Precio"
+                              value={editPlato.precio}
+                              onCommit={(val) => commitEditPlato({ precio: val })}
+                              flushRegistry={camposFlushRef}
                               onBlur={() => setTouchedEditPlato(prev => ({ ...prev, precio: true }))}
                               style={{
                                 marginBottom: intentoEditPlato && touchedEditPlato.precio && errores.precio ? '4px' : '8px',
@@ -2265,13 +2392,12 @@ export default function MiMenuPage() {
                           </>
                         )}
                         <div style={{ position: 'relative', marginBottom: '10px' }}>
-                          <input className="input" placeholder="Descripción" value={editPlato.descripcion}
-                            onChange={(e) => { if (e.target.value.length <= MAX_DESC) setEditPlato({ ...editPlato, descripcion: e.target.value }) }}
+                          <CampoTexto className="input" placeholder="Descripción"
+                            value={editPlato.descripcion}
+                            onCommit={(val) => commitEditPlato({ descripcion: val })}
+                            flushRegistry={camposFlushRef}
+                            showCounter maxLength={MAX_DESC}
                             style={{ paddingRight: '50px' }} />
-                          <span style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)',
-                            fontSize: '10px', color: editPlato.descripcion.length > MAX_DESC - 20 ? 'var(--color-warning)' : 'var(--text-tertiary)' }}>
-                            {editPlato.descripcion.length}/{MAX_DESC}
-                          </span>
                         </div>
 
                         {/* Toggle hasVariantes */}
@@ -2331,16 +2457,14 @@ export default function MiMenuPage() {
                               return (
                               <div key={v.id ?? `new-${i}`} style={{ marginBottom: '8px' }}>
                                 <div style={{ display: 'flex', gap: '6px', alignItems: 'flex-start', opacity: pending ? 0.55 : 1 }}>
-                                <input
+                                <CampoTexto
                                   type="text"
                                   placeholder="Ej: Pequeña"
                                   value={v.nombre}
+                                  maxLength={30}
                                   disabled={pending}
-                                  onChange={(e) => {
-                                    const nuevas = [...editPlato.variantes]
-                                    nuevas[i] = { ...nuevas[i], nombre: e.target.value }
-                                    setEditPlato({ ...editPlato, variantes: nuevas })
-                                  }}
+                                  onCommit={(val) => commitEditVariante(i, { nombre: val })}
+                                  flushRegistry={camposFlushRef}
                                   style={{
                                     flex: 1,
                                     padding: '6px 8px',
@@ -2353,16 +2477,14 @@ export default function MiMenuPage() {
                                   }}
                                 />
 
-                                <input
+                                <CampoTexto
                                   type="number"
+                                  inputMode="numeric"
                                   placeholder="$0"
                                   value={v.precio}
                                   disabled={pending}
-                                  onChange={(e) => {
-                                    const nuevas = [...editPlato.variantes]
-                                    nuevas[i] = { ...nuevas[i], precio: e.target.value }
-                                    setEditPlato({ ...editPlato, variantes: nuevas })
-                                  }}
+                                  onCommit={(val) => commitEditVariante(i, { precio: val })}
+                                  flushRegistry={camposFlushRef}
                                   style={{
                                     width: '90px',
                                     padding: '6px 8px',
@@ -2660,7 +2782,7 @@ export default function MiMenuPage() {
                   return (
                   <div className="card" style={{ padding: '14px', marginBottom: '14px' }}>
                     <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '10px' }}>{editandoComboId ? 'Editar combo' : 'Nuevo combo'}</div>
-                    <input className="input" placeholder="Nombre del combo (ej: Combo paisa)" value={nuevoCombo.nombre}
+                    <input className="input" placeholder="Nombre del combo (ej: Combo paisa)" value={nuevoCombo.nombre} maxLength={50}
                       onChange={(e) => setNuevoCombo({ ...nuevoCombo, nombre: e.target.value })}
                       onBlur={() => setTouchedCombo(prev => ({ ...prev, nombre: true }))}
                       style={{
@@ -2939,7 +3061,7 @@ export default function MiMenuPage() {
                   return (
                   <div className="card" style={{ padding: '14px', marginBottom: '14px' }}>
                     <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '10px' }}>{editandoPromoId ? 'Editar promoción' : 'Nueva promoción'}</div>
-                    <input className="input" placeholder="Nombre (ej: Happy Hour)" value={nuevaPromo.nombre}
+                    <input className="input" placeholder="Nombre (ej: Happy Hour)" value={nuevaPromo.nombre} maxLength={50}
                       onChange={(e) => setNuevaPromo({ ...nuevaPromo, nombre: e.target.value })}
                       onBlur={() => setTouchedPromo(prev => ({ ...prev, nombre: true }))}
                       style={{
