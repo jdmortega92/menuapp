@@ -581,11 +581,19 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
 - **Priority**: 🟡 high (Julian lo señaló como importante).
 - **Resuelto**: 2026-06-01 (commit 5b08f00). El trigger de "Eliminar categoría" ya no llama eliminarCategoria directo: computa en memoria los conteos agregados (combos distintos y promos ACTIVAS que referencian cualquier plato de la categoría, + si el día/ganador actual está entre sus platos) y abre un modal categoriaDeleteWarning ("¿Estás seguro de eliminar esta categoría?") que muestra el conteo de platos (oculto si la categoría está vacía), las referencias vía construirTextoVinculaciones, y líneas destacadas para día/ganador. Cierra el menú ⋯ al abrir (z-index). Siempre confirma (incluso categoría vacía). eliminarCategoria intacto (incluye el fix de BL.19), solo gateado por el onConfirm. Estado separado de platoDeleteWarning. Completa el arco "ningún borrado destructivo sin confirmación" (plato, variante, categoría).
 
-### BL.21 🟢 Combos vacíos sin limpiar tras cascada — PENDIENTE
+### BL.22 ✅ Plato fantasma en combos/promos tras borrado (vista stale) — RESUELTO
+- **Found**: 2026-06-01 (reportado por Julian desde el uso: borró un plato de un combo de 3; el combo seguía mostrando 3, con el borrado renombrado a "Plato", hasta que desaparecía tiempo después).
+- **Causa**: tras borrar un plato/variante/categoría, los combos/promos que SOBREVIVÍAN (combo con ≥2, promo con ≥1) no se invalidaban — limpiarCombosVacios/limpiarPromosVacias solo invalidaban si auto-borraban algo, y mutateCategoriasYPlatos solo refresca la key de platos, no las keys separadas de combos/promos. La useMemo de combos re-cruzaba las filas viejas de combo_platos contra la lista de platos ya podada, y el plato borrado caía al placeholder 'Plato' (page.tsx:808) hasta una revalidación por foco (revalidateOnFocus).
+- **Resuelto**: 2026-06-01 (commit ce51be4). limpiarVinculosVacios ahora invalida combos + promos SIEMPRE (incondicional, aunque no se borre nada), así los vínculos que solo perdieron un plato refrescan al instante. Los dos helpers ya no invalidan internamente (el orquestador es dueño). Optimización en el mismo cambio: las dos limpiezas corren en paralelo (Promise.all, tablas/keys disjuntas), las invalidaciones se batchean, y el delete de plato_ganador en eliminarPlato se gateó en eraGanador (ahorra un round-trip cuando no es el ganador, preservando el orden NO ACTION). El mismo bug afectaba a promos y quedó cubierto.
+- **Where**: src/app/menu/page.tsx (limpiarVinculosVacios, eliminarPlato).
+- **Priority**: 🟡 (afectaba la confianza en la vista del admin).
+
+### BL.21 ✅ Combos vacíos sin limpiar tras cascada — RESUELTO
 - **[PENDIENTE] No hay limpieza de combos vacíos (simétrico a limpiarPromosVacias)**: cuando un borrado de plato/variante/categoría deja un combo sin platos (combo_platos cascadea en plato_id/variante_id), el combo queda vacío y colgando. Existe limpiarPromosVacias para promos pero NO un limpiarCombosVacios equivalente. Fix sugerido: replicar el patrón de limpiarPromosVacias para combos (recuento por restaurante, borrar los de junction vacío reusando eliminarCombo, banner). Detectado al investigar BL.19.
 - **Found**: 2026-06-01 (investigación BL.19).
 - **Where**: src/app/menu/page.tsx.
 - **Priority**: 🟢 normal.
+- **Resuelto**: 2026-06-01 (commit ce51be4, junto con BL.22). Se agregó limpiarCombosVacios (espejo de limpiarPromosVacias) que borra combos con junction < 2 platos (no solo vacíos: un combo de 1 plato está por debajo del mínimo de validarCombo y queda roto). Un orquestador limpiarVinculosVacios corre ambas limpiezas y compone UN solo aviso combinado (promos "sin platos", combos "incompleto" — wording veraz por tipo, ya que un combo de 1 plato no está vacío). Llamado desde los tres handlers de borrado (eliminarPlato, guardarEdicionPlato, eliminarCategoria). Imperativo, nunca efecto global (ventana transitoria de actualizarCombo). Decisión de Julian: borrar con < 2 (cubre el combo roto de 1 plato).
 
 ### BL.18 🟢 Literal 'gratis' muerto en TipoPromo
 - **Found**: 2026-05-29 durante la investigación de la poda de precio_especial.
