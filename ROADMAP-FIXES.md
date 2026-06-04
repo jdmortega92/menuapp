@@ -567,6 +567,27 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
 - **Where**: src/types/index.ts (TipoPromo), src/app/menu/page.tsx (validarPromo + form promo), src/app/[slug]/page.tsx (modal + cart promo).
 - **Commits**: refactor e235ef2.
 
+### BL.23 ✅ Lag al tipear en formularios del admin (re-renders) — RESUELTO
+- **Found**: 2026-06-01 (reportado por Julian: al escribir en los campos de crear/editar plato, el texto entraba con lag, no fluido).
+- **Causa**: menu/page.tsx es UN componente de 4131 líneas con 73 useState arriba; todo el estado de los forms vive ahí, así que cada tecla disparaba setNuevoPlato/setEditPlato y re-renderizaba todo el árbol (el form de plato está incluso anidado dentro del map de categorías, peor aún). Los useMemo NO eran el problema (bien cacheados). El refactor por sí solo NO arreglaba esto — mover código a archivos es cosmético; el fix real es aislar el render-scope.
+- **Resuelto**: 2026-06-01 (commit 9740f28). Componente reusable CampoTexto: mantiene el valor del input en estado LOCAL y confirma al padre con onCommit en blur, así cada tecla re-renderiza SOLO el input, no la página. Ref-mirror sincrónico (nuevoPlatoRef/editPlatoRef vía commitNuevoPlato/commitEditPlato) + registro de flush (camposFlushRef + flushCampos): los handlers de guardado llaman flushCampos() y leen el snapshot del ref ANTES de validar, así escribir-y-Guardar-sin-blur nunca pierde la última edición (corrección senior: el setState es async, no se podía leer el estado en el mismo handler). Re-sync focus-aware (useEffect[value], solo si no enfocado) reseedea en reset/abrir-edit/reorder de variantes sin pisar el tecleo. Contador interno opcional (usado en descripciones, vive del estado local). 10 inputs de plato convertidos (create+edit: nombre, precio, descripcion, variante nombre/precio). Validación/errores intactos (ya esperaban blur/submit). CampoTexto es genérico y sobrevive al refactor. Sharp edge pre-existente flageado: los botones de variante (▲▼✕＋) leen el estado del closure, no el ref — tipear en variante y clickearlos sin blur podría perder lo tecleado (no arreglado, estrecho).
+- **Where**: src/app/menu/page.tsx (CampoTexto module-scope, flush registry + ref-mirror en MiMenuPage, 10 inputs de plato).
+- **Priority**: 🟡 high (afecta la experiencia de uso directa; producto pre-lanzamiento).
+- **Pendiente relacionado**: extender CampoTexto a los forms de categoría/combo/promo (anti-lag), y React.memo en las filas de listas — va con el refactor.
+
+### BL.24 ✅ Sin límite de caracteres en nombres (rompe layout) — RESUELTO
+- **Found**: 2026-06-01 (reportado por Julian: nombre de categoría y de variante sin límite causaban quiebre visual fuerte con texto largo).
+- **Resuelto**: 2026-06-01 (commit 9740f28). maxLength silencioso (hard-stop, sin contador) en los 5 campos de nombre: plato 60, variante 30 (vía prop maxLength de CampoTexto), categoría 40, combo 50, promo 50 (vía atributo maxLength nativo de HTML en los inputs crudos, preservando su onChange/Enter/validación viva — recomendación senior de no convertirlos a CampoTexto para no tocar lógica que funciona). Límites dimensionados según dónde renderiza cada campo en el menú público (columna móvil ~500px). Descripciones mantienen sus contadores (150/100). Sin truncado retroactivo (maxLength solo limita tecleo nuevo; valores existentes cargan completos). Auditoría confirmó que validar* no dependen de length.
+- **Where**: src/app/menu/page.tsx (8 ediciones: 4 CampoTexto + 4 inputs crudos).
+- **Priority**: 🟡 (pulido pre-lanzamiento, evita quiebre visual).
+- **Follow-up flageado**: los precios (type=number) no tienen techo de valor — un entero gigante rompe el formato. Guard de rango numérico, tema aparte (ver BL nuevo de precios).
+
+### BL.25 🟡 Precios sin techo de valor (rompe formato) — PENDIENTE
+- **[PENDIENTE]**: los campos de precio (plato, variante, combo, precio especial del día) son type=number sin límite superior; un valor absurdo (ej. 999999999) rompe el formato/layout de precios. validarPlato/validarCombo/validarPlatoDia solo chequean > 0, sin techo. Fix sugerido: un guard de rango (ej. rechazar > 10.000.000 COP) en cada validador. Detectado durante BL.24 (Julian confirmó que hace falta).
+- **Found**: 2026-06-01 (auditoría de BL.24 + confirmación de Julian).
+- **Where**: src/app/menu/page.tsx (validarPlato, validarCombo, validarPlatoDia).
+- **Priority**: 🟡 high (Julian lo confirmó como necesario).
+
 ### BL.19 ✅ Bug ganador NO ACTION en eliminarCategoria — RESUELTO
 - **[PENDIENTE] Bug ganador NO ACTION en eliminarCategoria**: eliminarCategoria (~L1115) borra los platos de la categoría directo, sin el cleanup de plato_ganador que se agregó a eliminarPlato. Si una categoría contiene el plato que es el ganador actual, el delete podría chocar con la FK plato_ganador (NO ACTION) y fallar en silencio (mismo bug que se arregló en eliminarPlato en commit 3565fd6). Fix: replicar en eliminarCategoria el patrón de eliminarPlato — detectar si algún plato de la categoría es el ganador actual, borrar la fila de plato_ganador primero, chequear el error, resetear estado local. Detectado al cablear limpiarPromosVacias (7e093f0).
 - **Found**: 2026-06-01.
