@@ -644,30 +644,78 @@ export default function MiMenuPage() {
   // borrado de plato/variante/categoría. Imperativo: se llama desde los handlers de
   // borrado, NUNCA desde un efecto global (eso dispararía durante la ventana de junction
   // vacío transitorio de actualizarPromo y borraría una promo en edición).
-  async function limpiarPromosVacias() {
-    if (!rest?.id) return
+  async function limpiarPromosVacias(): Promise<string[]> {
+    if (!rest?.id) return []
     const supabase = createClient()
     // Recuento: cada promo con sus filas de junction (length 0 = vacía).
     const { data, error } = await supabase
       .from('promos')
       .select('id, nombre, promo_platos(id)')
       .eq('restaurante_id', rest.id)
-    if (error || !data) return
+    if (error || !data) return []
     const vacias = (data as any[]).filter(p => (p.promo_platos?.length ?? 0) === 0)
-    if (vacias.length === 0) return
+    if (vacias.length === 0) return []
     // Borrar cada promo vacía reusando la lógica de eliminarPromo (junction → promo),
     // SIN invalidar por promo; un solo refetch al final.
     for (const p of vacias) {
       await supabase.from('promo_platos').delete().eq('promo_id', p.id)
       await supabase.from('promos').delete().eq('id', p.id)
     }
-    await invalidateAll('promos')
-    const nombres = vacias.map(p => `"${p.nombre || 'Sin nombre'}"`)
-    mostrarAviso(
-      vacias.length === 1
-        ? `La promo ${nombres[0]} quedó sin platos y se eliminó.`
-        : `Se eliminaron ${vacias.length} promos que quedaron sin platos: ${nombres.join(', ')}.`
-    )
+    // La invalidación de 'promos' la hace limpiarVinculosVacios (siempre, aunque no se
+    // borre nada, para refrescar promos que solo perdieron un plato). Aquí solo devolvemos
+    // los nombres borrados; el aviso lo compone el orquestador.
+    return vacias.map(p => p.nombre || 'Sin nombre')
+  }
+
+  // Auto-borra combos que quedaron rotos (junction < 2 platos, el mínimo de validarCombo)
+  // tras una cascada de borrado de plato/variante/categoría. Un combo de 1 plato está por
+  // debajo del mínimo y no se puede re-guardar sin re-agregar un plato. Imperativo: se llama
+  // desde los handlers de borrado, NUNCA desde un efecto global (eso dispararía durante la
+  // ventana de junction vacío transitorio de actualizarCombo y borraría un combo en edición).
+  async function limpiarCombosVacios(): Promise<string[]> {
+    if (!rest?.id) return []
+    const supabase = createClient()
+    // Recuento: cada combo con sus filas de junction (length < 2 = roto).
+    const { data, error } = await supabase
+      .from('combos')
+      .select('id, nombre, combo_platos(id)')
+      .eq('restaurante_id', rest.id)
+    if (error || !data) return []
+    const rotos = (data as any[]).filter(c => (c.combo_platos?.length ?? 0) < 2)
+    if (rotos.length === 0) return []
+    // Borrar cada combo roto reusando la lógica de eliminarCombo (junction → combo),
+    // SIN invalidar por combo; un solo refetch al final.
+    for (const c of rotos) {
+      await supabase.from('combo_platos').delete().eq('combo_id', c.id)
+      await supabase.from('combos').delete().eq('id', c.id)
+    }
+    // La invalidación de 'combos' la hace limpiarVinculosVacios (siempre, aunque no se
+    // borre nada, para refrescar combos que solo perdieron un plato). Aquí solo devolvemos
+    // los nombres borrados; el aviso lo compone el orquestador.
+    return rotos.map(c => c.nombre || 'Sin nombre')
+  }
+
+  // Orquestador: corre ambas limpiezas tras una cascada y compone UN solo aviso.
+  // Promos quedan VACÍAS (cero platos); combos quedan INCOMPLETOS (< 2 platos) — wording
+  // distinto por tipo. Un único mostrarAviso evita que un aviso pise al otro (timer de 3.5s).
+  async function limpiarVinculosVacios() {
+    // Ambas limpiezas tocan tablas/keys disjuntas → corren en paralelo.
+    const [promos, combos] = await Promise.all([limpiarPromosVacias(), limpiarCombosVacios()])
+    // SIEMPRE invalidar combos + promos (aunque no se borrara nada): un plato/variante/
+    // categoría borrado en cascada quita filas de combo_platos/promo_platos de vínculos que
+    // SOBREVIVEN (combo con ≥2, promo con ≥1). Sin esto, la vista mantiene el junction viejo
+    // y el plato borrado aparece como placeholder 'Plato' hasta una revalidación por foco.
+    await Promise.all([invalidateAll('combos'), invalidateAll('promos')])
+    const partes: string[] = []
+    if (promos.length === 1) partes.push(`la promo "${promos[0]}" quedó sin platos`)
+    else if (promos.length > 1) partes.push(`${promos.length} promos quedaron sin platos (${promos.map(n => `"${n}"`).join(', ')})`)
+    if (combos.length === 1) partes.push(`el combo "${combos[0]}" quedó incompleto`)
+    else if (combos.length > 1) partes.push(`${combos.length} combos quedaron incompletos (${combos.map(n => `"${n}"`).join(', ')})`)
+    if (partes.length === 0) return
+    const total = promos.length + combos.length
+    const cuerpo = partes.join(' y ')
+    const verbo = total === 1 ? 'se eliminó' : 'se eliminaron'
+    mostrarAviso(`${cuerpo.charAt(0).toUpperCase()}${cuerpo.slice(1)}, así que ${verbo}.`)
   }
 
   const MAX_DESC = 150
@@ -1148,8 +1196,8 @@ export default function MiMenuPage() {
     }
     await supabase.from('categorias').delete().eq('id', id)
     await mutateCategoriasYPlatos()
-    // El borrado en cascada de los platos pudo dejar promos sin platos.
-    await limpiarPromosVacias()
+    // El borrado en cascada de los platos pudo dejar promos sin platos o combos incompletos.
+    await limpiarVinculosVacios()
     setMenuCategoria(null)
   }
   async function renombrarCategoria(id: string) {
@@ -1365,10 +1413,11 @@ export default function MiMenuPage() {
     const supabase = createClient()
     const eraGanador = platoGanadorActivo && platoGanadorConfig.platoId === platoId
     const eraDia = platoDiaActivo && platoDiaConfig.platoId === platoId
-    // plato_ganador.plato_id es NO ACTION (no cascada): hay que borrar la fila ANTES,
-    // o el DELETE de platos fallaría por violación de FK. Idempotente (no-op si no existe).
+    // plato_ganador.plato_id es NO ACTION (no cascada): si el plato es el ganador actual,
+    // hay que borrar su fila ANTES del DELETE de platos o fallaría por violación de FK.
+    // Gateado en eraGanador (evita un round-trip cuando no es el ganador).
     // combo_platos / promo_platos / plato_del_dia SÍ son CASCADE → se limpian solos.
-    await supabase.from('plato_ganador').delete().eq('plato_id', platoId)
+    if (eraGanador) await supabase.from('plato_ganador').delete().eq('plato_id', platoId)
     const { error } = await supabase.from('platos').delete().eq('id', platoId)
     if (error) {
       alert('No se pudo eliminar el plato. Intentá de nuevo.')
@@ -1386,8 +1435,8 @@ export default function MiMenuPage() {
       await invalidateAll('plato-del-dia')
     }
     await mutateCategoriasYPlatos()
-    // El borrado en cascada de promo_platos pudo dejar promos sin platos.
-    await limpiarPromosVacias()
+    // El borrado en cascada de promo_platos/combo_platos pudo dejar promos sin platos o combos incompletos.
+    await limpiarVinculosVacios()
     if (platoExpandido === platoId) {
       setPlatoExpandido(null)
       setOriginalVariantes([])
@@ -1555,9 +1604,9 @@ export default function MiMenuPage() {
     }
 
     await mutateCategoriasYPlatos()
-    // Si se borraron variantes, su cascada en promo_platos pudo dejar promos sin platos.
+    // Si se borraron variantes, su cascada en promo_platos/combo_platos pudo dejar promos sin platos o combos incompletos.
     if (rowsToDelete.length > 0) {
-      await limpiarPromosVacias()
+      await limpiarVinculosVacios()
     }
 
     setGuardandoEditPlato(false)
