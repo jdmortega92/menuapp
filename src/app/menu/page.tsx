@@ -416,6 +416,7 @@ export default function MiMenuPage() {
     if (!state.platoId) e.platoId = 'Selecciona un plato'
     const v = parseInt(state.precioEspecial)
     if (!state.precioEspecial || isNaN(v) || v <= 0) e.precioEspecial = 'El precio especial debe ser mayor a 0'
+    else if (v > MAX_PRECIO) e.precioEspecial = 'El precio especial no puede superar $10.000.000'
 
     if (state.platoId && otherActive?.activo && otherActive.platoId === state.platoId) {
       e.platoId = 'Este plato ya está configurado como plato ganador. Selecciona otro o desactiva el plato ganador primero.'
@@ -832,6 +833,7 @@ export default function MiMenuPage() {
   }
 
   const MAX_DESC = 150
+  const MAX_PRECIO = 10_000_000
   function recortarImagen(imageSrc: string, pixelCrop: any): Promise<Blob> {
     return new Promise((resolve) => {
       const img = new Image()
@@ -1076,6 +1078,7 @@ export default function MiMenuPage() {
     if (!state.nombre.trim()) e.nombre = 'El nombre es obligatorio'
     const precioNum = parseInt(state.precio)
     if (!state.precio || isNaN(precioNum) || precioNum <= 0) e.precio = 'El precio debe ser mayor a 0'
+    else if (precioNum > MAX_PRECIO) e.precio = 'El precio no puede superar $10.000.000'
     if (state.platoIds.length < 2) {
       e.platos = 'Selecciona al menos 2 platos'
     } else {
@@ -1399,6 +1402,8 @@ export default function MiMenuPage() {
           const p = parseInt(v.precio)
           if (!v.precio || isNaN(p) || p <= 0) {
             e[`variante_${i}_precio`] = 'Precio inválido'
+          } else if (p > MAX_PRECIO) {
+            e[`variante_${i}_precio`] = 'Precio máximo $10.000.000'
           }
         })
       }
@@ -1406,6 +1411,8 @@ export default function MiMenuPage() {
       const precioNum = parseInt(state.precio)
       if (!state.precio || isNaN(precioNum) || precioNum <= 0) {
         e.precio = 'El precio debe ser mayor a 0'
+      } else if (precioNum > MAX_PRECIO) {
+        e.precio = 'El precio no puede superar $10.000.000'
       }
     }
 
@@ -2089,7 +2096,8 @@ export default function MiMenuPage() {
                         )}
 
                         {nuevoPlato.variantes.map((v, i) => (
-                          <div key={i} style={{ display: 'flex', gap: '6px', marginBottom: '8px', alignItems: 'flex-start' }}>
+                          <div key={i} style={{ marginBottom: '8px' }}>
+                          <div style={{ display: 'flex', gap: '6px', alignItems: 'flex-start' }}>
                             <CampoTexto
                               type="text"
                               placeholder="Ej: Pequeña"
@@ -2195,6 +2203,13 @@ export default function MiMenuPage() {
                             >
                               ✕
                             </button>
+                          </div>
+                          {intentoPlato && (errores[`variante_${i}_nombre`] || errores[`variante_${i}_precio`]) && (
+                            <div style={{ marginTop: '3px', marginLeft: '2px', fontSize: '11px', color: 'var(--color-danger)' }}>
+                              {errores[`variante_${i}_nombre`] && <div>{errores[`variante_${i}_nombre`]}</div>}
+                              {errores[`variante_${i}_precio`] && <div>{errores[`variante_${i}_precio`]}</div>}
+                            </div>
+                          )}
                           </div>
                         ))}
 
@@ -2593,6 +2608,12 @@ export default function MiMenuPage() {
                                   </button>
                                 )}
                                 </div>
+                                {intentoEditPlato && (errores[`variante_${i}_nombre`] || errores[`variante_${i}_precio`]) && (
+                                  <div style={{ marginTop: '3px', marginLeft: '2px', fontSize: '11px', color: 'var(--color-danger)' }}>
+                                    {errores[`variante_${i}_nombre`] && <div>{errores[`variante_${i}_nombre`]}</div>}
+                                    {errores[`variante_${i}_precio`] && <div>{errores[`variante_${i}_precio`]}</div>}
+                                  </div>
+                                )}
                                 {pending && (
                                   <div style={{ marginTop: '3px', marginLeft: '2px' }}>
                                     {esDiaVar && (
