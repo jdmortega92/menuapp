@@ -595,12 +595,13 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
 - **Priority**: 🟢 normal.
 - **Resuelto**: 2026-06-01 (commit ce51be4, junto con BL.22). Se agregó limpiarCombosVacios (espejo de limpiarPromosVacias) que borra combos con junction < 2 platos (no solo vacíos: un combo de 1 plato está por debajo del mínimo de validarCombo y queda roto). Un orquestador limpiarVinculosVacios corre ambas limpiezas y compone UN solo aviso combinado (promos "sin platos", combos "incompleto" — wording veraz por tipo, ya que un combo de 1 plato no está vacío). Llamado desde los tres handlers de borrado (eliminarPlato, guardarEdicionPlato, eliminarCategoria). Imperativo, nunca efecto global (ventana transitoria de actualizarCombo). Decisión de Julian: borrar con < 2 (cubre el combo roto de 1 plato).
 
-### BL.18 🟢 Literal 'gratis' muerto en TipoPromo
+### BL.18 ✅ Literal 'gratis' muerto en TipoPromo — RESUELTO
 - **Found**: 2026-05-29 durante la investigación de la poda de precio_especial.
 - **Symptom**: TipoPromo incluye 'gratis' pero no se encontró ninguna referencia en menu/page.tsx, [slug]/page.tsx ni usePromos.ts. Parece tipo muerto nunca implementado.
 - **Steps to reproduce**: grep 'gratis' en el código de promos → sin consumidores.
 - **Where (suspected)**: src/types/index.ts (TipoPromo union).
 - **Acceptance criteria**: investigar si 'gratis' se usa en algún lado no auditado (seeds, migraciones, otros componentes). Si está muerto confirmado, removerlo de la union. NO se tocó en la poda de precio_especial para mantener el batch enfocado.
+- **Resuelto**: 2026-06-01 (commit pendiente). Verificado en todo el repo: 'gratis' no tenía ningún uso como tipo de promo — el selector solo ofrece dos_por_uno/descuento, ningún código escribe 'gratis', y las únicas referencias a TipoPromo son anotaciones + un cast sin chequear. Removido el member del type (cambio de una línea en src/types/index.ts, solo type-level, sin efecto en runtime). tsc verde.
 - **Priority**: 🟢 medium-low — limpieza, no afecta funcionalidad.
 
 ### F8.7 ✅ Variantes de platos — Sesión 7 (variante selector para plato del día y plato ganador) — CLOSED
