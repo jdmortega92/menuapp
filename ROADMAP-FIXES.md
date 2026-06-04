@@ -582,11 +582,19 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
 - **Priority**: 🟡 (pulido pre-lanzamiento, evita quiebre visual).
 - **Follow-up flageado**: los precios (type=number) no tienen techo de valor — un entero gigante rompe el formato. Guard de rango numérico, tema aparte (ver BL nuevo de precios).
 
-### BL.25 🟡 Precios sin techo de valor (rompe formato) — PENDIENTE
+### BL.25 ✅ Precios sin techo de valor (rompe formato) — RESUELTO
 - **[PENDIENTE]**: los campos de precio (plato, variante, combo, precio especial del día) son type=number sin límite superior; un valor absurdo (ej. 999999999) rompe el formato/layout de precios. validarPlato/validarCombo/validarPlatoDia solo chequean > 0, sin techo. Fix sugerido: un guard de rango (ej. rechazar > 10.000.000 COP) en cada validador. Detectado durante BL.24 (Julian confirmó que hace falta).
 - **Found**: 2026-06-01 (auditoría de BL.24 + confirmación de Julian).
 - **Where**: src/app/menu/page.tsx (validarPlato, validarCombo, validarPlatoDia).
 - **Priority**: 🟡 high (Julian lo confirmó como necesario).
+- **Resuelto**: 2026-06-01 (commit 5420fa4). Constante MAX_PRECIO = 10.000.000 COP y un check de cota superior (else if espejando el check de > 0) en validarPlato (rama sin-variante y rama variante), validarCombo y validarPlatoDia. Rechaza y muestra mensaje (no clampea en silencio), reusando las keys de error existentes. El % de descuento de promos queda intacto (ya clampeado 1-100). Techo único para todos los campos (hasta un combo familiar grande ~250k está ~40x debajo). Decisión de Julian: 10M.
+
+### BL.26 ✅ Errores de variante sin mensaje (solo borde rojo) — RESUELTO
+- **Found**: 2026-06-01 (reportado por Julian: al pasar el techo de precio en una variante no aparecía ningún mensaje, en los demás campos sí).
+- **Causa**: los errores por-campo de variante (variante_i_nombre, variante_i_precio) solo se cableaban al borderColor del input — NO había ningún JSX que renderizara el texto del mensaje, a diferencia de los otros campos de precio que sí tienen su <div>{errores.x}</div>. Hueco pre-existente: el 'Precio inválido' (check de <= 0) también era mudo; el techo de precio de BL.25 lo hizo visible.
+- **Resuelto**: 2026-06-01 (commit 5420fa4). Bloque de mensaje en su propia línea debajo de cada fila de variante (create + edit), gateado en intentoPlato/intentoEditPlato (igual que el borde, sin flag touched que las variantes nunca setean), renderizando los errores de nombre y precio en líneas separadas. Display-only: validador, save handlers y gating del borde intactos. El espaciado entre filas del create se preservó moviendo el marginBottom a un wrapper nuevo. Las filas marcadas para borrar (_pendingDelete) no muestran error porque el validador las saltea.
+- **Where**: src/app/menu/page.tsx (filas de variante create ~L2099 y edit ~L2465).
+- **Priority**: 🟡 (validación muda confunde al usuario; pulido pre-lanzamiento).
 
 ### BL.19 ✅ Bug ganador NO ACTION en eliminarCategoria — RESUELTO
 - **[PENDIENTE] Bug ganador NO ACTION en eliminarCategoria**: eliminarCategoria (~L1115) borra los platos de la categoría directo, sin el cleanup de plato_ganador que se agregó a eliminarPlato. Si una categoría contiene el plato que es el ganador actual, el delete podría chocar con la FK plato_ganador (NO ACTION) y fallar en silencio (mismo bug que se arregló en eliminarPlato en commit 3565fd6). Fix: replicar en eliminarCategoria el patrón de eliminarPlato — detectar si algún plato de la categoría es el ganador actual, borrar la fila de plato_ganador primero, chequear el error, resetear estado local. Detectado al cablear limpiarPromosVacias (7e093f0).
