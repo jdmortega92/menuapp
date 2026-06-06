@@ -484,7 +484,7 @@ export default function MenuPublicoPage() {
   }
 
   const itemsPedido = Object.entries(pedido).map(([cartKey, cantidad]) => {
-    const { platoId, varianteId } = parseCartKey(cartKey)
+    const { platoId, varianteId, source } = parseCartKey(cartKey)
     const plato = todosLosPlatos.find((p: any) => p.id === platoId)
     if (!plato) return null
     const variante = varianteId
@@ -492,7 +492,29 @@ export default function MenuPublicoPage() {
       : undefined
     // Defensive: si la cartKey referencia una variante que ya no existe, descartar el item
     if (varianteId && !variante) return null
-    const promo = preciosPromo[cartKey]
+    // Promo cart-sync: día/ganador son specials congelados (precio capturado al
+    // agregar; NUNCA recalcular, ver comentario de día en agregarAlPedido). Para
+    // líneas normales, RE-DERIVAR descuento/2x1 contra los índices vivos
+    // (effDiscount/has2x1) en vez de leer preciosPromo congelado, para que editar o
+    // eliminar una promo en el admin se refleje en el carrito (precio, total,
+    // WhatsApp, productos). Mismo orden y cómputo que agregarAlPedido: descuento → 2x1.
+    // Si ninguna promo aplica ahora (eliminada, fuera de día/hora, promos off) →
+    // promo undefined → la línea cae al precio normal del plato/variante. La cantidad
+    // NO se toca: una promo revertida queda como N unidades a precio normal.
+    let promo: { precioUnitario: number; etiqueta: string } | undefined
+    if (source === 'dia' || source === 'ganador') {
+      promo = preciosPromo[cartKey]
+    } else {
+      const base = precioEfectivo(plato, varianteId)
+      const pct = effDiscount(platoId, varianteId ?? null)
+      if (pct > 0) {
+        promo = { precioUnitario: Math.round(base * (1 - pct / 100)), etiqueta: `${pct}% OFF` }
+      } else if (has2x1(platoId, varianteId ?? null)) {
+        promo = { precioUnitario: Math.round(base / 2), etiqueta: '2x1' }
+      } else {
+        promo = undefined
+      }
+    }
     return { plato, variante, cantidad, promo, cartKey }
   }).filter((i: any) => i !== null) as Array<{
     plato: any
