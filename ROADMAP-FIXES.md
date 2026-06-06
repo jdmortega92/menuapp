@@ -490,6 +490,20 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
 
 ## Items
 
+### BL.27 ✅ Promo en canasta no se sincroniza al editar/eliminar — RESUELTO
+- **Found**: 2026-06-01 (reportado por Julian: al editar o eliminar una promo, no se actualizaba/desaparecía de la canasta del menú público; platos y combos sí lo hacían, promos no).
+- **Causa**: en el menú público, una línea con promo congelaba su precio con descuento/2x1 en preciosPromo al agregarse y nunca se recalculaba. Platos/combos "se sincronizan" porque itemsPedido los re-deriva de los datos vivos en cada render; las promos quedaban afuera de ese mecanismo (precio congelado en estado, leído verbatim).
+- **Resuelto**: 2026-06-01 (commit f702a5b). itemsPedido ahora re-deriva la promo de las líneas normales contra los índices vivos (effDiscount/has2x1) en vez de leer preciosPromo, usando el mismo base/cómputo/orden que agregarAlPedido (sin drift de redondeo). Editar promo → el precio/etiqueta de la línea se actualiza; eliminar o fuera de ventana → vuelve al precio normal y pierde la etiqueta, manteniendo la línea (el plato sigue válido); la cantidad NUNCA se toca (un 2x1 revertido queda como N unidades a precio normal). Día/ganador (source-tagged) quedan congelados, excluidos del recálculo. totalPedido, el mensaje de WhatsApp y el insert a pedidos_whatsapp.productos leen la promo derivada, así que se corrigen los tres a la vez. Decisión de Julian: recalcular siempre.
+- **Where**: src/app/[slug]/page.tsx (itemsPedido ~L486).
+- **Priority**: 🟡 high (bug funcional que afecta al cliente final / precio cobrado).
+
+### BL.28 🟢 Stepping de cantidad del 2x1 usa el tag congelado de preciosPromo — PENDIENTE
+- **[PENDIENTE]**: los handlers de +/- (agregarAlPedido ~L433, quitarDelPedido ~L469) deciden si pasos de ±2 mirando preciosPromo[cartKey]?.etiqueta === '2x1' (congelado), no el valor recalculado. preciosPromo se escribe al agregar y no se limpia cuando una promo se re-deriva away. Consecuencia: si un 2x1 se elimina en el admin mientras el cliente tiene esa línea, el precio/etiqueta/total quedan correctos (re-derivados a normal), pero futuros clicks +/- en esa línea seguirían pasando de a 2 por el tag viejo. Caso de borde estrecho, display/precio-correcto, solo el stepping queda viejo.
+- **Found**: 2026-06-01 (flageado durante BL.27, no tocado: la tarea no modificaba comportamiento de cantidad).
+- **Where**: src/app/[slug]/page.tsx (agregarAlPedido ~L433, quitarDelPedido ~L469).
+- **Fix sugerido**: que esos handlers consulten has2x1(platoId, varianteId) en vivo en vez del tag congelado de preciosPromo (y/o limpiar las entradas de preciosPromo de keys no-día/ganador).
+- **Priority**: 🟢 normal (caso de borde estrecho).
+
 ### F8.8 Mejoras de borrado en el admin (aviso de plato, mark-for-removal de variantes, auto-borrado de promos vacías) — CLOSED
 - **Closed**: 2026-06-01.
 - **Goal**: cerrar los huecos de UX y correctitud en los borrados del admin que surgieron al terminar PIEZA 3. Tres piezas + un fix de FK.
