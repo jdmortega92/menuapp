@@ -1846,14 +1846,11 @@ export default function DashboardPage() {
               <div className="card" style={{ padding: '16px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '4px' }}>
                   <div style={{ fontSize: '13px', fontWeight: 500 }}>Actividad por día</div>
-                  {promedioDiario > 0 && (
-                    <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
-                      prom. {promedioDiario}/día
-                    </div>
-                  )}
                 </div>
                 <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginBottom: '14px' }}>
-                  {contextoTemporal.rango}
+                  {esMesChart
+                    ? `${contextoTemporal.rango} · días 1–${escaneosPorDia[escaneosPorDia.length - 1]?.numero ?? ''}`
+                    : contextoTemporal.rango}
                 </div>
 
                 {/* Gráfica */}
@@ -1945,14 +1942,19 @@ export default function DashboardPage() {
                     lineHeight: 1.5,
                   }}>
                     {mejorDiaSemana && (
-                      <>
+                      <div>
                         Mejor día: <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{mejorDiaSemana.dia} {mejorDiaSemana.numero}</span> con <span style={{ color: 'var(--color-green)', fontWeight: 500 }}>{mejorDiaSemana.actual} visitas</span>
                         {topHorario && <>. Horario pico: <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{topHorario.rango}</span></>}
                         .
-                      </>
+                      </div>
                     )}
                     {!mejorDiaSemana && topHorario && (
-                      <>Horario con más movimiento: <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{topHorario.rango}</span>.</>
+                      <div>Horario con más movimiento: <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{topHorario.rango}</span>.</div>
+                    )}
+                    {promedioDiario > 0 && (
+                      <div style={{ marginTop: '4px' }}>
+                        Promedio: <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{promedioDiario} {promedioDiario === 1 ? 'visita' : 'visitas'} por día</span>
+                      </div>
                     )}
                   </div>
                 )}
