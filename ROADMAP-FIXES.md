@@ -490,6 +490,64 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
 
 ## Items
 
+### BL.29 ✅ Dashboard: bug de huso horario en fechaColombia (doble offset) — RESUELTO
+- **Found**: 2026-06-06 (auditoría del dashboard de estadísticas).
+- **Causa**: fechaColombia (dashboard/page.tsx) calculaba el ajuste con signos cruzados — offsetCol escrito a mano como -300 vs getTimezoneOffset() que devuelve +300 para UTC-5 → restaba 10h en vez de 5h. Resultado: las ventanas de fecha rodaban un día hacia atrás entre 00:00–04:59 COT, y "este mes" quedaba en cero el día 1 antes de las 05:00 (desde=1ro pero hasta=hoyStr sesgado al mes anterior → desde > hasta).
+- **Resuelto**: 2026-06-07 (commit cd18c8a). Reemplazado por la MISMA convención con que el menú público ESCRIBE fecha: new Date(d.getTime() - 5h).toISOString().split('T')[0] — independiente del huso del navegador, sin getTimezoneOffset(). Una fila escrita con fecha=X cae siempre dentro de la ventana que incluye X. Además: el año/mes de la rama 'mes' y el primerDiaMes de la alerta-4 ahora se derivan de la fecha COT corregida (hoyStr) en vez de getters locales del navegador. Solo lectura (límites de query / flags de display), sin escrituras. Los helpers del heatmap (horaColombia/diaColombia) ya eran correctos (mecánica distinta que cancela el offset) y no se tocaron.
+- **Where**: src/app/dashboard/page.tsx (fechaColombia, rama 'mes', alerta-4).
+- **Priority**: 🟡 high (números equivocados en horas tempranas / día 1 del mes).
+
+### BL.30 ✅ Dashboard: ventanas 'semana' asimétricas y dos definiciones de "esta semana" — RESUELTO
+- **Found**: 2026-06-06 (auditoría del dashboard).
+- **Causa**: 'semana' era asimétrica — actual = 8 días inclusive (hoy-7..hoy) vs anterior = 7 días (hoy-14..hoy-8), sesgando la variación. Y había DOS definiciones de "esta semana" en la misma pantalla: el titular usaba la ventana rodante de 8 días, pero el gráfico "Actividad por día" mostraba la semana calendario lun-dom → el número del titular no cuadraba con la suma de las barras, y la etiqueta "día X de 7" contradecía la ventana rodante.
+- **Resuelto**: 2026-06-07 (commit 099c4b3). Model B-fair: actual = lunes..hoy; anterior = lunes-pasado..mismo-día-de-la-semana-pasada (mismos días transcurridos → variación como-con-como, arregla la asimetría 8-vs-7 Y el sesgo de inicio de semana). lunesSemana unificado/hoisteado (fuente única reusada por la ventana y el gráfico). Barras del gráfico construidas vía fechaColombia (COT). El titular ahora ES igual a la suma de las barras del gráfico. 'hoy' (1v1) y 'mes' (mes-a-hoy vs mes anterior completo, por diseño) sin tocar. Solo lectura; sin cambiar la longitud de otras ventanas.
+- **Where**: src/app/dashboard/page.tsx (bloque de ventanas 'semana', array del gráfico).
+- **Priority**: 🟡 high (variación sesgada + dos números de "esta semana" que no cuadran).
+
+### BL.31 ✅ Dashboard: embudo de conversión real por sesión (3 capas) — RESUELTO
+- **Found**: 2026-06-06 (auditoría: el embudo trataba 3 métricas no comparables como un funnel anidado — visitasMenu=eventos de menú-abierto, vieronPlatos=eventos de plato-detalle (uno abre muchos), pidieron=pedidos → tasas >100% ("320% continuó explorando"), fuga negativa, etapa 3 > etapa 2, veredicto falso).
+- **Goal**: reemplazar el embudo basado en conteo-de-eventos por uno real basado en sesiones únicas (visitas distintas), distinguible de las stat cards (que cuentan eventos).
+- **Capa 1 — Schema (Supabase SQL, manual)**: columna session_id text NULL añadida a visitas_menu, vistas_platos y pedidos_whatsapp. Aditiva, sin default, sin FK; filas viejas quedan NULL (el embudo arranca desde la activación, las visitas previas no se incluyen).
+- **Capa 2 — Logging (commit b4052d8)**: helper getSessionId() (id por-visita, cacheado en sessionStorage, crypto.randomUUID(), guard SSR typeof window, módulo-scope) escrito en los TRES inserts del menú público, así una visita (pestaña) comparte el mismo id en menu-open + cada plato-view + el pedido. Nueva pestaña/re-escaneo = nueva sesión. Solo se llama en effects/callbacks (post-hidratación), nunca en render.
+- **Capa 3 — Dashboard (commit ab27224)**: reemplazado el embudo de event-ratio por conteos de sesiones DISTINTAS vía intersección de Sets en cliente, con subconjuntos ANIDADOS para monotonía (toda sesión de plato/pedido contada ⊆ las que abrieron el menú). Embudo de 2 etapas menú→pedido (los pedidos NO se gatean en plato-views, así los pedidos directos de combo/promo cuentan); la exploración de platos se muestra como métrica de engagement aparte, no como etapa intermedia. Todas las tasas 0-100% por construcción. Eliminado el benchmark sin fuente "promedio del sector (10%)" del dashboard Y del PDF. Filas legacy NULL excluidas (.not is null); caption "desde la activación del seguimiento por sesión".
+- **Capa 4 — Labels (commit 07fd170)**: etapas del embudo renombradas a "Sesiones que abrieron el menú" / "Sesiones que pidieron" para distinguirlas de las stat cards (que cuentan eventos: ej. card "Pedidos WhatsApp: 2" vs embudo "1" = una sesión que pidió 2 veces), con subtítulo "Cuenta sesiones únicas (una visita = una sesión), no pedidos totales". PDF actualizado a juego ("Sesiones que ...").
+- **Where**: src/app/[slug]/page.tsx (getSessionId + 3 inserts); src/app/dashboard/page.tsx (queries de sesión, embudoData, render, PDF); schema en Supabase (3 tablas).
+- **Commits**: b4052d8 (logging), ab27224 (dashboard), 07fd170 (labels).
+- **Priority**: 🟡 high (el embudo mostraba números imposibles al tier Pro).
+
+### BL.32 ✅ Dashboard: tres fixes medium (gráfico 'mes', rating histórico, platos vistos reconciliado) — RESUELTO
+- **Found**: 2026-06-06 (auditoría del dashboard).
+- **Resuelto**: 2026-06-07 (commit 619f9c8).
+  - **(A) Gráfico "Actividad por día" period-aware**: bajo 'mes' mostraba solo la semana actual (array fijo de 7 lun-dom) aunque fetchaba todo el mes → el resto se fetchaba y se descartaba. Ahora: 'semana' sigue lun-dom (preserva el comportamiento del window fix); 'mes' arma una barra por día desde el 1ro..hoy (el mes descubre su nº de días del rango, sin futuros). Las barras comprimen sin scroll (flex:1, gap más fino en mes), etiquetas dispersas en mes (número solo en 1, múltiplos de 5 y hoy; sin nombre de día). Forma de day-object preservada → el PDF y el resumen "mejor día" siguen funcionando igual. Fechas ancladas a mediodía para que el -5h de COT no cruce el límite de día.
+  - **(B) Rating/reseñas lifetime etiquetadas**: calData (promedio) y resenasData (últimas) no tienen filtro de fecha (son históricos) pero viven bajo el contexto del periodo. Se mantienen lifetime (las reseñas son escasas; un rating de 7 días sería ruidoso/vacío), solo se etiquetan: subtítulo "histórico · N reseñas" en el card de rating y caption "de todo el historial" en "Últimas reseñas".
+  - **(C) Titular "Platos vistos" reconciliado**: contaba TODAS las filas de vistas_platos (incl. platos eliminados) vía un count separado, mientras el desglose "Platos más vistos" cruza contra platos actuales → no cuadraban. Ahora el titular = suma de vistas SOLO sobre platos actuales (derivado de vistasData + platosInfo ya fetchados, sin query nueva); el periodo anterior se filtra simétricamente con .in('plato_id', currentPlatoIds) y guard de array vacío (sin platos actuales → 0, no "todas las filas").
+- **Where**: src/app/dashboard/page.tsx (build de escaneosPorDia + render del gráfico; cards de rating/reseñas; derivación de stats.visitas + periodo anterior).
+- **Priority**: 🟡 (A) misrepresenta el mes / 🟢 (B,C) menores.
+
+### BL.33 ✅ Dashboard: claridad del resumen del gráfico mensual — RESUELTO
+- **Found**: 2026-06-07 (usuarios confundidos: los números del eje no se leían como "días del mes" y "prom. X/día" era críptico).
+- **Resuelto**: 2026-06-07 (commit 6a99739). Subtítulo del gráfico period-aware: en 'mes' muestra "{Mes Año} · días 1–N" (reusa contextoTemporal.rango / el array meses, sin hardcode) para que los números del eje se lean como días. Removido el "prom. X/día" abreviado; añadida una línea explícita "Promedio: N visitas por día" (singular "visita" si N===1) junto al resumen de "mejor día". El "Horario pico" (hora pico) se preservó intacto (texto y valor), ahora arriba de la línea de Promedio. Solo copy/labels; sin cambios de datos/cálculo/query. 'semana' sin cambios.
+- **Where**: src/app/dashboard/page.tsx (subtítulo + bloque resumen del gráfico "Actividad por día").
+- **Priority**: 🟢 (claridad/copy).
+
+### BL.34 🟡 Visitas con doble/triple logging (sin dedup) — PENDIENTE
+- **[PENDIENTE]**: el effect que inserta en visitas_menu no tiene guard de dedup (StrictMode en dev, remounts), así que escribe 2-3 filas por visita. El embudo por sesión se auto-cura vía COUNT(DISTINCT session_id), pero la stat card cruda "Visitas al menú" queda inflada. Fix: un guard de inserción única por sesión (ej. marcar en sessionStorage que ya se logueó la visita) para que el conteo crudo sea fiel.
+- **Found**: 2026-06-06 (auditoría del dashboard; confirmado al cablear el embudo por sesión, BL.31).
+- **Where**: src/app/[slug]/page.tsx (effect de insert de visitas_menu ~L163).
+- **Priority**: 🟡 (infla un número visible, pero el embudo no se ve afectado). No urgente.
+
+### BL.35 🟢 Dashboard: performance al cambiar de periodo — PENDIENTE
+- **[PENDIENTE]**: cambiar de periodo (Hoy/Semana/Mes) re-corre todas las queries en serie cada vez. Optimización futura: paralelizar con Promise.all, añadir caching SWR para cambio de periodo instantáneo, y crear el índice DB (restaurante_id, fecha) en las tablas de alto volumen (sobre todo vistas_platos) cuando el volumen crezca. Mejor hacerlo junto con el refactor planeado.
+- **Found**: 2026-06-06 (auditoría del dashboard).
+- **Where**: src/app/dashboard/page.tsx (cargarStats); índices en Supabase.
+- **Priority**: 🟢 (no urgente al volumen actual, pre-lanzamiento).
+
+### BL.36 🟢 Embudo: mejoras futuras (RPC distinct + visitor id persistente) — PENDIENTE
+- **[PENDIENTE]**: (1) cuando el volumen de vistas_platos crezca, mover el COUNT(DISTINCT session_id) a un RPC de Postgres (hoy es dedup client-side con Sets, que transfiere una fila por evento). (2) Opcional: un visitor id PERSISTENTE (cross-visita, distinto del session_id por-visita) para una métrica de retención/visitantes recurrentes, separada del embudo por-sesión.
+- **Found**: 2026-06-06 (diseño del embudo por sesión, BL.31).
+- **Where**: src/app/dashboard/page.tsx (queries del embudo); src/app/[slug]/page.tsx (logging); schema/RPC en Supabase.
+- **Priority**: 🟢 (mejora futura, no urgente al volumen actual).
+
 ### BL.27 ✅ Promo en canasta no se sincroniza al editar/eliminar — RESUELTO
 - **Found**: 2026-06-01 (reportado por Julian: al editar o eliminar una promo, no se actualizaba/desaparecía de la canasta del menú público; platos y combos sí lo hacían, promos no).
 - **Causa**: en el menú público, una línea con promo congelaba su precio con descuento/2x1 en preciosPromo al agregarse y nunca se recalculaba. Platos/combos "se sincronizan" porque itemsPedido los re-deriva de los datos vivos en cada render; las promos quedaban afuera de ese mecanismo (precio congelado en estado, leído verbatim).
