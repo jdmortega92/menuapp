@@ -23,6 +23,23 @@ function formatoPrecio(valor: number | null | undefined): string {
   return (valor ?? 0).toLocaleString('es-CO')
 }
 
+// Id de sesión por-visita (por pestaña): se crea una vez y se cachea en
+// sessionStorage; sobrevive re-renders y navegación dentro de la pestaña, y
+// muere al cerrarla → nueva visita/re-escaneo = nueva sesión. Lo comparten los
+// tres inserts de logging (visitas_menu, vistas_platos, pedidos_whatsapp) para
+// permitir un embudo real por sesión. Solo se llama en effects / callbacks
+// (cliente, post-hidratación), nunca en render.
+function getSessionId(): string {
+  if (typeof window === 'undefined') return '' // SSR guard — nunca tocar sessionStorage en el server
+  const KEY = 'menuapp_session_id'
+  let id = window.sessionStorage.getItem(KEY)
+  if (!id) {
+    id = crypto.randomUUID()
+    window.sessionStorage.setItem(KEY, id)
+  }
+  return id
+}
+
 function formatDiasFull(dias: string[]): string {
   const map: Record<string, string> = {
     lun: 'Lunes', mar: 'Martes', mie: 'Miércoles', jue: 'Jueves',
@@ -169,6 +186,7 @@ export default function MenuPublicoPage() {
       origen: esQR ? 'qr' : 'enlace',
       mesa: qrMesa || null,
       fecha: fechaColombia,
+      session_id: getSessionId(),
     }).then(() => {})
   }, [restaurante?.id])
   useEffect(() => {
@@ -182,6 +200,7 @@ export default function MenuPublicoPage() {
       plato_id: platoDetalle.id,
       restaurante_id: restaurante.id,
       fecha: fechaCOL,
+      session_id: getSessionId(),
     }).then(({ error }: any) => {
 
     })
@@ -578,6 +597,7 @@ export default function MenuPublicoPage() {
       fecha: new Date(new Date().getTime() - 5 * 60 * 60 * 1000).toISOString().split('T')[0],
       total: totalPedido,
       nota: nota || null,
+      session_id: getSessionId(),
       productos: itemsPedido.map(i => ({
         nombre: i.variante ? `${i.plato.nombre} (${i.variante.nombre})` : i.plato.nombre,
         cantidad: i.cantidad,
