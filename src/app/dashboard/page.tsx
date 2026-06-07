@@ -30,6 +30,12 @@ export default function DashboardPage() {
     pedidosWhatsapp: 0,
     calificacion: 0,
     totalResenas: 0,
+    // Embudo por sesión (Layer 3). Subconjuntos anidados sobre las sesiones que
+    // abrieron el menú → todas las tasas quedan 0-100% por construcción. Excluyen
+    // filas legacy con session_id NULL (anteriores al seguimiento por sesión).
+    sesionesMenu: 0,
+    sesionesPlato: 0,
+    sesionesPedido: 0,
   })
 
   const [statsAnterior, setStatsAnterior] = useState({
@@ -123,6 +129,32 @@ export default function DashboardPage() {
         .eq('restaurante_id', rest!.id)
         .gte('fecha', desde)
         .lte('fecha', hasta)
+
+      // ===== Embudo por sesión (menú → pedido), con platos como engagement =====
+      // Traemos session_id (NOT NULL) de las tres tablas para el periodo y
+      // deduplicamos/intersectamos con Sets en cliente. Subconjuntos anidados:
+      // toda sesión de plato/pedido contada debe existir entre las que abrieron
+      // el menú → monotonía garantizada (menú ≥ platos, menú ≥ pedido) y tasas 0-100%.
+      const [{ data: sesMenuRows }, { data: sesPlatoRows }, { data: sesPedidoRows }] = await Promise.all([
+        supabase.from('visitas_menu').select('session_id')
+          .eq('restaurante_id', rest!.id).gte('fecha', desde).lte('fecha', hasta)
+          .not('session_id', 'is', null),
+        supabase.from('vistas_platos').select('session_id')
+          .eq('restaurante_id', rest!.id).gte('fecha', desde).lte('fecha', hasta)
+          .not('session_id', 'is', null),
+        supabase.from('pedidos_whatsapp').select('session_id')
+          .eq('restaurante_id', rest!.id).gte('fecha', desde).lte('fecha', hasta)
+          .not('session_id', 'is', null),
+      ])
+      const setMenu = new Set((sesMenuRows ?? []).map((r: any) => r.session_id))
+      const setPlato = new Set((sesPlatoRows ?? []).map((r: any) => r.session_id))
+      const setPedido = new Set((sesPedidoRows ?? []).map((r: any) => r.session_id))
+      const sesionesMenu = setMenu.size
+      // engagement: sesiones que exploraron ≥1 plato, entre las que abrieron el menú
+      const sesionesPlato = [...setPlato].filter((id: any) => setMenu.has(id)).length
+      // conversión: sesiones que pidieron, entre las que abrieron el menú
+      // (NO se exige haber visto un plato → los pedidos directos de combo/promo cuentan)
+      const sesionesPedido = [...setPedido].filter((id: any) => setMenu.has(id)).length
 
       // Calificación promedio
       const { data: calData } = await supabase
@@ -529,6 +561,9 @@ export default function DashboardPage() {
         pedidosWhatsapp: pedidos || 0,
         calificacion: promedio,
         totalResenas: calData?.length || 0,
+        sesionesMenu,
+        sesionesPlato,
+        sesionesPedido,
       })
     }
     cargarStats()
@@ -675,10 +710,10 @@ export default function DashboardPage() {
 
     // Línea 2: conversión
     const lineaResumen2 = esPro && embudoData.visitasMenu > 0
-      ? `Conversión del ${embudoData.conversionFinal}% — ${embudoData.diagnostico.tipo === 'excelente' ? 'por encima del promedio del sector.'
-        : embudoData.diagnostico.tipo === 'bueno' ? 'en el promedio del sector.'
-        : embudoData.diagnostico.tipo === 'regular' ? 'por debajo del promedio (10%).'
-        : 'muy por debajo del promedio.'}`
+      ? `Conversión del ${embudoData.conversionFinal}% — ${embudoData.diagnostico.tipo === 'excelente' ? 'tu menú está convirtiendo muy bien.'
+        : embudoData.diagnostico.tipo === 'bueno' ? 'buen ritmo, con espacio para optimizar.'
+        : embudoData.diagnostico.tipo === 'regular' ? 'hay oportunidades claras de mejora.'
+        : 'revisa los puntos de fuga para impulsar el pedido.'}`
       : `Total de pedidos por WhatsApp: ${stats.pedidosWhatsapp}.`
     doc.text(lineaResumen2, margen + 6, y + 20)
 
@@ -1241,68 +1276,58 @@ export default function DashboardPage() {
   const varEscaneos = calcularVariacion(stats.escaneos, statsAnterior.escaneos)
   const varVisitas = calcularVariacion(stats.visitas, statsAnterior.visitas)
   const varPedidos = calcularVariacion(stats.pedidosWhatsapp, statsAnterior.pedidosWhatsapp)
-  // ===== Embudo de conversión inteligente =====
+  // ===== Embudo de conversión por sesión (menú → pedido) =====
+  // 2 etapas anidadas: sesiones que abrieron el menú → sesiones que pidieron
+  // (entre las que abrieron). La exploración de platos es engagement lateral, NO
+  // una etapa intermedia obligatoria (un pedido directo de combo/promo cuenta sin
+  // abrir detalle de plato). Todas las tasas quedan 0-100% por construcción.
   const embudoData = (() => {
-    const visitasMenu = stats.escaneos
-    const vieronPlatos = stats.visitas
-    const pidieron = stats.pedidosWhatsapp
+    const visitasMenu = stats.sesionesMenu     // sesiones que abrieron el menú
+    const exploraron = stats.sesionesPlato     // engagement: vieron ≥1 plato (⊆ menú)
+    const pidieron = stats.sesionesPedido       // pidieron (⊆ menú)
 
-    // Tasas de paso entre etapas
-    const tasaExploracion = visitasMenu > 0 ? (vieronPlatos / visitasMenu) * 100 : 0
-    const tasaPedido = vieronPlatos > 0 ? (pidieron / vieronPlatos) * 100 : 0
-    const conversionFinal = visitasMenu > 0 ? (pidieron / visitasMenu) * 100 : 0
+    const conversionFinal = visitasMenu > 0 ? Math.round((pidieron / visitasMenu) * 100) : 0
+    const tasaExploracion = visitasMenu > 0 ? Math.round((exploraron / visitasMenu) * 100) : 0
+    const fuga = visitasMenu - pidieron        // abrieron pero no pidieron
 
-    // Fuga en cada etapa (cuántos se fueron)
-    const fugaExploracion = visitasMenu > 0 ? ((visitasMenu - vieronPlatos) / visitasMenu) * 100 : 0
-    const fugaPedido = vieronPlatos > 0 ? ((vieronPlatos - pidieron) / vieronPlatos) * 100 : 0
-
-    // Benchmark del sector (restaurantes con menú digital)
-    // Fuentes: promedio observado 8-15% conversión final
-    const benchmarkConversion = 10
-    const diferenciaBenchmark = conversionFinal - benchmarkConversion
-
-    // Identificar la mayor fuga
-    const mayorFuga = fugaExploracion >= fugaPedido
-      ? { etapa: 'menu_a_plato', pct: Math.round(fugaExploracion), perdidos: visitasMenu - vieronPlatos }
-      : { etapa: 'plato_a_pedido', pct: Math.round(fugaPedido), perdidos: vieronPlatos - pidieron }
-
-    // Diagnóstico del rendimiento general
+    // Diagnóstico SOLO según conversión menú→pedido. Sin afirmar un "promedio del
+    // sector" (era un benchmark hardcodeado sin fuente).
     let diagnostico: { tipo: 'excelente' | 'bueno' | 'regular' | 'mejorable' | 'sin_datos'; mensaje: string } = {
       tipo: 'sin_datos',
       mensaje: 'Comparte tu menú para empezar a ver datos de conversión.',
     }
     if (visitasMenu > 0) {
       if (conversionFinal >= 15) {
-        diagnostico = { tipo: 'excelente', mensaje: `Conversión del ${Math.round(conversionFinal)}% — por encima del promedio del sector (10%). Tu menú está funcionando muy bien.` }
+        diagnostico = { tipo: 'excelente', mensaje: `${conversionFinal}% de las sesiones que abrieron el menú terminaron en un pedido. Tu menú está convirtiendo muy bien.` }
       } else if (conversionFinal >= 10) {
-        diagnostico = { tipo: 'bueno', mensaje: `Conversión del ${Math.round(conversionFinal)}% — en el promedio del sector. Hay espacio para optimizar.` }
+        diagnostico = { tipo: 'bueno', mensaje: `${conversionFinal}% de las sesiones terminaron en un pedido. Buen ritmo, con espacio para optimizar.` }
       } else if (conversionFinal >= 5) {
-        diagnostico = { tipo: 'regular', mensaje: `Conversión del ${Math.round(conversionFinal)}% — por debajo del promedio (10%). Hay oportunidades claras de mejora.` }
+        diagnostico = { tipo: 'regular', mensaje: `${conversionFinal}% de las sesiones terminaron en un pedido. Hay oportunidades claras de mejora.` }
       } else {
-        diagnostico = { tipo: 'mejorable', mensaje: `Conversión del ${Math.round(conversionFinal)}% — muy por debajo del promedio (10%). Revisa los puntos de fuga.` }
+        diagnostico = { tipo: 'mejorable', mensaje: `${conversionFinal}% de las sesiones terminaron en un pedido. Revisa fotos, precios y descripciones para impulsar el pedido.` }
       }
     }
 
-    // Recomendación según dónde está la mayor fuga
+    // Recomendación según exploración / conversión (sin etapa-plato como fuga).
     let recomendacion = ''
     if (visitasMenu >= 10) {
-      if (mayorFuga.etapa === 'menu_a_plato' && mayorFuga.pct >= 50) {
-        recomendacion = 'Muchos abren el menú pero no entran a ningún plato. Mejora las fotos de portada y los nombres de las categorías.'
-      } else if (mayorFuga.etapa === 'plato_a_pedido' && mayorFuga.pct >= 70) {
-        recomendacion = 'Ven los platos pero no piden. Revisa precios, descripciones y tiempos de entrega que muestras.'
+      if (tasaExploracion < 40) {
+        recomendacion = 'Pocas sesiones abren el detalle de un plato. Mejora las fotos de portada y los nombres de las categorías para invitar a explorar.'
+      } else if (conversionFinal < 5) {
+        recomendacion = 'Exploran el menú pero pocos piden. Revisa precios, descripciones y el flujo de pedido por WhatsApp.'
       }
     }
 
     return {
-      visitasMenu, vieronPlatos, pidieron,
-      tasaExploracion: Math.round(tasaExploracion),
-      tasaPedido: Math.round(tasaPedido),
-      conversionFinal: Math.round(conversionFinal * 10) / 10,
-      mayorFuga,
+      visitasMenu,
+      vieronPlatos: exploraron,    // engagement (expuesto para el PDF y la línea de engagement)
+      pidieron,
+      conversionFinal,
+      tasaExploracion,             // % de sesiones que exploraron platos (engagement, no fuga)
+      tasaPedido: conversionFinal, // compat PDF: "tasa de paso" menú→pedido (≤100%)
+      fuga,
       diagnostico,
       recomendacion,
-      benchmarkConversion,
-      diferenciaBenchmark: Math.round(diferenciaBenchmark * 10) / 10,
     }
   })()
 
@@ -1636,7 +1661,7 @@ export default function DashboardPage() {
                 )}
               </div>
 
-              {/* Etapa 1: Visitaron el menú */}
+              {/* Etapa 1: Abrieron el menú (sesiones) */}
               <div style={{ marginBottom: '8px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '6px' }}>
                   <span style={{ fontSize: '13px' }}>Abrieron el menú</span>
@@ -1645,53 +1670,49 @@ export default function DashboardPage() {
                 <div style={{ height: '6px', background: 'var(--color-info)', borderRadius: '3px' }} />
               </div>
 
-              {/* Paso 1 → 2 */}
+              {/* Paso menú → pedido */}
               {embudoData.visitasMenu > 0 && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '0 0 8px 4px', padding: '4px 0' }}>
                   <span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>↓</span>
                   <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>
-                    {embudoData.tasaExploracion}% continuó explorando
-                    {embudoData.mayorFuga.etapa === 'menu_a_plato' && embudoData.mayorFuga.pct >= 50 && (
-                      <span style={{ color: 'var(--color-warning)', marginLeft: '6px' }}>· mayor fuga</span>
-                    )}
+                    {embudoData.conversionFinal}% llegó al pedido
                   </span>
                 </div>
               )}
 
-              {/* Etapa 2: Vieron platos */}
-              <div style={{ marginBottom: '8px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '6px' }}>
-                  <span style={{ fontSize: '13px' }}>Vieron detalle de platos</span>
-                  <span style={{ fontSize: '13px', fontWeight: 500 }}>{embudoData.vieronPlatos}</span>
-                </div>
-                <div style={{ height: '6px', background: 'var(--bg-tertiary)', borderRadius: '3px', overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${embudoData.tasaExploracion}%`, background: 'var(--color-info)', borderRadius: '3px', transition: 'width 0.4s' }} />
-                </div>
-              </div>
-
-              {/* Paso 2 → 3 */}
-              {embudoData.vieronPlatos > 0 && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '0 0 8px 4px', padding: '4px 0' }}>
-                  <span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>↓</span>
-                  <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>
-                    {embudoData.tasaPedido}% llegó al pedido
-                    {embudoData.mayorFuga.etapa === 'plato_a_pedido' && embudoData.mayorFuga.pct >= 50 && (
-                      <span style={{ color: 'var(--color-warning)', marginLeft: '6px' }}>· mayor fuga</span>
-                    )}
-                  </span>
-                </div>
-              )}
-
-              {/* Etapa 3: Pidieron */}
-              <div style={{ marginBottom: '16px' }}>
+              {/* Etapa 2: Pidieron por WhatsApp (sesiones, ⊆ abrieron el menú) */}
+              <div style={{ marginBottom: '14px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '6px' }}>
                   <span style={{ fontSize: '13px' }}>Pidieron por WhatsApp</span>
                   <span style={{ fontSize: '13px', fontWeight: 500 }}>{embudoData.pidieron}</span>
                 </div>
                 <div style={{ height: '6px', background: 'var(--bg-tertiary)', borderRadius: '3px', overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${embudoData.visitasMenu > 0 ? (embudoData.pidieron / embudoData.visitasMenu) * 100 : 0}%`, background: 'var(--color-green)', borderRadius: '3px', transition: 'width 0.4s' }} />
+                  <div style={{ height: '100%', width: `${embudoData.conversionFinal}%`, background: 'var(--color-green)', borderRadius: '3px', transition: 'width 0.4s' }} />
                 </div>
               </div>
+
+              {/* Engagement (NO es una etapa del embudo): exploración de platos */}
+              {embudoData.visitasMenu > 0 && (
+                <div style={{
+                  background: 'var(--bg-tertiary)',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '10px 12px',
+                  marginBottom: '12px',
+                  fontSize: '11px',
+                  color: 'var(--text-secondary)',
+                  lineHeight: 1.4,
+                }}>
+                  De las sesiones que abrieron el menú, <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{embudoData.tasaExploracion}%</span> exploró el detalle de algún plato
+                  <span style={{ color: 'var(--text-tertiary)' }}> ({embudoData.vieronPlatos} {embudoData.vieronPlatos === 1 ? 'sesión' : 'sesiones'})</span>.
+                </div>
+              )}
+
+              {/* Caption: alcance del embudo */}
+              {embudoData.visitasMenu > 0 && (
+                <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginBottom: '12px', lineHeight: 1.4 }}>
+                  Embudo basado en sesiones registradas (desde la activación del seguimiento por sesión). Las visitas anteriores no se incluyen.
+                </div>
+              )}
 
               {/* Diagnóstico principal */}
               {embudoData.diagnostico.tipo !== 'sin_datos' && (
