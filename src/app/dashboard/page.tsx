@@ -68,6 +68,14 @@ export default function DashboardPage() {
       let desdeAnterior = ''
       let hastaAnterior = ''
 
+      // Lunes de la semana actual (COT). Fuente única reusada por la ventana
+      // 'semana' y por el gráfico "Actividad por día" (no recalcular abajo).
+      const diaHoy = hoy.getDay()
+      const diasDesdeLunesSem = diaHoy === 0 ? 6 : diaHoy - 1
+      const lunesSemana = new Date(hoy)
+      lunesSemana.setDate(hoy.getDate() - diasDesdeLunesSem)
+      lunesSemana.setHours(0, 0, 0, 0)
+
       if (filtroTiempo === 'hoy') {
         desde = hoyStr
         hasta = hoyStr
@@ -75,10 +83,13 @@ export default function DashboardPage() {
         desdeAnterior = ayer
         hastaAnterior = ayer
       } else if (filtroTiempo === 'semana') {
-        desde = fechaColombia(new Date(hoy.getTime() - 7 * 24 * 60 * 60 * 1000))
+        // Semana calendario (Model B-fair): actual = lunes..hoy; anterior =
+        // lunes pasado..mismo día de la semana pasada (mismo nº de días transcurridos),
+        // para que la variación compare como-con-como. Todo vía fechaColombia (COT).
+        desde = fechaColombia(lunesSemana)
         hasta = hoyStr
-        desdeAnterior = fechaColombia(new Date(hoy.getTime() - 14 * 24 * 60 * 60 * 1000))
-        hastaAnterior = fechaColombia(new Date(hoy.getTime() - 8 * 24 * 60 * 60 * 1000))
+        desdeAnterior = fechaColombia(new Date(lunesSemana.getTime() - 7 * 24 * 60 * 60 * 1000))
+        hastaAnterior = fechaColombia(new Date(hoy.getTime() - 7 * 24 * 60 * 60 * 1000))
       } else {
         // Año/mes derivados de la fecha COT corregida (hoyStr), no de los getters
         // locales del navegador, para robustez total de huso horario.
@@ -309,22 +320,14 @@ export default function DashboardPage() {
 
       const diasCortos = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb']
 
-      // Calcular lunes de esta semana
-      const diaHoy = hoy.getDay()
-      const diasDesdeLunesSem = diaHoy === 0 ? 6 : diaHoy - 1
-      const lunesSemana = new Date(hoy)
-      lunesSemana.setDate(hoy.getDate() - diasDesdeLunesSem)
-      lunesSemana.setHours(0, 0, 0, 0)
-
-      // Construir array de 7 días (lun a dom) con fechas reales
+      // lunesSemana ya está definido arriba (fuente única). Construir array de 7
+      // días (lun a dom) con fechas en COT vía fechaColombia para que las barras
+      // coincidan exactamente con la semántica de la métrica.
       const diasConFecha: any[] = []
       for (let i = 0; i < 7; i++) {
         const fecha = new Date(lunesSemana)
         fecha.setDate(lunesSemana.getDate() + i)
-        const yyyy = fecha.getFullYear()
-        const mm = String(fecha.getMonth() + 1).padStart(2, '0')
-        const dd = String(fecha.getDate()).padStart(2, '0')
-        const fechaStr = `${yyyy}-${mm}-${dd}`
+        const fechaStr = fechaColombia(fecha)
 
         const hoyComparar = fechaColombia(hoy)
         const esFuturo = fechaStr > hoyComparar
