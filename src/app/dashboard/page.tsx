@@ -790,9 +790,9 @@ export default function DashboardPage() {
         startY: y,
         head: [['Etapa', 'Cantidad', '% del total', 'Tasa de paso']],
         body: [
-          ['Abrieron el menú', embudoData.visitasMenu.toString(), '100%', '—'],
-          ['Vieron detalle de platos', embudoData.vieronPlatos.toString(), `${Math.round((embudoData.vieronPlatos / embudoData.visitasMenu) * 100)}%`, `${embudoData.tasaExploracion}%`],
-          ['Pidieron por WhatsApp', embudoData.pidieron.toString(), `${Math.round((embudoData.pidieron / embudoData.visitasMenu) * 100)}%`, `${embudoData.tasaPedido}%`],
+          ['Sesiones que abrieron el menú', embudoData.visitasMenu.toString(), '100%', '—'],
+          ['Sesiones que exploraron platos', embudoData.vieronPlatos.toString(), `${Math.round((embudoData.vieronPlatos / embudoData.visitasMenu) * 100)}%`, `${embudoData.tasaExploracion}%`],
+          ['Sesiones que pidieron', embudoData.pidieron.toString(), `${Math.round((embudoData.pidieron / embudoData.visitasMenu) * 100)}%`, `${embudoData.tasaPedido}%`],
         ],
         margin: { left: margen, right: margen },
         styles: { fontSize: 9, cellPadding: 4, textColor: TEXTO, lineColor: BORDE_SUAVE, lineWidth: 0.1 },
@@ -1652,7 +1652,7 @@ export default function DashboardPage() {
         {esPro ? (
           <div style={{ padding: '0 20px', marginBottom: '14px' }}>
             <div className="card" style={{ padding: '16px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '4px' }}>
                 <div style={{ fontSize: '13px', fontWeight: 500 }}>Embudo de conversión</div>
                 {embudoData.visitasMenu > 0 && (
                   <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
@@ -1660,11 +1660,14 @@ export default function DashboardPage() {
                   </div>
                 )}
               </div>
+              <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginBottom: '16px', lineHeight: 1.4 }}>
+                Cuenta sesiones únicas (una visita = una sesión), no pedidos totales
+              </div>
 
               {/* Etapa 1: Abrieron el menú (sesiones) */}
               <div style={{ marginBottom: '8px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '6px' }}>
-                  <span style={{ fontSize: '13px' }}>Abrieron el menú</span>
+                  <span style={{ fontSize: '13px' }}>Sesiones que abrieron el menú</span>
                   <span style={{ fontSize: '13px', fontWeight: 500 }}>{embudoData.visitasMenu}</span>
                 </div>
                 <div style={{ height: '6px', background: 'var(--color-info)', borderRadius: '3px' }} />
@@ -1683,7 +1686,7 @@ export default function DashboardPage() {
               {/* Etapa 2: Pidieron por WhatsApp (sesiones, ⊆ abrieron el menú) */}
               <div style={{ marginBottom: '14px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '6px' }}>
-                  <span style={{ fontSize: '13px' }}>Pidieron por WhatsApp</span>
+                  <span style={{ fontSize: '13px' }}>Sesiones que pidieron</span>
                   <span style={{ fontSize: '13px', fontWeight: 500 }}>{embudoData.pidieron}</span>
                 </div>
                 <div style={{ height: '6px', background: 'var(--bg-tertiary)', borderRadius: '3px', overflow: 'hidden' }}>
