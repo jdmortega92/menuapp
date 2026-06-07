@@ -167,15 +167,7 @@ export default function DashboardPage() {
         promedio = Math.round((calData.reduce((sum: number, c: any) => sum + c.estrellas, 0) / calData.length) * 10) / 10
       }
 
-      // Vistas de platos
-      const { count: vistasPlatos } = await supabase
-        .from('vistas_platos')
-        .select('*', { count: 'exact', head: true })
-        .eq('restaurante_id', rest!.id)
-        .gte('fecha', desde)
-        .lte('fecha', hasta)
-
-      // Platos más vistos
+      // Platos más vistos (filas con plato_id del periodo)
       const { data: vistasData } = await supabase
         .from('vistas_platos')
         .select('plato_id')
@@ -189,11 +181,19 @@ export default function DashboardPage() {
         .select('id, nombre, created_at')
         .eq('restaurante_id', rest!.id)
 
+      // Ids de platos ACTUALES. El titular "Platos vistos" se reconcilia con el
+      // desglose contando SOLO vistas de platos que aún existen (no de eliminados),
+      // así el titular = suma de todo el desglose por plato actual.
+      const currentPlatoIds = (platosInfo ?? []).map((p: any) => p.id)
+      let vistasPlatosCurrent = 0
+
       if (platosInfo && platosInfo.length > 0) {
         const conteo: Record<string, number> = {}
         if (vistasData) {
           vistasData.forEach((v: any) => { conteo[v.plato_id] = (conteo[v.plato_id] || 0) + 1 })
         }
+        // Titular reconciliado: suma de vistas SOLO sobre platos actuales.
+        vistasPlatosCurrent = currentPlatoIds.reduce((s: number, id: any) => s + (conteo[id] || 0), 0)
 
         // Fecha de inicio del periodo para filtrar por antigüedad del plato
         const desdePeriodo = new Date(desde + 'T00:00:00')
@@ -351,28 +351,46 @@ export default function DashboardPage() {
         .lte('fecha', hasta)
 
       const diasCortos = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb']
+      const hoyComparar = fechaColombia(hoy)
 
-      // lunesSemana ya está definido arriba (fuente única). Construir array de 7
-      // días (lun a dom) con fechas en COT vía fechaColombia para que las barras
-      // coincidan exactamente con la semántica de la métrica.
+      // Array de barras period-aware (fechas en COT vía fechaColombia):
+      // - 'semana': lunes..domingo (7 barras, días futuros en gris) — PRESERVA el
+      //   comportamiento que estableció el window fix.
+      // - 'mes' (y 'hoy', cuyo gráfico no se renderiza): una barra por día desde
+      //   `desde` hasta `hasta` (=hoy) inclusive → el mes descubre su nº de días del
+      //   rango y se detiene en hoy (sin días futuros). Mantiene la MISMA forma de
+      //   day-object, así el PDF y el resumen "mejor día" siguen funcionando igual.
       const diasConFecha: any[] = []
-      for (let i = 0; i < 7; i++) {
-        const fecha = new Date(lunesSemana)
-        fecha.setDate(lunesSemana.getDate() + i)
-        const fechaStr = fechaColombia(fecha)
-
-        const hoyComparar = fechaColombia(hoy)
-        const esFuturo = fechaStr > hoyComparar
-        const esHoy = fechaStr === hoyComparar
-
-        diasConFecha.push({
-          dia: diasCortos[fecha.getDay()],
-          numero: fecha.getDate(),
-          fecha: fechaStr,
-          actual: 0,
-          esFuturo,
-          esHoy,
-        })
+      if (filtroTiempo === 'semana') {
+        for (let i = 0; i < 7; i++) {
+          const fecha = new Date(lunesSemana)
+          fecha.setDate(lunesSemana.getDate() + i)
+          const fechaStr = fechaColombia(fecha)
+          diasConFecha.push({
+            dia: diasCortos[fecha.getDay()],
+            numero: fecha.getDate(),
+            fecha: fechaStr,
+            actual: 0,
+            esFuturo: fechaStr > hoyComparar,
+            esHoy: fechaStr === hoyComparar,
+          })
+        }
+      } else {
+        // Iterar desde..hasta inclusive. Ancla a mediodía local para que el ajuste
+        // COT (-5h) de fechaColombia no cruce el límite de día.
+        const start = new Date(desde + 'T12:00:00')
+        const end = new Date(hasta + 'T12:00:00')
+        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+          const fechaStr = fechaColombia(d)
+          diasConFecha.push({
+            dia: diasCortos[d.getDay()],
+            numero: d.getDate(),
+            fecha: fechaStr,
+            actual: 0,
+            esFuturo: fechaStr > hoyComparar,
+            esHoy: fechaStr === hoyComparar,
+          })
+        }
       }
 
       // Llenar con datos reales
@@ -430,12 +448,20 @@ export default function DashboardPage() {
         .gte('fecha', desdeAnterior)
         .lte('fecha', hastaAnterior)
 
-      const { count: vistasPlatosAnt } = await supabase
-        .from('vistas_platos')
-        .select('*', { count: 'exact', head: true })
-        .eq('restaurante_id', rest!.id)
-        .gte('fecha', desdeAnterior)
-        .lte('fecha', hastaAnterior)
+      // Periodo anterior: contar SOLO vistas de platos actuales (simétrico al
+      // titular) para que la variación compare como-con-como. Guarda el .in() vacío
+      // (sin platos actuales → 0, no "todas las filas").
+      let vistasPlatosAnt = 0
+      if (currentPlatoIds.length > 0) {
+        const { count } = await supabase
+          .from('vistas_platos')
+          .select('*', { count: 'exact', head: true })
+          .eq('restaurante_id', rest!.id)
+          .gte('fecha', desdeAnterior)
+          .lte('fecha', hastaAnterior)
+          .in('plato_id', currentPlatoIds)
+        vistasPlatosAnt = count || 0
+      }
 
       const { count: pedidosAnt } = await supabase
         .from('pedidos_whatsapp')
@@ -557,7 +583,7 @@ export default function DashboardPage() {
 
       setStats({
         escaneos: visitas || 0,
-        visitas: vistasPlatos || 0,
+        visitas: vistasPlatosCurrent,
         pedidosWhatsapp: pedidos || 0,
         calificacion: promedio,
         totalResenas: calData?.length || 0,
@@ -1627,7 +1653,7 @@ export default function DashboardPage() {
                   <div style={{ fontSize: '26px', fontWeight: 500 }}>{stats.calificacion}</div>
                   <div style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>/5</div>
                 </div>
-                <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '2px' }}>de {stats.totalResenas} reseñas</div>
+                <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '2px' }}>histórico · {stats.totalResenas} reseñas</div>
               </div>
             </div>
           </div>
@@ -1804,6 +1830,10 @@ export default function DashboardPage() {
           const totalVisitasSemana = escaneosPorDia.reduce((s: number, d: any) => s + d.actual, 0)
           const promedioDiario = diasConDatos.length > 0 ? Math.round(totalVisitasSemana / diasConDatos.length) : 0
           const maxDia = Math.max(...escaneosPorDia.map((d: any) => d.actual), 1)
+          // 'mes' puede tener hasta 31 barras: gap más fino para que compriman sin
+          // scroll, y etiquetas dispersas (ver más abajo).
+          const esMesChart = filtroTiempo === 'mes'
+          const gapChart = esMesChart ? '2px' : '6px'
 
           // Mejor día real (solo de días con datos)
           const mejorDiaSemana = [...diasConDatos].sort((a: any, b: any) => b.actual - a.actual)[0]
@@ -1827,7 +1857,7 @@ export default function DashboardPage() {
                 </div>
 
                 {/* Gráfica */}
-                <div style={{ display: 'flex', alignItems: 'end', gap: '6px', height: '90px', marginBottom: '6px', position: 'relative' }}>
+                <div style={{ display: 'flex', alignItems: 'end', gap: gapChart, height: '90px', marginBottom: '6px', position: 'relative' }}>
                   {/* Línea de promedio */}
                   {promedioDiario > 0 && (
                     <div style={{
@@ -1877,21 +1907,30 @@ export default function DashboardPage() {
                   })}
                 </div>
 
-                {/* Labels de días con fecha */}
-                <div style={{ display: 'flex', gap: '6px', fontSize: '10px' }}>
-                  {escaneosPorDia.map((d: any, i: number) => (
-                    <div key={i} style={{
-                      flex: 1,
-                      textAlign: 'center',
-                      color: d.esHoy ? 'var(--color-info)' : d.esFuturo ? 'var(--text-tertiary)' : 'var(--text-secondary)',
-                      fontWeight: d.esHoy ? 500 : 400,
-                      opacity: d.esFuturo ? 0.5 : 1,
-                      lineHeight: 1.3,
-                    }}>
-                      <div>{d.dia}</div>
-                      <div style={{ fontSize: '9px', color: 'var(--text-tertiary)' }}>{d.numero}</div>
-                    </div>
-                  ))}
+                {/* Labels de días con fecha. En 'mes' (hasta 31 días) se ocultan los
+                    nombres de día y solo se muestra el número en días clave (1, cada
+                    múltiplo de 5, y hoy) para que no colisionen; en 'semana' se
+                    conserva el nombre + número como antes. */}
+                <div style={{ display: 'flex', gap: gapChart, fontSize: '10px' }}>
+                  {escaneosPorDia.map((d: any, i: number) => {
+                    const mostrarNumero = esMesChart
+                      ? (d.numero === 1 || d.numero % 5 === 0 || d.esHoy)
+                      : true
+                    return (
+                      <div key={i} style={{
+                        flex: 1,
+                        minWidth: 0,
+                        textAlign: 'center',
+                        color: d.esHoy ? 'var(--color-info)' : d.esFuturo ? 'var(--text-tertiary)' : 'var(--text-secondary)',
+                        fontWeight: d.esHoy ? 500 : 400,
+                        opacity: d.esFuturo ? 0.5 : 1,
+                        lineHeight: 1.3,
+                      }}>
+                        {!esMesChart && <div>{d.dia}</div>}
+                        <div style={{ fontSize: '9px', color: 'var(--text-tertiary)' }}>{mostrarNumero ? d.numero : ''}</div>
+                      </div>
+                    )
+                  })}
                 </div>
 
                 {/* Resumen inteligente */}
@@ -2392,7 +2431,8 @@ export default function DashboardPage() {
         {esPro && resenas.length > 0 && (
           <div style={{ padding: '0 20px', marginBottom: '14px' }}>
             <div className="card" style={{ padding: '14px' }}>
-              <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '12px' }}>Últimas reseñas</div>
+              <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '2px' }}>Últimas reseñas</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginBottom: '12px' }}>de todo el historial</div>
               {resenas.map((r: any, i: number) => (
                 <div key={i} style={{ padding: '10px 0', borderBottom: i < resenas.length - 1 ? '1px solid var(--border-light)' : 'none' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
