@@ -54,13 +54,13 @@ export default function DashboardPage() {
     async function cargarStats() {
       const supabase = createClient()
       const hoy = new Date()
-      // Fecha en zona horaria Colombia (UTC-5) para evitar desfase con toISOString
+      // Fecha calendario en zona horaria Colombia (UTC-5). Coincide EXACTAMENTE con
+      // la convención con la que el menú público escribe `fecha` (ver [slug]/page.tsx):
+      // new Date(Date.now() - 5h).toISOString().slice(0,10). Independiente del huso
+      // del navegador (no usa getTimezoneOffset), así que una fila escrita con fecha=X
+      // cae siempre dentro de la ventana del dashboard que incluye X.
       function fechaColombia(d: Date): string {
-        const offsetCol = -5 * 60 // Colombia está en UTC-5 (en minutos)
-        const offsetLocal = d.getTimezoneOffset()
-        const ajuste = (offsetLocal - offsetCol) * 60 * 1000
-        const fechaAjustada = new Date(d.getTime() - ajuste)
-        return fechaAjustada.toISOString().split('T')[0]
+        return new Date(d.getTime() - 5 * 60 * 60 * 1000).toISOString().split('T')[0]
       }
       const hoyStr = fechaColombia(hoy)
       let desde = ''
@@ -80,13 +80,16 @@ export default function DashboardPage() {
         desdeAnterior = fechaColombia(new Date(hoy.getTime() - 14 * 24 * 60 * 60 * 1000))
         hastaAnterior = fechaColombia(new Date(hoy.getTime() - 8 * 24 * 60 * 60 * 1000))
       } else {
-        const yyyy = hoy.getFullYear()
-        const mm = String(hoy.getMonth() + 1).padStart(2, '0')
-        desde = `${yyyy}-${mm}-01`
+        // Año/mes derivados de la fecha COT corregida (hoyStr), no de los getters
+        // locales del navegador, para robustez total de huso horario.
+        const [cy, cm] = hoyStr.split('-') // 'YYYY-MM-DD' en COT
+        const cmNum = parseInt(cm, 10)
+        const cyNum = parseInt(cy, 10)
+        desde = `${cy}-${cm}-01`
         hasta = hoyStr
 
-        const mesAnterior = hoy.getMonth() === 0 ? 12 : hoy.getMonth()
-        const yearAnterior = hoy.getMonth() === 0 ? yyyy - 1 : yyyy
+        const mesAnterior = cmNum === 1 ? 12 : cmNum - 1
+        const yearAnterior = cmNum === 1 ? cyNum - 1 : cyNum
         const mmAnterior = String(mesAnterior).padStart(2, '0')
         const ultimoDiaMesAnterior = new Date(yearAnterior, mesAnterior, 0).getDate()
         desdeAnterior = `${yearAnterior}-${mmAnterior}-01`
@@ -495,7 +498,8 @@ export default function DashboardPage() {
 
       // Alerta 4: Plan gratis con alta actividad
       if (plan === 'gratis') {
-        const primerDiaMes = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-01`
+        // Primer día del mes en COT, derivado de hoyStr (no de getters locales).
+        const primerDiaMes = `${hoyStr.slice(0, 7)}-01`
         const { count: visitasMes } = await supabase
           .from('visitas_menu')
           .select('*', { count: 'exact', head: true })
