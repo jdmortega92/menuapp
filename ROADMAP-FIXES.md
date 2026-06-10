@@ -490,6 +490,19 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
 
 ## Items
 
+### BL.40 ✅ Admin: filas de variantes cortadas en móvil (~360px) — RESUELTO
+- **Found**: 2026-06-10 (testing en dispositivo real de Julian: en el editor de variantes de crear/editar plato, los botones ▲ ▼ ✕ quedaban cortados fuera del card; la fila de una sola línea [nombre flex | precio 90px | ▲ | ▼ | ✕] no entra en ~360px de ancho útil).
+- **Resuelto**: 2026-06-10 (commit a5a4751). Layout de DOS líneas por variante (Opción B elegida sobre mockups visuales): línea 1 = inputs (nombre flex:1 minWidth:0 + precio fijo); línea 2 = ▲ ▼ ✕ alineados a la derecha con touch padding ampliado (6px 14px, antes 4px 6px). Divider sutil (borderBottom var(--border-light)) entre variantes consecutivas, excepto la última. Aplicado idéntico en los DOS forms (crear + editar). En el edit, las filas _pendingDelete conservan inputs/flechas deshabilitados pero PIERDEN el spacer invisible del ✕ (solo existía para alinear columnas en el layout viejo de una línea); el bloque Deshacer + nota y los mensajes de error por fila quedaron intactos. Validadores, infra de flush/commit y save handlers sin tocar.
+- **Where**: src/app/menu/page.tsx (filas de variante create ~L2102 y edit ~L2484).
+- **Priority**: 🟡 (controles inutilizables en móvil; el admin se usa principalmente desde el celular).
+
+### BL.39 ✅ Público: bandeja flotante "Ver pedido" deformada con totales anchos — RESUELTO
+- **Found**: 2026-06-10 (testing en dispositivo real: con un total ancho tipo $10.060.000, el bloque derecho precio + botón "Ver pedido" se salía de pantalla o se aplastaba).
+- **Causa**: el flex space-between de la bandeja no tenía higiene de shrink — el bloque izquierdo (contador + resumen) sin flex:1/minWidth:0 no cedía espacio, y el derecho sin flexShrink:0 se comprimía.
+- **Resuelto**: 2026-06-10 (commit 2fda92c). Izquierda flex:1 + minWidth:0 (el resumen ya truncaba con ellipsis; su maxWidth 200px hardcodeado pasó a 100% del padre ahora correctamente acotado); derecha flexShrink:0 + whiteSpace nowrap (precio y botón siempre completos); gap 12px entre bloques. Solo higiene flex, sin rediseño — fonts/colores/posición/handler intactos.
+- **Where**: src/app/[slug]/page.tsx (bandeja flotante ~L1998).
+- **Priority**: 🟡 (la bandeja es el CTA de conversión del menú público).
+
 ### BL.38 ✅ Acceso directo "Ver mi menú" en el admin — RESUELTO
 - **Found**: 2026-06-09 (pedido de Julian: abrir el menú público en un clic desde el admin, sin pasar por la sección del QR).
 - **Resuelto**: 2026-06-09 (commit 6bb3f02). Dos ubicaciones: (1) header de /menu — anchor btn-outline en el slot derecho vacío del flex, "estoy editando → verlo en vivo"; (2) primera fila del dropdown de perfil del dashboard, con branch external en el handler (window.open '_blank' noopener; las otras filas siguen en router.push, byte-identical). URL RELATIVA '/' + slug (sin dominio hardcodeado): funciona hoy en menuapp-iota.vercel.app y sobrevive la migración futura a menuapp.co sin cambios — a diferencia de /qr y /referidos que hardcodean el dominio (ver BL.37). Render solo cuando rest?.slug existe (sin slug placeholder; mejor ausente que roto).
