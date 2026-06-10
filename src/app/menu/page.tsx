@@ -1823,7 +1823,11 @@ export default function MiMenuPage() {
         {/* Header */}
         <div style={{ padding: '16px 20px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ fontSize: '18px', fontWeight: 500 }}>Mi menú</div>
-          
+          {rest?.slug && (
+            <a href={'/' + rest.slug} target="_blank" rel="noopener" className="btn-outline" style={{ padding: '8px 14px', fontSize: '12px', textDecoration: 'none' }}>
+              Ver mi menú
+            </a>
+          )}
         </div>
 
         {/* Tabs */}

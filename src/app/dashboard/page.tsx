@@ -1428,12 +1428,14 @@ export default function DashboardPage() {
                 </div>
               </div>
               {[
+                ...(rest?.slug ? [{ label: 'Ver mi menú', sub: 'Abrir en pestaña nueva', href: '/' + rest.slug, external: true }] : []),
                 { label: 'Mi suscripción', sub: esPro ? 'Plan Pro' : esBasico ? 'Plan Básico' : 'Plan Gratis', href: '/suscripcion' },
                 { label: 'Mis facturas', sub: 'Descargar y compartir', href: '/facturas' },
                 { label: 'Invitar restaurantes', sub: 'Gana meses gratis', href: '/referidos' },
-                { label: 'Idioma', sub: 'Español', href: '#' },
+                // Oculto hasta implementar i18n real (hoy solo existe español).
+                // { label: 'Idioma', sub: 'Español', href: '#' },
               ].map((item: any, i: number) => (
-                <div key={i} onClick={() => { setMostrarPerfil(false); router.push(item.href) }} style={{
+                <div key={i} onClick={() => { setMostrarPerfil(false); if (item.external) { window.open(item.href, '_blank', 'noopener') } else { router.push(item.href) } }} style={{
                   padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                   borderBottom: '1px solid var(--border-light)', cursor: 'pointer',
                 }}>
