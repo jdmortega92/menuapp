@@ -179,6 +179,14 @@ export default function MenuPublicoPage() {
 
   useEffect(() => {
     if (!restaurante) return
+    // Dedup por sesión y por restaurante (BL.34): StrictMode/remounts re-disparan
+    // este effect y inflaban el conteo crudo 2-3x. El flag se setea ANTES del
+    // insert (los dos disparos de StrictMode son back-to-back; un flag post-insert
+    // no frena el segundo). Trade-off: si el insert falla no se reintenta en esta
+    // sesión — perder una visita es mejor que contarla 2-3 veces.
+    const guardKey = 'menuapp_visita_logged_' + restaurante.id
+    if (window.sessionStorage.getItem(guardKey)) return
+    window.sessionStorage.setItem(guardKey, '1')
     const supabase = createClient()
     const fechaColombia = new Date(new Date().getTime() - 5 * 60 * 60 * 1000).toISOString().split('T')[0]
     supabase.from('visitas_menu').insert({
