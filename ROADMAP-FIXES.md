@@ -556,11 +556,12 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
 - **Where**: src/app/dashboard/page.tsx (subtítulo + bloque resumen del gráfico "Actividad por día").
 - **Priority**: 🟢 (claridad/copy).
 
-### BL.34 🟡 Visitas con doble/triple logging (sin dedup) — PENDIENTE
-- **[PENDIENTE]**: el effect que inserta en visitas_menu no tiene guard de dedup (StrictMode en dev, remounts), así que escribe 2-3 filas por visita. El embudo por sesión se auto-cura vía COUNT(DISTINCT session_id), pero la stat card cruda "Visitas al menú" queda inflada. Fix: un guard de inserción única por sesión (ej. marcar en sessionStorage que ya se logueó la visita) para que el conteo crudo sea fiel.
+### BL.34 ✅ Visitas con doble/triple logging (sin dedup) — RESUELTO
+- **Diagnóstico**: el effect que inserta en visitas_menu no tenía guard de dedup (StrictMode en dev, remounts), así que escribía 2-3 filas por visita. El embudo por sesión se auto-cura vía COUNT(DISTINCT session_id), pero la stat card cruda "Visitas al menú" quedaba inflada.
+- **Resuelto**: 2026-06-10 (commit 1da2179). Guard de inserción única por sesión: flag en sessionStorage scopeado POR RESTAURANTE (menuapp_visita_logged_<restaurante_id>) seteado SINCRÓNICAMENTE ANTES del insert — crítico porque StrictMode re-dispara el efecto antes de que el primer insert resuelva; un flag post-insert no previene el segundo. Scope por restaurante para que escanear un segundo menú en la misma pestaña sí loguee su visita. Trade-off aceptado: si el insert falla por red, la visita no se reintenta en esa sesión (perder 1 fila > contar 2-3). vistas_platos y pedidos_whatsapp intactos (disparan por-plato/por-pedido por diseño). Verificado en Supabase: sesiones post-fix con exactamente 1 fila en visitas_menu.
 - **Found**: 2026-06-06 (auditoría del dashboard; confirmado al cablear el embudo por sesión, BL.31).
-- **Where**: src/app/[slug]/page.tsx (effect de insert de visitas_menu ~L163).
-- **Priority**: 🟡 (infla un número visible, pero el embudo no se ve afectado). No urgente.
+- **Where**: src/app/[slug]/page.tsx (effect de insert de visitas_menu ~L180).
+- **Priority**: 🟡 (inflaba un número visible, aunque el embudo no se veía afectado).
 
 ### BL.35 🟢 Dashboard: performance al cambiar de periodo — PENDIENTE
 - **[PENDIENTE]**: cambiar de periodo (Hoy/Semana/Mes) re-corre todas las queries en serie cada vez. Optimización futura: paralelizar con Promise.all, añadir caching SWR para cambio de periodo instantáneo, y crear el índice DB (restaurante_id, fecha) en las tablas de alto volumen (sobre todo vistas_platos) cuando el volumen crezca. Mejor hacerlo junto con el refactor planeado.
