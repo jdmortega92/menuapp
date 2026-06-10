@@ -1998,8 +1998,9 @@ export default function MenuPublicoPage() {
             zIndex: 40,
             cursor: 'pointer',
             boxShadow: '0 8px 30px rgba(0,0,0,0.2)',
+            gap: '12px',
           }}>
-            <div style={{ color: 'var(--theme-bg)' }}>
+            <div style={{ color: 'var(--theme-bg)', flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: '14px', fontWeight: 500 }}>{totalProductos} producto{totalProductos > 1 ? 's' : ''}</div>
               <div style={{
                 fontSize: '10px',
@@ -2007,7 +2008,7 @@ export default function MenuPublicoPage() {
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',
-                maxWidth: '200px',
+                maxWidth: '100%',
               }}>
                 {(() => {
                   const items = itemsPedido.map(i => `${i.cantidad} ${i.plato.nombre}${i.variante ? ` · ${i.variante.nombre}` : ''}`)
@@ -2018,7 +2019,7 @@ export default function MenuPublicoPage() {
                 })()}
               </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0, whiteSpace: 'nowrap' }}>
               <span style={{ color: 'var(--theme-bg)', fontWeight: 500 }}>${totalPedido.toLocaleString('es-CO')}</span>
               <div style={{
                 background: 'var(--theme-bg)',
