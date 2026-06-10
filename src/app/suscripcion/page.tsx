@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks'
 import { createClient } from '@/lib/supabase-browser'
+import { formatoPrecio } from '@/lib/precio'
 
 export default function SuscripcionPage() {
   const router = useRouter()
@@ -86,7 +87,7 @@ export default function SuscripcionPage() {
               </div>
             </div>
             <div style={{ fontSize: '20px', fontWeight: 500, color: 'var(--color-info)' }}>
-              ${planes.find(p => p.id === planActual)?.precioMensual.toLocaleString('es-CO')}
+              ${formatoPrecio(planes.find(p => p.id === planActual)?.precioMensual)}
               <span style={{ fontSize: '11px', fontWeight: 400 }}>/mes</span>
             </div>
           </div>
@@ -142,12 +143,12 @@ export default function SuscripcionPage() {
                   <div>
                     <div style={{ fontSize: '16px', fontWeight: 500 }}>{plan.nombre}</div>
                     <div style={{ fontSize: '22px', fontWeight: 500, marginTop: '2px' }}>
-                      {precio === 0 ? '$0' : `$${precio.toLocaleString('es-CO')}`}
+                      {precio === 0 ? '$0' : `$${formatoPrecio(precio)}`}
                       {precio > 0 && <span style={{ fontSize: '12px', fontWeight: 400, color: 'var(--text-secondary)' }}>/mes</span>}
                     </div>
                     {precioTotal && precio > 0 && (
                       <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>
-                        ${precioTotal.toLocaleString('es-CO')}/año
+                        ${formatoPrecio(precioTotal)}/año
                       </div>
                     )}
                   </div>

@@ -21,6 +21,8 @@ import Select from '@/components/ui/Select'
 import DiasSelector from '@/components/ui/DiasSelector'
 import { formato12h } from '@/lib/time'
 import { fechaColombia, diaCodigoColombia } from '@/lib/fechas'
+import { formatoPrecio } from '@/lib/precio'
+import { formatDias } from '@/lib/dias'
 import type { DiaSemana, Variante } from '@/types'
 
 function invalidateAll(prefix: string) {
@@ -29,14 +31,6 @@ function invalidateAll(prefix: string) {
     undefined,
     { revalidate: true, populateCache: false },
   )
-}
-
-function formatDiasShort(dias: string[]): string {
-  const map: Record<string, string> = {
-    lun: 'Lun', mar: 'Mar', mie: 'Mié', jue: 'Jue',
-    vie: 'Vie', sab: 'Sáb', dom: 'Dom',
-  }
-  return dias.map(d => map[d] || d).join(', ')
 }
 
 // Arma una frase de vinculaciones a partir de cláusulas con count > 0, con
@@ -994,7 +988,7 @@ export default function MiMenuPage() {
   const platoDiaOptions = useMemo(() => {
     return todosPlatos.map(p => {
       const h = horariosPorPlato.get(p.id) ?? null
-      const precioStr = `$${p.precio.toLocaleString('es-CO')}`
+      const precioStr = `$${formatoPrecio(p.precio)}`
       const scheduleStr = h ? ` (⏰ ${h.hora_inicio}–${h.hora_fin})` : ''
       return {
         value: p.id,
@@ -1011,7 +1005,7 @@ export default function MiMenuPage() {
   const platoGanadorOptions = useMemo(() => {
     return todosPlatos.map(p => ({
       value: p.id,
-      label: <span>{p.nombre} <span style={{ color: 'var(--text-tertiary)' }}>— ${p.precio.toLocaleString('es-CO')}</span></span>,
+      label: <span>{p.nombre} <span style={{ color: 'var(--text-tertiary)' }}>— ${formatoPrecio(p.precio)}</span></span>,
       searchText: `${p.nombre} ${p.precio}`.toLowerCase(),
     }))
   }, [todosPlatos])
@@ -2362,7 +2356,7 @@ export default function MiMenuPage() {
                           </div>
                         </div>
                         <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                          {plato.variantes && plato.variantes.length > 0 ? 'desde ' : ''}${plato.precio.toLocaleString('es-CO')}
+                          {plato.variantes && plato.variantes.length > 0 ? 'desde ' : ''}${formatoPrecio(plato.precio)}
                           {plato.descripcion && <span style={{ marginLeft: '6px', color: 'var(--text-tertiary)' }}>· {plato.descripcion.length > 30 ? plato.descripcion.slice(0, 30) + '...' : plato.descripcion}</span>}
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '5px' }}>
@@ -2873,7 +2867,7 @@ export default function MiMenuPage() {
                                 {(() => { const h = getHorarioPlato(p.id); return h ? <span style={{ fontSize: '9px', color: 'var(--color-warning)', marginLeft: '4px' }}>⏰ {formato12h(h.hora_inicio)}–{formato12h(h.hora_fin)}</span> : null })()}
                               </div>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>${precioMostrar.toLocaleString('es-CO')}</span>
+                                <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>${formatoPrecio(precioMostrar)}</span>
                                 {isSelected && <span style={{ color: 'var(--color-info)', fontSize: '12px' }}>✓</span>}
                               </div>
                             </div>
@@ -2896,7 +2890,7 @@ export default function MiMenuPage() {
                                       <span>
                                         {v.nombre}
                                         <span style={{ color: 'var(--text-tertiary)' }}>
-                                          {' '}— ${v.precio.toLocaleString('es-CO')}
+                                          {' '}— ${formatoPrecio(v.precio)}
                                         </span>
                                       </span>
                                     ),
@@ -2961,7 +2955,7 @@ export default function MiMenuPage() {
                     )}
                     {nuevoCombo.platoIds.length > 0 && nuevoCombo.precio && (
                       <div style={{ fontSize: '12px', color: 'var(--color-green)', marginBottom: '8px' }}>
-                        Ahorro: ${(precioIndividualCombo - parseInt(nuevoCombo.precio || '0')).toLocaleString('es-CO')} ({Math.round(((precioIndividualCombo - parseInt(nuevoCombo.precio || '0')) / precioIndividualCombo) * 100)}% descuento)
+                        Ahorro: ${formatoPrecio(precioIndividualCombo - parseInt(nuevoCombo.precio || '0'))} ({Math.round(((precioIndividualCombo - parseInt(nuevoCombo.precio || '0')) / precioIndividualCombo) * 100)}% descuento)
                       </div>
                     )}
                     {nuevoCombo.platoIds.length > 0 && (() => {
@@ -2995,14 +2989,14 @@ export default function MiMenuPage() {
                         <div style={{ fontSize: '14px', fontWeight: 500 }}>{combo.nombre}</div>
                         <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>{combo.platos.join(' + ')}</div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
-                          <span style={{ fontSize: '14px', fontWeight: 500 }}>${combo.precio.toLocaleString('es-CO')}</span>
-                          <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', textDecoration: 'line-through' }}>${combo.precioIndividual.toLocaleString('es-CO')}</span>
-                          <span className="badge badge-success">Ahorras ${(combo.precioIndividual - combo.precio).toLocaleString('es-CO')}</span>
+                          <span style={{ fontSize: '14px', fontWeight: 500 }}>${formatoPrecio(combo.precio)}</span>
+                          <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', textDecoration: 'line-through' }}>${formatoPrecio(combo.precioIndividual)}</span>
+                          <span className="badge badge-success">Ahorras ${formatoPrecio(combo.precioIndividual - combo.precio)}</span>
                         </div>
                         {((combo.dias && combo.dias.length > 0) || (combo.horario_inicio && combo.horario_fin)) && (
                           <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '4px' }}>
                             {combo.dias && combo.dias.length > 0 && (
-                              <span>{formatDiasShort(combo.dias)}</span>
+                              <span>{formatDias(combo.dias, 'short')}</span>
                             )}
                             {combo.dias && combo.dias.length > 0 && combo.horario_inicio && combo.horario_fin && ' · '}
                             {combo.horario_inicio && combo.horario_fin && (
@@ -3190,7 +3184,7 @@ export default function MiMenuPage() {
                               {(() => { const h = getHorarioPlato(p.id); return h ? <span style={{ fontSize: '9px', color: 'var(--color-warning)', marginLeft: '4px' }}>⏰ {formato12h(h.hora_inicio)}–{formato12h(h.hora_fin)}</span> : null })()}
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>${precioMostrar.toLocaleString('es-CO')}</span>
+                              <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>${formatoPrecio(precioMostrar)}</span>
                               {isSelected && <span style={{ color: 'var(--color-info)', fontSize: '12px' }}>✓</span>}
                             </div>
                           </div>
@@ -3216,7 +3210,7 @@ export default function MiMenuPage() {
                                       <span>
                                         {v.nombre}
                                         <span style={{ color: 'var(--text-tertiary)' }}>
-                                          {' '}— ${v.precio.toLocaleString('es-CO')}
+                                          {' '}— ${formatoPrecio(v.precio)}
                                         </span>
                                       </span>
                                     ),
@@ -3324,11 +3318,11 @@ export default function MiMenuPage() {
                                   </span>
                                   <span style={{ flexShrink: 0 }}>
                                     <span style={{ textDecoration: 'line-through', color: 'var(--text-tertiary)', fontSize: '11px' }}>
-                                      ${original.toLocaleString('es-CO')}
+                                      ${formatoPrecio(original)}
                                     </span>
                                     {' → '}
                                     <span style={{ fontWeight: 500 }}>
-                                      ${final.toLocaleString('es-CO')}
+                                      ${formatoPrecio(final)}
                                     </span>
                                     <span style={{ fontSize: '11px', color: 'var(--color-green)', marginLeft: '4px' }}>
                                       ({detalle})
@@ -3505,7 +3499,7 @@ export default function MiMenuPage() {
                       { value: '', label: <span style={{ color: 'var(--text-tertiary)' }}>Sin variante específica</span> },
                       ...variantes.map(v => ({
                         value: v.id,
-                        label: <span>{v.nombre} <span style={{ color: 'var(--text-tertiary)' }}>— ${v.precio.toLocaleString('es-CO')}</span></span>,
+                        label: <span>{v.nombre} <span style={{ color: 'var(--text-tertiary)' }}>— ${formatoPrecio(v.precio)}</span></span>,
                         searchText: `${v.nombre} ${v.precio}`.toLowerCase(),
                       })),
                     ]
@@ -3563,7 +3557,7 @@ export default function MiMenuPage() {
                           marginTop: '6px',
                           marginBottom: '8px',
                         }}>
-                          ⚠️ El precio especial es igual o mayor al precio original (${precioReferencia.toLocaleString('es-CO')}). ¿Es correcto?
+                          ⚠️ El precio especial es igual o mayor al precio original (${formatoPrecio(precioReferencia)}). ¿Es correcto?
                         </div>
                       )
                     }
@@ -3608,23 +3602,23 @@ export default function MiMenuPage() {
                           {varianteLockedPreview ? (
                             <>
                               <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', textDecoration: 'line-through' }}>
-                                ${varianteLockedPreview.precio.toLocaleString('es-CO')}
+                                ${formatoPrecio(varianteLockedPreview.precio)}
                               </span>
                               <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--color-accent)' }}>
-                                ${parseInt(platoDiaConfig.precioEspecial).toLocaleString('es-CO')}
+                                ${formatoPrecio(parseInt(platoDiaConfig.precioEspecial))}
                               </span>
                             </>
                           ) : tieneVariantesPreview ? (
                             <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--color-accent)' }}>
-                              desde ${platoPreview.precio.toLocaleString('es-CO')}
+                              desde ${formatoPrecio(platoPreview.precio)}
                             </span>
                           ) : (
                             <>
                               <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', textDecoration: 'line-through' }}>
-                                ${platoPreview.precio.toLocaleString('es-CO')}
+                                ${formatoPrecio(platoPreview.precio)}
                               </span>
                               <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--color-accent)' }}>
-                                ${parseInt(platoDiaConfig.precioEspecial).toLocaleString('es-CO')}
+                                ${formatoPrecio(parseInt(platoDiaConfig.precioEspecial))}
                               </span>
                             </>
                           )}
@@ -3737,7 +3731,7 @@ export default function MiMenuPage() {
                       { value: '', label: <span style={{ color: 'var(--text-tertiary)' }}>Sin variante específica</span> },
                       ...variantes.map(v => ({
                         value: v.id,
-                        label: <span>{v.nombre} <span style={{ color: 'var(--text-tertiary)' }}>— ${v.precio.toLocaleString('es-CO')}</span></span>,
+                        label: <span>{v.nombre} <span style={{ color: 'var(--text-tertiary)' }}>— ${formatoPrecio(v.precio)}</span></span>,
                         searchText: `${v.nombre} ${v.precio}`.toLowerCase(),
                       })),
                     ]
@@ -3792,10 +3786,10 @@ export default function MiMenuPage() {
                         )}
                         <div style={{ fontSize: '13px', fontWeight: 500, marginTop: '4px' }}>
                           {varianteLockedPreview
-                            ? `$${varianteLockedPreview.precio.toLocaleString('es-CO')}`
+                            ? `$${formatoPrecio(varianteLockedPreview.precio)}`
                             : tieneVariantesPreview
-                              ? `desde $${platoPreview.precio.toLocaleString('es-CO')}`
-                              : `$${platoPreview.precio.toLocaleString('es-CO')}`}
+                              ? `desde $${formatoPrecio(platoPreview.precio)}`
+                              : `$${formatoPrecio(platoPreview.precio)}`}
                         </div>
                       </div>
                     )

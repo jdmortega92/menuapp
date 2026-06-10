@@ -8,6 +8,8 @@ import Modal from '@/components/ui/Modal'
 import { formato12h } from '@/lib/time'
 import { isCurrentlyVisible } from '@/lib/visibility'
 import { fechaColombia } from '@/lib/fechas'
+import { formatoPrecio } from '@/lib/precio'
+import { formatDias } from '@/lib/dias'
 import { useRestauranteBySlug } from '@/hooks/data/useRestauranteBySlug'
 import { useCategoriasYPlatos } from '@/hooks/data/useCategoriasYPlatos'
 import { useCalificacionesAggregate } from '@/hooks/data/useCalificacionesAggregate'
@@ -18,11 +20,6 @@ import { usePlatoGanador } from '@/hooks/data/usePlatoGanador'
 import { useConfigRestaurante } from '@/hooks/data/useConfigRestaurante'
 import { useHorarios } from '@/hooks/data/useHorarios'
 import { useTick } from '@/hooks/useTick'
-
-// Helper: formatea precios de forma segura (evita crashes si viene null/undefined)
-function formatoPrecio(valor: number | null | undefined): string {
-  return (valor ?? 0).toLocaleString('es-CO')
-}
 
 // Id de sesión por-visita (por pestaña): se crea una vez y se cachea en
 // sessionStorage; sobrevive re-renders y navegación dentro de la pestaña, y
@@ -39,14 +36,6 @@ function getSessionId(): string {
     window.sessionStorage.setItem(KEY, id)
   }
   return id
-}
-
-function formatDiasFull(dias: string[]): string {
-  const map: Record<string, string> = {
-    lun: 'Lunes', mar: 'Martes', mie: 'Miércoles', jue: 'Jueves',
-    vie: 'Viernes', sab: 'Sábado', dom: 'Domingo',
-  }
-  return dias.map(d => map[d] || d).join(', ')
 }
 
 // F8.4 — Cart key helpers
@@ -620,11 +609,11 @@ export default function MenuPublicoPage() {
       const nombre = i.variante ? `${i.plato.nombre} (${i.variante.nombre})` : i.plato.nombre
       const precioUnit = i.promo ? i.promo.precioUnitario : (i.variante ? i.variante.precio : i.plato.precio)
       const etiqueta = i.promo ? ` (${i.promo.etiqueta})` : ''
-      return `- ${i.cantidad} ${nombre}${etiqueta} $${(precioUnit * i.cantidad).toLocaleString('es-CO')}`
+      return `- ${i.cantidad} ${nombre}${etiqueta} $${formatoPrecio(precioUnit * i.cantidad)}`
     })
     let msg = `Hola! Vi tu menú en ${restaurante.nombre} y quiero pedir:\n${lineas.join('\n')}`
     if (nota) msg += `\nNota: ${nota}`
-    msg += `\nTotal: $${totalPedido.toLocaleString('es-CO')}`
+    msg += `\nTotal: $${formatoPrecio(totalPedido)}`
     window.open(`https://wa.me/57${restaurante.whatsapp}?text=${encodeURIComponent(msg)}`, '_blank')
   }
 
@@ -1250,7 +1239,7 @@ export default function MenuPublicoPage() {
                     }
                     return (
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
-                        <span style={{ fontSize: '14px', fontWeight: 500, color: '#B8860B' }}>{ganadorTieneVariantes ? 'desde ' : ''}${platoGanador.precio?.toLocaleString('es-CO')}</span>
+                        <span style={{ fontSize: '14px', fontWeight: 500, color: '#B8860B' }}>{ganadorTieneVariantes ? 'desde ' : ''}${formatoPrecio(platoGanador.precio)}</span>
                         {ganadorTieneVariantes ? null : <Qty cartKey={makeCartKey(platoGanador.id, undefined, 'ganador')} />}
                       </div>
                     )
@@ -1461,7 +1450,7 @@ export default function MenuPublicoPage() {
                           fontWeight: 500,
                           color: 'var(--theme-text)',
                         }}>
-                          {plato.variantes && plato.variantes.length > 0 ? 'desde ' : ''}${plato.precio.toLocaleString('es-CO')}
+                          {plato.variantes && plato.variantes.length > 0 ? 'desde ' : ''}${formatoPrecio(plato.precio)}
                         </span>
                       )}
                       {plato.variantes && plato.variantes.length > 0
@@ -1524,22 +1513,22 @@ export default function MenuPublicoPage() {
                     color: 'var(--theme-text-subtle)',
                     marginTop: '4px',
                   }}>
-                    {combo.dias && combo.dias.length > 0 && formatDiasFull(combo.dias)}
+                    {combo.dias && combo.dias.length > 0 && formatDias(combo.dias, 'full')}
                     {combo.dias && combo.dias.length > 0 && combo.horario_inicio && combo.horario_fin && ' · '}
                     {combo.horario_inicio && combo.horario_fin && `${formato12h(combo.horario_inicio)}–${formato12h(combo.horario_fin)}`}
                   </div>
                 )}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: '15px', fontWeight: 500, color: color }}>${combo.precio.toLocaleString('es-CO')}</span>
+                    <span style={{ fontSize: '15px', fontWeight: 500, color: color }}>${formatoPrecio(combo.precio)}</span>
                     <span style={{
                       fontSize: '12px',
                       color: 'var(--theme-text-subtle)',
                       textDecoration: 'line-through',
                     }}>
-                      ${combo.precioIndividual.toLocaleString('es-CO')}
+                      ${formatoPrecio(combo.precioIndividual)}
                     </span>
-                    <span style={{ fontSize: '11px', color: 'var(--color-green)', fontWeight: 500 }}>-${(combo.precioIndividual - combo.precio).toLocaleString('es-CO')}</span>
+                    <span style={{ fontSize: '11px', color: 'var(--color-green)', fontWeight: 500 }}>-${formatoPrecio(combo.precioIndividual - combo.precio)}</span>
                   </div>
                   <div onClick={(e) => e.stopPropagation()}>
                     <Qty cartKey={combo.id} />
@@ -1706,7 +1695,7 @@ export default function MenuPublicoPage() {
                         color: 'var(--theme-text-subtle)',
                         marginTop: '4px',
                       }}>
-                        Precio individual: ${(plato.precioEfectivo ?? plato.precio).toLocaleString('es-CO')}
+                        Precio individual: ${formatoPrecio(plato.precioEfectivo ?? plato.precio)}
                       </div>
                     </div>
                   </div>
@@ -1729,7 +1718,7 @@ export default function MenuPublicoPage() {
                     marginBottom: '6px',
                   }}>
                     <span>Comprando por separado</span>
-                    <span style={{ textDecoration: 'line-through' }}>${precioIndividual.toLocaleString('es-CO')}</span>
+                    <span style={{ textDecoration: 'line-through' }}>${formatoPrecio(precioIndividual)}</span>
                   </div>
                   <div style={{
                     display: 'flex',
@@ -1741,7 +1730,7 @@ export default function MenuPublicoPage() {
                     color: 'var(--theme-text)',
                   }}>
                     <span>Precio del combo</span>
-                    <span style={{ color: color }}>${comboDetalle.precio.toLocaleString('es-CO')}</span>
+                    <span style={{ color: color }}>${formatoPrecio(comboDetalle.precio)}</span>
                   </div>
                   <div style={{
                     display: 'flex',
@@ -1754,7 +1743,7 @@ export default function MenuPublicoPage() {
                     borderTop: '1px solid var(--theme-border)',
                   }}>
                     <span>Tu ahorro</span>
-                    <span>${ahorro.toLocaleString('es-CO')}</span>
+                    <span>${formatoPrecio(ahorro)}</span>
                   </div>
                 </div>
 
@@ -1772,7 +1761,7 @@ export default function MenuPublicoPage() {
                   fontWeight: 500,
                   cursor: 'pointer',
                 }}>
-                  Agregar combo al pedido · ${comboDetalle.precio.toLocaleString('es-CO')}
+                  Agregar combo al pedido · ${formatoPrecio(comboDetalle.precio)}
                 </div>
               </div>
             </Modal>
@@ -1890,7 +1879,7 @@ export default function MenuPublicoPage() {
                           return (
                             <>
                               <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--theme-text)' }}>
-                                {platoTieneVariantes ? 'desde ' : ''}${plato.precio.toLocaleString('es-CO')}
+                                {platoTieneVariantes ? 'desde ' : ''}${formatoPrecio(plato.precio)}
                               </span>
                               <span style={{ fontSize: '10px', color: 'white', background: color, padding: '2px 6px', borderRadius: '8px', fontWeight: 500 }}>Ofertas</span>
                             </>
@@ -1901,7 +1890,7 @@ export default function MenuPublicoPage() {
                           return (
                             <>
                               <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--theme-text)' }}>
-                                {platoTieneVariantes ? 'desde ' : ''}${plato.precio.toLocaleString('es-CO')}
+                                {platoTieneVariantes ? 'desde ' : ''}${formatoPrecio(plato.precio)}
                               </span>
                               <span style={{ fontSize: '10px', color: 'white', background: color, padding: '2px 6px', borderRadius: '8px', fontWeight: 500 }}>2x1</span>
                               <span style={{ fontSize: '10px', color: color, fontWeight: 500 }}>Lleva 2, paga 1</span>
@@ -1912,7 +1901,7 @@ export default function MenuPublicoPage() {
                           // sin promo aplicable (o índice vacío / no-Pro) → exacto como hoy
                           return (
                             <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--theme-text)' }}>
-                              {platoTieneVariantes ? 'desde ' : ''}${plato.precio.toLocaleString('es-CO')}
+                              {platoTieneVariantes ? 'desde ' : ''}${formatoPrecio(plato.precio)}
                             </span>
                           )
                         }
@@ -2027,7 +2016,7 @@ export default function MenuPublicoPage() {
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0, whiteSpace: 'nowrap' }}>
-              <span style={{ color: 'var(--theme-bg)', fontWeight: 500 }}>${totalPedido.toLocaleString('es-CO')}</span>
+              <span style={{ color: 'var(--theme-bg)', fontWeight: 500 }}>${formatoPrecio(totalPedido)}</span>
               <div style={{
                 background: 'var(--theme-bg)',
                 color: 'var(--theme-text)',
@@ -2117,7 +2106,7 @@ export default function MenuPublicoPage() {
                   color: 'var(--theme-text)',
                   fontFamily: 'var(--theme-font-body)',
                 }}>
-                  ${((item.promo ? item.promo.precioUnitario : (item.variante ? item.variante.precio : item.plato.precio)) * item.cantidad).toLocaleString('es-CO')}
+                  ${formatoPrecio((item.promo ? item.promo.precioUnitario : (item.variante ? item.variante.precio : item.plato.precio)) * item.cantidad)}
                 </div>
               </div>
             ))}
@@ -2144,7 +2133,7 @@ export default function MenuPublicoPage() {
               borderTop: '1px solid var(--theme-border)',
             }}>
               <span style={{ fontSize: '15px', fontWeight: 500, color: 'var(--theme-text)', fontFamily: 'var(--theme-font-body)' }}>Total</span>
-              <span style={{ fontSize: '20px', fontWeight: 500, color: 'var(--theme-text)', fontFamily: 'var(--theme-font-body)' }}>${totalPedido.toLocaleString('es-CO')}</span>
+              <span style={{ fontSize: '20px', fontWeight: 500, color: 'var(--theme-text)', fontFamily: 'var(--theme-font-body)' }}>${formatoPrecio(totalPedido)}</span>
             </div>
             {esQR ? (
               <div style={{ marginTop: '16px', textAlign: 'center' }}>
@@ -2511,7 +2500,7 @@ export default function MenuPublicoPage() {
                             }
                             return (
                               <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--theme-text)' }}>
-                                ${v.precio.toLocaleString('es-CO')}
+                                ${formatoPrecio(v.precio)}
                               </span>
                             )
                           })()}

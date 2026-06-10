@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { formatoPrecio } from '@/lib/precio'
 
 export default function FacturasPage() {
   const router = useRouter()
@@ -89,7 +90,7 @@ export default function FacturasPage() {
                 <span onClick={limpiarFiltro} style={{ cursor: 'pointer' }}>✕</span>
               </div>
               <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
-                {facturasFiltradas.length} factura{facturasFiltradas.length !== 1 ? 's' : ''} · ${totalFiltrado.toLocaleString('es-CO')}
+                {facturasFiltradas.length} factura{facturasFiltradas.length !== 1 ? 's' : ''} · ${formatoPrecio(totalFiltrado)}
               </div>
             </div>
           </div>
@@ -101,7 +102,7 @@ export default function FacturasPage() {
             <div className="card" style={{ padding: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Total {anoSeleccionado}</div>
-                <div style={{ fontSize: '18px', fontWeight: 500, marginTop: '2px' }}>${totalFiltrado.toLocaleString('es-CO')}</div>
+                <div style={{ fontSize: '18px', fontWeight: 500, marginTop: '2px' }}>${formatoPrecio(totalFiltrado)}</div>
               </div>
               <div style={{ textAlign: 'right' }}>
                 <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Facturas</div>
@@ -130,7 +131,7 @@ export default function FacturasPage() {
                     <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>#{factura.numero}</div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: '13px', fontWeight: 500 }}>${factura.monto.toLocaleString('es-CO')}</div>
+                    <div style={{ fontSize: '13px', fontWeight: 500 }}>${formatoPrecio(factura.monto)}</div>
                     <div style={{ fontSize: '10px', color: 'var(--color-green)', marginTop: '2px' }}>Pagada</div>
                   </div>
                 </div>
