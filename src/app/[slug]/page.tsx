@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase-browser'
 import Modal from '@/components/ui/Modal'
 import { formato12h } from '@/lib/time'
 import { isCurrentlyVisible } from '@/lib/visibility'
+import { fechaColombia } from '@/lib/fechas'
 import { useRestauranteBySlug } from '@/hooks/data/useRestauranteBySlug'
 import { useCategoriasYPlatos } from '@/hooks/data/useCategoriasYPlatos'
 import { useCalificacionesAggregate } from '@/hooks/data/useCalificacionesAggregate'
@@ -188,12 +189,11 @@ export default function MenuPublicoPage() {
     if (window.sessionStorage.getItem(guardKey)) return
     window.sessionStorage.setItem(guardKey, '1')
     const supabase = createClient()
-    const fechaColombia = new Date(new Date().getTime() - 5 * 60 * 60 * 1000).toISOString().split('T')[0]
     supabase.from('visitas_menu').insert({
       restaurante_id: restaurante.id,
       origen: esQR ? 'qr' : 'enlace',
       mesa: qrMesa || null,
-      fecha: fechaColombia,
+      fecha: fechaColombia(),
       session_id: getSessionId(),
     }).then(() => {})
   }, [restaurante?.id])
@@ -203,11 +203,10 @@ export default function MenuPublicoPage() {
     setMostrarTodasResenas(false) // Resetear al abrir otro plato
     // Registrar vista del plato
     const supabaseVista = createClient()
-    const fechaCOL = new Date(new Date().getTime() - 5 * 60 * 60 * 1000).toISOString().split('T')[0]
     supabaseVista.from('vistas_platos').insert({
       plato_id: platoDetalle.id,
       restaurante_id: restaurante.id,
-      fecha: fechaCOL,
+      fecha: fechaColombia(),
       session_id: getSessionId(),
     }).then(({ error }: any) => {
 
@@ -602,7 +601,7 @@ export default function MenuPublicoPage() {
       restaurante_id: restaurante.id,
       origen: esQR ? 'qr' : 'enlace',
       mesa: qrMesa || null,
-      fecha: new Date(new Date().getTime() - 5 * 60 * 60 * 1000).toISOString().split('T')[0],
+      fecha: fechaColombia(),
       total: totalPedido,
       nota: nota || null,
       session_id: getSessionId(),

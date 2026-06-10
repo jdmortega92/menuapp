@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks'
 import { createClient } from '@/lib/supabase-browser'
+import { fechaColombia } from '@/lib/fechas'
 import BottomNav from '@/components/BottomNav'
 
 
@@ -60,14 +61,9 @@ export default function DashboardPage() {
     async function cargarStats() {
       const supabase = createClient()
       const hoy = new Date()
-      // Fecha calendario en zona horaria Colombia (UTC-5). Coincide EXACTAMENTE con
-      // la convención con la que el menú público escribe `fecha` (ver [slug]/page.tsx):
-      // new Date(Date.now() - 5h).toISOString().slice(0,10). Independiente del huso
-      // del navegador (no usa getTimezoneOffset), así que una fila escrita con fecha=X
-      // cae siempre dentro de la ventana del dashboard que incluye X.
-      function fechaColombia(d: Date): string {
-        return new Date(d.getTime() - 5 * 60 * 60 * 1000).toISOString().split('T')[0]
-      }
+      // Fechas calendario COT vía lib/fechas (misma convención con la que el menú
+      // público escribe `fecha`), así que una fila escrita con fecha=X cae siempre
+      // dentro de la ventana del dashboard que incluye X.
       const hoyStr = fechaColombia(hoy)
       let desde = ''
       let hasta = hoyStr

@@ -20,6 +20,7 @@ import TimeRangeHelper from '@/components/ui/TimeRangeHelper'
 import Select from '@/components/ui/Select'
 import DiasSelector from '@/components/ui/DiasSelector'
 import { formato12h } from '@/lib/time'
+import { fechaColombia, diaCodigoColombia } from '@/lib/fechas'
 import type { DiaSemana, Variante } from '@/types'
 
 function invalidateAll(prefix: string) {
@@ -439,7 +440,6 @@ export default function MiMenuPage() {
     if (Object.keys(errores).length > 0 || !rest?.id) return
     setGuardandoPlatoDia(true)
     const supabase = createClient()
-    const fechaColombia = new Date(new Date().getTime() - 5 * 60 * 60 * 1000).toISOString().split('T')[0]
 
     // Borrar cualquier plato del día anterior (activo o no) para garantizar
     // exactamente 0 o 1 fila por restaurante — maybeSingle() en el hook
@@ -455,7 +455,7 @@ export default function MiMenuPage() {
       horario_inicio: platoDiaConfig.horaInicio,
       horario_fin: platoDiaConfig.horaFin,
       activo: true,
-      fecha: fechaColombia,
+      fecha: fechaColombia(),
     })
 
     setPlatoDiaActivo(true)
@@ -3439,7 +3439,7 @@ export default function MiMenuPage() {
               // de un solo día (hoy), así que el cruce con promos solo puede ocurrir hoy.
               // Mapear "hoy" (offset Colombia, igual que guardarPlatoDia) a código de día
               // y comprobar si el plato tiene alguna promo descuento ACTIVA ese día.
-              const codigoHoy = ['dom', 'lun', 'mar', 'mie', 'jue', 'vie', 'sab'][new Date(Date.now() - 5 * 60 * 60 * 1000).getDay()]
+              const codigoHoy = diaCodigoColombia()
               const platoDiaTienePromoHoy = !!platoDiaConfig.platoId && promos.some(p =>
                 p.activo && (p.tipo === 'descuento' || p.tipo === 'dos_por_uno') &&
                 (p.dias || []).includes(codigoHoy) &&
