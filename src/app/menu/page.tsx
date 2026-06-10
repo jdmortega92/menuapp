@@ -2100,7 +2100,11 @@ export default function MiMenuPage() {
                         )}
 
                         {nuevoPlato.variantes.map((v, i) => (
-                          <div key={i} style={{ marginBottom: '8px' }}>
+                          <div key={i} style={{
+                            marginBottom: '8px',
+                            paddingBottom: '8px',
+                            borderBottom: i === nuevoPlato.variantes.length - 1 ? 'none' : '1px solid var(--border-light)',
+                          }}>
                           <div style={{ display: 'flex', gap: '6px', alignItems: 'flex-start' }}>
                             <CampoTexto
                               type="text"
@@ -2111,6 +2115,7 @@ export default function MiMenuPage() {
                               flushRegistry={camposFlushRef}
                               style={{
                                 flex: 1,
+                                minWidth: 0,
                                 padding: '6px 8px',
                                 border: `1px solid ${intentoPlato && errores[`variante_${i}_nombre`] ? 'var(--color-danger)' : 'var(--border-light)'}`,
                                 borderRadius: '4px',
@@ -2137,7 +2142,9 @@ export default function MiMenuPage() {
                                 color: 'var(--text-primary)',
                               }}
                             />
+                          </div>
 
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px', marginTop: '6px' }}>
                             <button
                               type="button"
                               disabled={i === 0}
@@ -2148,7 +2155,7 @@ export default function MiMenuPage() {
                                 setNuevoPlato({ ...nuevoPlato, variantes: nuevas })
                               }}
                               style={{
-                                padding: '4px 6px',
+                                padding: '6px 14px',
                                 background: 'transparent',
                                 border: '1px solid var(--border-light)',
                                 borderRadius: '4px',
@@ -2172,7 +2179,7 @@ export default function MiMenuPage() {
                                 setNuevoPlato({ ...nuevoPlato, variantes: nuevas })
                               }}
                               style={{
-                                padding: '4px 6px',
+                                padding: '6px 14px',
                                 background: 'transparent',
                                 border: '1px solid var(--border-light)',
                                 borderRadius: '4px',
@@ -2195,7 +2202,7 @@ export default function MiMenuPage() {
                                 })
                               }}
                               style={{
-                                padding: '4px 8px',
+                                padding: '6px 14px',
                                 background: 'transparent',
                                 border: '1px solid var(--color-danger)',
                                 borderRadius: '4px',
@@ -2474,7 +2481,11 @@ export default function MiMenuPage() {
                                   ])
                                 : null
                               return (
-                              <div key={v.id ?? `new-${i}`} style={{ marginBottom: '8px' }}>
+                              <div key={v.id ?? `new-${i}`} style={{
+                                marginBottom: '8px',
+                                paddingBottom: '8px',
+                                borderBottom: esUltima ? 'none' : '1px solid var(--border-light)',
+                              }}>
                                 <div style={{ display: 'flex', gap: '6px', alignItems: 'flex-start', opacity: pending ? 0.55 : 1 }}>
                                 <CampoTexto
                                   type="text"
@@ -2486,6 +2497,7 @@ export default function MiMenuPage() {
                                   flushRegistry={camposFlushRef}
                                   style={{
                                     flex: 1,
+                                    minWidth: 0,
                                     padding: '6px 8px',
                                     border: `1px solid ${intentoEditPlato && errores[`variante_${i}_nombre`] ? 'var(--color-danger)' : 'var(--border-light)'}`,
                                     borderRadius: '4px',
@@ -2515,7 +2527,9 @@ export default function MiMenuPage() {
                                     textDecoration: pending ? 'line-through' : 'none',
                                   }}
                                 />
+                                </div>
 
+                                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px', marginTop: '6px' }}>
                                 <button
                                   type="button"
                                   disabled={pending || i === 0}
@@ -2526,7 +2540,7 @@ export default function MiMenuPage() {
                                     setEditPlato({ ...editPlato, variantes: nuevas })
                                   }}
                                   style={{
-                                    padding: '4px 6px',
+                                    padding: '6px 14px',
                                     background: 'transparent',
                                     border: '1px solid var(--border-light)',
                                     borderRadius: '4px',
@@ -2550,7 +2564,7 @@ export default function MiMenuPage() {
                                     setEditPlato({ ...editPlato, variantes: nuevas })
                                   }}
                                   style={{
-                                    padding: '4px 6px',
+                                    padding: '6px 14px',
                                     background: 'transparent',
                                     border: '1px solid var(--border-light)',
                                     borderRadius: '4px',
@@ -2564,27 +2578,7 @@ export default function MiMenuPage() {
                                   ▼
                                 </button>
 
-                                {pending ? (
-                                  // El botón Deshacer se movió debajo (junto a la nota). Spacer
-                                  // invisible que clona la caja del ✕ para que las columnas ▲▼
-                                  // queden alineadas con las filas no marcadas. Es un <span> (no
-                                  // focusable) → no necesita aria-hidden y no puede retener foco,
-                                  // así se evita el warning "Blocked aria-hidden … retained focus".
-                                  <span
-                                    aria-hidden="true"
-                                    style={{
-                                      display: 'inline-block',
-                                      boxSizing: 'border-box',
-                                      padding: '4px 8px',
-                                      border: '1px solid transparent',
-                                      borderRadius: '4px',
-                                      fontSize: '12px',
-                                      visibility: 'hidden',
-                                    }}
-                                  >
-                                    ✕
-                                  </span>
-                                ) : (
+                                {!pending && (
                                   <button
                                     type="button"
                                     onClick={() => {
@@ -2598,7 +2592,7 @@ export default function MiMenuPage() {
                                       }
                                     }}
                                     style={{
-                                      padding: '4px 8px',
+                                      padding: '6px 14px',
                                       background: 'transparent',
                                       border: '1px solid var(--color-danger)',
                                       borderRadius: '4px',
