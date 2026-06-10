@@ -490,6 +490,19 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
 
 ## Items
 
+### BL.38 ✅ Acceso directo "Ver mi menú" en el admin — RESUELTO
+- **Found**: 2026-06-09 (pedido de Julian: abrir el menú público en un clic desde el admin, sin pasar por la sección del QR).
+- **Resuelto**: 2026-06-09 (commit 6bb3f02). Dos ubicaciones: (1) header de /menu — anchor btn-outline en el slot derecho vacío del flex, "estoy editando → verlo en vivo"; (2) primera fila del dropdown de perfil del dashboard, con branch external en el handler (window.open '_blank' noopener; las otras filas siguen en router.push, byte-identical). URL RELATIVA '/' + slug (sin dominio hardcodeado): funciona hoy en menuapp-iota.vercel.app y sobrevive la migración futura a menuapp.co sin cambios — a diferencia de /qr y /referidos que hardcodean el dominio (ver BL.37). Render solo cuando rest?.slug existe (sin slug placeholder; mejor ausente que roto).
+- **Where**: src/app/menu/page.tsx (header ~L1824), src/app/dashboard/page.tsx (dropdown items array + handler ~L1430-1438).
+- **Priority**: 🟢 (comodidad de uso del admin).
+
+### BL.37 ✅ Selector de idioma decorativo oculto (+ hallazgo: dominios hardcodeados) — RESUELTO
+- **Found**: 2026-06-09. La fila "Idioma" del dropdown de perfil del dashboard era puramente decorativa: href '#', sin estado, sin contexto, sin librería i18n en el repo. Solo existe español.
+- **Resuelto**: 2026-06-09 (commit 6bb3f02). Comentada in place (no eliminada) con nota, para reactivarla cuando llegue i18n real. El campo Restaurante.idioma de la DB y sus writes en registro/completa-perfil quedaron intactos (independientes de la fila).
+- **Hallazgo lateral (PENDIENTE, sin BL propio aún)**: la investigación reveló que /qr usa DOS dominios hardcodeados — menuapp.co (cosmético, hoy daría 404) y menuapp-iota.vercel.app (el funcional: QR canvas, clipboard, WhatsApp/Facebook share). /referidos también hardcodea vercel.app. Cuando se migre a menuapp.co (F6/F7), hay que barrer estos puntos; considerar centralizar en una constante o usar window.location.origin.
+- **Where**: src/app/dashboard/page.tsx (~L1434).
+- **Priority**: 🟢 (limpieza UI).
+
 ### BL.29 ✅ Dashboard: bug de huso horario en fechaColombia (doble offset) — RESUELTO
 - **Found**: 2026-06-06 (auditoría del dashboard de estadísticas).
 - **Causa**: fechaColombia (dashboard/page.tsx) calculaba el ajuste con signos cruzados — offsetCol escrito a mano como -300 vs getTimezoneOffset() que devuelve +300 para UTC-5 → restaba 10h en vez de 5h. Resultado: las ventanas de fecha rodaban un día hacia atrás entre 00:00–04:59 COT, y "este mes" quedaba en cero el día 1 antes de las 05:00 (desde=1ro pero hasta=hoyStr sesgado al mes anterior → desde > hasta).
