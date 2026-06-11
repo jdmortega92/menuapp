@@ -6,7 +6,7 @@ import { mutate } from 'swr'
 import { createClient } from '@/lib/supabase-browser'
 import Modal from '@/components/ui/Modal'
 import { formato12h } from '@/lib/time'
-import { isCurrentlyVisible } from '@/lib/visibility'
+import { useMenuVisibility } from '@/hooks/useMenuVisibility'
 import { fechaColombia } from '@/lib/fechas'
 import { formatoPrecio } from '@/lib/precio'
 import { formatDias } from '@/lib/dias'
@@ -196,51 +196,36 @@ export default function MenuPublicoPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [platoDetalle?.id])
 
-  // Filtrar por horario si está activo
+  // Cadena de visibilidad extraída a useMenuVisibility (Refactor Fase 2).
+  // `ahora` se computa UNA vez por render aquí, junto a useTick (60s), y la
+  // cadena entera se recomputa cada render a propósito (visibilidad por horario).
   const ahora = new Date()
-  const horaActual = `${ahora.getHours().toString().padStart(2, '0')}:${ahora.getMinutes().toString().padStart(2, '0')}`
-
-  // Las categorías con horario configurado siempre respetan su ventana,
-  // independientemente del antiguo toggle global.
-  const categoriasPorHorario = categorias.filter((cat) =>
-    isCurrentlyVisible({ horaInicio: cat.hora_inicio, horaFin: cat.hora_fin, ahora })
-  )
-
-  // IDs de platos visibles por horario
-  const platosVisiblesIds = new Set(categoriasPorHorario.flatMap((c) => c.platos.map((p) => p.id)))
-
-  // Filtrar combos: solo mostrar si TODOS sus platos son visibles
-  const combosVisibles = combosEnriquecidos.filter((combo: any) => {
-    // Excluir combos sin precio válido
-    if (combo.precio === null || combo.precio === undefined) return false
-
-    // Restricciones propias del combo (solo si están configuradas)
-    const hasDias = combo.dias && combo.dias.length > 0
-    const hasHorario = combo.horario_inicio && combo.horario_fin
-    if (hasDias || hasHorario) {
-      const visible = isCurrentlyVisible({
-        dias: hasDias ? combo.dias : null,
-        horaInicio: hasHorario ? combo.horario_inicio : null,
-        horaFin: hasHorario ? combo.horario_fin : null,
-        ahora,
-      })
-      if (!visible) return false
-    }
-
-    const platosDelCombo = categorias.flatMap((c: any) => c.platos).filter((p: any) => combo.platosIds?.includes(p.id))
-    return platosDelCombo.every((p: any) => platosVisiblesIds.has(p.id))
+  const {
+    horaActual,
+    platosVisiblesIds,
+    combosVisibles,
+    promosVisibles,
+    platoDiaVisible: platoDiaVisibleRaw,
+    platoGanadorVisible: platoGanadorVisibleRaw,
+    sorprendemeVisible,
+    categoriasFiltradas,
+    categoriasListado,
+  } = useMenuVisibility({
+    categorias,
+    combosEnriquecidos,
+    promosPublico,
+    platoDia,
+    platoGanador,
+    config,
+    esProPublico,
+    busqueda,
+    ahora,
   })
-
-  // Filtrar promos: solo mostrar si TODOS sus platos son visibles Y la promo es válida
-  const promosVisibles = promosPublico.filter((promo: any) => {
-    // Excluir promos con datos inválidos (valor null/undefined cuando se requiere)
-    const requiereValor = promo.tipo === 'descuento'
-    if (requiereValor && (promo.valor === null || promo.valor === undefined || promo.valor === 0)) {
-      return false
-    }
-    if (!isCurrentlyVisible({ dias: promo.dias, ahora })) return false
-    return promo.platosIds?.every((id: string) => platosVisiblesIds.has(id))
-  })
+  // Re-alias local para que TS narrowee platoDia/platoGanador en el JSX
+  // (aliased condition narrowing requiere el `x && ...` en este scope).
+  // Idéntico en valor: el flag del hook ya incluye la truthiness de x.
+  const platoDiaVisible = platoDia && platoDiaVisibleRaw
+  const platoGanadorVisible = platoGanador && platoGanadorVisibleRaw
 
   // PIEZA 3b-i — Índice de descuentos activos para DISPLAY público.
   // CHOKE POINT de gating: si el restaurante no es Pro o tiene promos desactivadas,
@@ -331,43 +316,6 @@ export default function MenuPublicoPage() {
     if (tieneVar) return plato.variantes.some((v: any) => has2x1(plato.id, v.id))
     return has2x1(plato.id, null)
   }
-
-  // Plato del día: respeta su propia ventana horaria
-  const platoDiaEnHorario = isCurrentlyVisible({
-    horaInicio: platoDia?.horaInicio,
-    horaFin: platoDia?.horaFin,
-    ahora,
-  })
-  const platoDiaVisible = platoDia && platoDiaEnHorario && platosVisiblesIds.has(platoDia.id)
-  const platoGanadorVisible = platoGanador && platosVisiblesIds.has(platoGanador.id)
-
-  // Sorpréndeme: verificar si ambas categorías están activas
-  const sorprendemeVisible = (() => {
-    const catsSorprendeme = config?.sorprendeme_categorias || []
-    if (catsSorprendeme.length !== 2) return true
-    return catsSorprendeme.every((catId: string) => categoriasPorHorario.some((c: any) => c.id === catId))
-  })()
-  
-  const categoriasFiltradas = busqueda.trim()
-    ? categoriasPorHorario.map((cat) => ({ ...cat, platos: cat.platos.filter((p) => p.nombre.toLowerCase().includes(busqueda.toLowerCase()) || p.descripcion?.toLowerCase().includes(busqueda.toLowerCase())) })).filter((cat) => cat.platos.length > 0)
-    : categoriasPorHorario
-
-  // F8.7 — Hide platos that are currently being shown as featured (plato del día / ganador)
-  // from the regular listing. Gated on the SAME visibility condition as the featured cards
-  // so the plato never disappears entirely (e.g. outside día horario, the featured card
-  // unmounts and the listing card reappears).
-  const idsOcultarEnListado = new Set<string>()
-  if (esProPublico && config?.plato_dia_activo && platoDiaVisible && !busqueda.trim() && platoDia) {
-    idsOcultarEnListado.add(platoDia.id)
-  }
-  if (esProPublico && config?.plato_ganador_activo && platoGanadorVisible && !busqueda.trim() && platoGanador) {
-    idsOcultarEnListado.add(platoGanador.id)
-  }
-  const categoriasListado = idsOcultarEnListado.size > 0
-    ? categoriasFiltradas
-        .map((cat: any) => ({ ...cat, platos: cat.platos.filter((p: any) => !idsOcultarEnListado.has(p.id)) }))
-        .filter((cat: any) => cat.platos.length > 0)
-    : categoriasFiltradas
 
   function agregarAlPedido(cartKey: string) {
     // PIEZA 3c-ii: parsear ANTES del incremento para poder consultar el índice 2x1.
