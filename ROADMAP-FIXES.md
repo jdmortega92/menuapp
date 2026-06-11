@@ -494,6 +494,14 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
 
 ## Items
 
+### REFACTOR-F2 ✅ Refactor Fase 2: descomposición de [slug]/page.tsx (menú público) — CLOSED
+- **Closed**: 2026-06-11. Segunda fase del plan de refactor. La página pasó de 2.872 a 820 líneas (−71%); ahora es estados + SWR hooks + logging + derivaciones + 3 hooks de dominio + ~600 líneas de JSX estructural + 8 componentes. Smoke completo verificado en dispositivo real (matriz BL.27/BL.28, modal de detalle con preselección BL.17, calificar anidado, WhatsApp end-to-end, vistas_platos 1 por apertura).
+- **Commits**: cb9255d+fix (vitest + lib/cart.ts con los primeros 14 unit tests del repo: codec round-trips incl. empty-middle 'a____dia', UUID safety, precioEfectivo, enriquecerComboPlatos), 95bec8f (useMenuVisibility), 1eef5cb (usePromoIndices), 8498dfc (useCart + fix BL.28), 6d2d1da (QtyControl/BandejaFlotante/RestaurantLanding), dd9c607 (PedidoModal/ComboDetalleModal), f563401 (heroes + PlatoCard), 3654c66 (PlatoDetalleModal + CalificarModal anidado).
+- **Hooks nuevos**: useMenuVisibility (cadena entera de visibilidad; `ahora` como parámetro desde el useTick de la página, sin memoización — recompute-per-render por diseño), usePromoIndices (índices + gating choke-point como params explícitos), useCart (pedido/preciosPromo/nota + handlers + itemsPedido sin memoizar + totales + pedirPorWhatsApp + limpiarNoDisponibles(esVisible)).
+- **Componentes nuevos** (src/components/menu-publico/): QtyControl, BandejaFlotante, RestaurantLanding, PedidoModal, ComboDetalleModal, PlatoDiaHero, PlatoGanadorHero, PlatoCard, PlatoDetalleModal, CalificarModal. Sin React.memo en ninguno (props derivadas de visibilidad cambian cada render por diseño del tick). PlatoCard NO unificado con la card de sorpréndeme (8+ diferencias estructurales — decisión documentada en el header del componente).
+- **Decisiones de arquitectura**: orden de extracción corregido por inversión de dependencias (visibilidad antes que índices de promo); qtyProps builder en la página como única fuente de stopPropagation; CalificarModal anidado en PlatoDetalleModal con stackLevel 1, cal-fields locales y reset por mount fresco; derivación cartKeySource encapsulada en el modal; narrowing aliases (platoDiaVisible = platoDia && raw) para preservar el type narrowing de TS tras mover flags a hooks.
+- **preciosPromo re-semantizado**: ahora significa exactamente "specials congelados (dia/ganador)" — las escrituras para keys sin source se eliminaron (cero lectores tras el fix BL.28).
+
 ### REFACTOR-F1 ✅ Refactor Fase 1: fundaciones (libs compartidas + migraciones SWR chicas) — CLOSED
 - **Closed**: 2026-06-10. Primera fase del plan de refactor de 5 fases derivado del censo del codebase (62% del código en 4 archivos; plan: 1 fundaciones → 2 [slug] → 3 /menu → UI pass → 4 dashboard → 5 sweeps semánticos).
 - **Commits**: 8608302 (lib/fechas), 7299adb (lib/precio + lib/dias), 39905da (lib/urls + delete lib/whatsapp muerto), 861e52e (lib/analytics + CampoTexto a components/ui), b932e16 (SWR /qr /referidos /suscripcion).
@@ -596,11 +604,11 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
 - **Where**: src/app/[slug]/page.tsx (itemsPedido ~L486).
 - **Priority**: 🟡 high (bug funcional que afecta al cliente final / precio cobrado).
 
-### BL.28 🟢 Stepping de cantidad del 2x1 usa el tag congelado de preciosPromo — PENDIENTE
-- **[PENDIENTE]**: los handlers de +/- (agregarAlPedido ~L433, quitarDelPedido ~L469) deciden si pasos de ±2 mirando preciosPromo[cartKey]?.etiqueta === '2x1' (congelado), no el valor recalculado. preciosPromo se escribe al agregar y no se limpia cuando una promo se re-deriva away. Consecuencia: si un 2x1 se elimina en el admin mientras el cliente tiene esa línea, el precio/etiqueta/total quedan correctos (re-derivados a normal), pero futuros clicks +/- en esa línea seguirían pasando de a 2 por el tag viejo. Caso de borde estrecho, display/precio-correcto, solo el stepping queda viejo.
+### BL.28 ✅ Stepping de cantidad del 2x1 usaba el tag congelado de preciosPromo — RESUELTO
+- **Diagnóstico**: los handlers de +/- (agregarAlPedido, quitarDelPedido) decidían si pasos de ±2 mirando preciosPromo[cartKey]?.etiqueta === '2x1' (congelado), no el valor recalculado. preciosPromo se escribía al agregar y no se limpiaba cuando una promo se re-derivaba away. Consecuencia: si un 2x1 se eliminaba en el admin mientras el cliente tenía esa línea, el precio/etiqueta/total quedaban correctos (re-derivados a normal, BL.27), pero futuros clicks +/- en esa línea seguían pasando de a 2 por el tag viejo. Caso de borde estrecho, display/precio-correcto, solo el stepping quedaba viejo.
+- **Resuelto**: 2026-06-11 (commit 8498dfc, dentro de REFACTOR-F2). Ambos handlers deciden el stepping desde el índice VIVO: agregarAlPedido dejó el frozen-OR-live y quitarDelPedido (que nunca parseaba la key y estaba stale en ambas direcciones) ahora parsea; es2x1 = !parsed.source && has2x1(platoId, varianteId). BONUS encontrado en el fix: el guard !parsed.source era necesario — sin él, una línea día/ganador podía saltar ±2 si el mismo plato tenía un 2x1 activo (el índice es ciego al source); las líneas congeladas ahora siempre van de a 1. Edge aceptado y documentado: una línea agregada como 2x1 cuya promo se borra pasa a steppear ±1 (consistente con BL.27). Verificado en dispositivo: matriz {promo viva, borrada con línea en carrito, creada después} × {+, −}.
 - **Found**: 2026-06-01 (flageado durante BL.27, no tocado: la tarea no modificaba comportamiento de cantidad).
-- **Where**: src/app/[slug]/page.tsx (agregarAlPedido ~L433, quitarDelPedido ~L469).
-- **Fix sugerido**: que esos handlers consulten has2x1(platoId, varianteId) en vivo en vez del tag congelado de preciosPromo (y/o limpiar las entradas de preciosPromo de keys no-día/ganador).
+- **Where**: src/hooks/useCart.ts (agregarAlPedido, quitarDelPedido — extraídos de [slug]/page.tsx en la misma fase).
 - **Priority**: 🟢 normal (caso de borde estrecho).
 
 ### F8.8 Mejoras de borrado en el admin (aviso de plato, mark-for-removal de variantes, auto-borrado de promos vacías) — CLOSED
