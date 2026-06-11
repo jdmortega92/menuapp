@@ -7,6 +7,8 @@ import { mutate } from 'swr'
 import { createClient } from '@/lib/supabase-browser'
 import Modal from '@/components/ui/Modal'
 import QtyControl from '@/components/menu-publico/QtyControl'
+import PedidoModal from '@/components/menu-publico/PedidoModal'
+import ComboDetalleModal from '@/components/menu-publico/ComboDetalleModal'
 import BandejaFlotante from '@/components/menu-publico/BandejaFlotante'
 import RestaurantLanding from '@/components/menu-publico/RestaurantLanding'
 import { formato12h } from '@/lib/time'
@@ -893,233 +895,17 @@ export default function MenuPublicoPage() {
           </div>
         )}
         {/* Modal detalle combo */}
-        {comboDetalle && (() => {
-          // F8.5a — preferir los platos enriquecidos (con variante + precio efectivo).
-          const enriquecidos = comboDetalle.comboPlatosEnriquecidos
-          const tieneEnriquecidos = Array.isArray(enriquecidos) && enriquecidos.length > 0
-
-          // Fallback defensivo (Task 7): si por algún motivo no hay datos
-          // enriquecidos, reconstruir desde categorías y usar el precio
-          // individual almacenado — preserva el comportamiento previo.
-          const platosDelCombo = tieneEnriquecidos
-            ? enriquecidos
-            : categorias
-                .flatMap((c: any) => c.platos)
-                .filter((p: any) => comboDetalle.platosIds?.includes(p.id))
-
-          // Strategy B: recomputar precio individual desde los platos del combo.
-          const precioIndividual = tieneEnriquecidos
-            ? enriquecidos.reduce((sum: number, p: any) => sum + (p.precioEfectivo || 0), 0)
-            : comboDetalle.precioIndividual
-
-          const ahorro = precioIndividual - comboDetalle.precio
-          const porcentajeAhorro = precioIndividual > 0
-            ? Math.round((ahorro / precioIndividual) * 100)
-            : 0
-
-          return (
-            <Modal
-              isOpen={!!comboDetalle}
-              onClose={() => setComboDetalle(null)}
-              maxWidth={500}
-              noPadding
-              showClose={false}
-              themeClass={themeClass}
-            >
-              {/* Header con nombre y badge de ahorro */}
-              <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--theme-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
-                  <span style={{
-                    fontSize: '16px',
-                    fontWeight: 'var(--theme-title-weight)' as any,
-                    fontFamily: 'var(--theme-font-display)',
-                    letterSpacing: 'var(--theme-title-letter-spacing)',
-                    textTransform: 'var(--theme-title-transform)' as any,
-                    color: 'var(--theme-text)',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}>🍱 {comboDetalle.nombre}</span>
-                  <span style={{
-                    fontSize: '11px',
-                    fontWeight: 500,
-                    color: 'white',
-                    background: 'var(--color-green)',
-                    padding: '2px 8px',
-                    borderRadius: '10px',
-                    flexShrink: 0,
-                  }}>
-                    -{porcentajeAhorro}%
-                  </span>
-                </div>
-                <span onClick={() => setComboDetalle(null)} style={{
-                  fontSize: '18px',
-                  color: 'var(--theme-text-subtle)',
-                  cursor: 'pointer',
-                  marginLeft: '12px',
-                  padding: '4px 8px',
-                  borderRadius: '6px',
-                  lineHeight: 1,
-                }}>✕</span>
-              </div>
-
-              <div style={{ padding: '16px 20px' }}>
-                {/* Descripción del combo */}
-                {comboDetalle.descripcion && (
-                  <div style={{
-                    fontSize: '13px',
-                    color: 'var(--theme-text-muted)',
-                    marginBottom: '16px',
-                    lineHeight: 1.5,
-                    overflowWrap: 'break-word',
-                  }}>
-                    {comboDetalle.descripcion}
-                  </div>
-                )}
-
-                {/* Título de la sección */}
-                <div style={{
-                  fontSize: '12px',
-                  fontWeight: 500,
-                  color: 'var(--theme-text-muted)',
-                  marginBottom: '8px',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px',
-                }}>
-                  Incluye {platosDelCombo.length} platos
-                </div>
-
-                {/* Lista de platos del combo */}
-                {platosDelCombo.map((plato: any) => (
-                  <div key={plato.id ?? `${plato.plato_id}-${plato.variante_id ?? 'base'}`} style={{
-                    padding: '12px',
-                    borderRadius: 'var(--theme-radius-card)',
-                    marginBottom: '8px',
-                    border: '1px solid var(--theme-border)',
-                    background: 'var(--theme-bg)',
-                    display: 'flex',
-                    gap: '10px',
-                    alignItems: 'center',
-                  }}>
-                    <div style={{
-                      width: '52px',
-                      height: '52px',
-                      borderRadius: 'var(--theme-radius-image)',
-                      background: `${color}15`,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      overflow: 'hidden',
-                      flexShrink: 0,
-                    }}>
-                      {esBasicoPublico && plato.foto_url ? (
-                        <img src={plato.foto_url} alt={plato.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      ) : (
-                        <span style={{ fontSize: '20px', fontWeight: 500, color: color }}>
-                          {plato.nombre.charAt(0)}
-                        </span>
-                      )}
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{
-                        fontSize: '13px',
-                        fontWeight: 500,
-                        color: 'var(--theme-text)',
-                      }}>
-                        {plato.nombre}{plato.varianteNombre ? ` (${plato.varianteNombre})` : ''}
-                      </div>
-                      {plato.descripcion && (
-                        <div style={{
-                          fontSize: '11px',
-                          color: 'var(--theme-text-muted)',
-                          marginTop: '2px',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          display: '-webkit-box',
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: 'vertical' as any,
-                          overflowWrap: 'break-word',
-                        }}>
-                          {plato.descripcion}
-                        </div>
-                      )}
-                      <div style={{
-                        fontSize: '11px',
-                        color: 'var(--theme-text-subtle)',
-                        marginTop: '4px',
-                      }}>
-                        Precio individual: ${formatoPrecio(plato.precioEfectivo ?? plato.precio)}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-
-                {/* Resumen de precios */}
-                <div style={{
-                  background: 'var(--theme-surface-muted)',
-                  borderRadius: 'var(--theme-radius-card)',
-                  padding: '14px',
-                  marginTop: '16px',
-                  marginBottom: '16px',
-                }}>
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    fontSize: '12px',
-                    color: 'var(--theme-text-muted)',
-                    marginBottom: '6px',
-                  }}>
-                    <span>Comprando por separado</span>
-                    <span style={{ textDecoration: 'line-through' }}>${formatoPrecio(precioIndividual)}</span>
-                  </div>
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    fontSize: '15px',
-                    fontWeight: 500,
-                    marginBottom: '6px',
-                    color: 'var(--theme-text)',
-                  }}>
-                    <span>Precio del combo</span>
-                    <span style={{ color: color }}>${formatoPrecio(comboDetalle.precio)}</span>
-                  </div>
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    fontSize: '12px',
-                    color: 'var(--color-green)',
-                    fontWeight: 500,
-                    paddingTop: '6px',
-                    borderTop: '1px solid var(--theme-border)',
-                  }}>
-                    <span>Tu ahorro</span>
-                    <span>${formatoPrecio(ahorro)}</span>
-                  </div>
-                </div>
-
-                {/* Botón agregar al pedido */}
-                <div onClick={() => {
-                  agregarAlPedido(comboDetalle.id)
-                  setComboDetalle(null)
-                }} style={{
-                  background: color,
-                  color: 'white',
-                  borderRadius: 'var(--theme-radius-button)',
-                  padding: '16px',
-                  textAlign: 'center',
-                  fontSize: '15px',
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                }}>
-                  Agregar combo al pedido · ${formatoPrecio(comboDetalle.precio)}
-                </div>
-              </div>
-            </Modal>
-          )
-        })()}
+        {comboDetalle && (
+          <ComboDetalleModal
+            combo={comboDetalle}
+            categorias={categorias}
+            color={color}
+            esBasicoPublico={esBasicoPublico}
+            themeClass={themeClass}
+            onAgregar={agregarAlPedido}
+            onClose={() => setComboDetalle(null)}
+          />
+        )}
         {/* Modal detalle promo — REMOVED in PIEZA 3b-ii-B. Los descuentos ahora se
             muestran en la tarjeta del plato + el modal de detalle (3b-i) y se aplican
             en el carrito vía agregarAlPedido (3b-ii-A). */}
@@ -1330,155 +1116,22 @@ export default function MenuPublicoPage() {
         )}
 
         {/* Modal ver pedido */}
-        <Modal
+        <PedidoModal
           isOpen={mostrarPedido}
           onClose={() => setMostrarPedido(false)}
-          title="Tu pedido"
-          maxWidth={500}
-          noPadding
+          itemsPedido={itemsPedido}
+          totalPedido={totalPedido}
+          nota={nota}
+          setNota={setNota}
+          onAgregar={agregarAlPedido}
+          onQuitar={quitarDelPedido}
+          onPedir={pedirPorWhatsApp}
+          esQR={esQR}
+          qrMesa={qrMesa}
+          color={color}
           themeClass={themeClass}
-        >
-          {esQR && (
-            <div style={{ padding: '12px 20px', background: 'var(--color-info-light)', fontSize: '12px', color: 'var(--color-info)' }}>
-              Mesa {qrMesa?.replace('mesa', '')} · Muéstrale este resumen al mesero
-            </div>
-          )}
-          <div style={{ padding: '16px 20px' }}>
-            {itemsPedido.map((item: any) => (
-              <div key={item.cartKey} style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                padding: '10px 0',
-                borderBottom: '1px solid var(--theme-border)',
-              }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{
-                    fontSize: '13px',
-                    fontWeight: 500,
-                    color: 'var(--theme-text)',
-                    fontFamily: 'var(--theme-font-body)',
-                  }}>
-                    {item.plato.nombre}{item.variante ? ` · ${item.variante.nombre}` : ''}
-                  </div>
-                  <div style={{
-                    fontSize: '12px',
-                    color: 'var(--theme-text-muted)',
-                    fontFamily: 'var(--theme-font-body)',
-                  }}>
-                    {item.promo ? (
-                      <><span style={{ textDecoration: 'line-through', marginRight: '4px' }}>${formatoPrecio(item.variante ? item.variante.precio : item.plato.precio)}</span><span style={{ color: color, fontWeight: 500 }}>${formatoPrecio(item.promo.precioUnitario)} c/u</span> <span style={{ fontSize: '10px', color: 'var(--color-green)' }}>({item.promo.etiqueta})</span></>
-                    ) : `$${formatoPrecio(item.variante ? item.variante.precio : item.plato.precio)} c/u`}
-                  </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <div onClick={() => quitarDelPedido(item.cartKey)} style={{
-                    width: '24px',
-                    height: '24px',
-                    borderRadius: '50%',
-                    border: '1px solid var(--theme-border)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '14px',
-                    cursor: 'pointer',
-                    color: 'var(--theme-text-muted)',
-                  }}>-</div>
-                  <span style={{
-                    fontSize: '14px',
-                    fontWeight: 500,
-                    minWidth: '16px',
-                    textAlign: 'center',
-                    color: 'var(--theme-text)',
-                    fontFamily: 'var(--theme-font-body)',
-                  }}>
-                    {item.cantidad}
-                  </span>
-                  <div onClick={() => agregarAlPedido(item.cartKey)} style={{ width: '24px', height: '24px', borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '14px', cursor: 'pointer' }}>+</div>
-                </div>
-                <div style={{
-                  fontSize: '13px',
-                  fontWeight: 500,
-                  minWidth: '70px',
-                  textAlign: 'right',
-                  color: 'var(--theme-text)',
-                  fontFamily: 'var(--theme-font-body)',
-                }}>
-                  ${formatoPrecio((item.promo ? item.promo.precioUnitario : (item.variante ? item.variante.precio : item.plato.precio)) * item.cantidad)}
-                </div>
-              </div>
-            ))}
-            <div style={{ marginTop: '14px' }}>
-              <input value={nota} onChange={(e) => setNota(e.target.value)} placeholder={esQR ? 'Nota para el mesero (opcional)' : 'Nota para el restaurante (opcional)'}
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  border: '1px solid var(--theme-border)',
-                  borderRadius: 'var(--theme-radius-image)',
-                  fontSize: '13px',
-                  fontFamily: 'var(--theme-font-body)',
-                  background: 'var(--theme-surface)',
-                  color: 'var(--theme-text)',
-                  outline: 'none',
-                }} />
-            </div>
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginTop: '16px',
-              paddingTop: '14px',
-              borderTop: '1px solid var(--theme-border)',
-            }}>
-              <span style={{ fontSize: '15px', fontWeight: 500, color: 'var(--theme-text)', fontFamily: 'var(--theme-font-body)' }}>Total</span>
-              <span style={{ fontSize: '20px', fontWeight: 500, color: 'var(--theme-text)', fontFamily: 'var(--theme-font-body)' }}>${formatoPrecio(totalPedido)}</span>
-            </div>
-            {esQR ? (
-              <div style={{ marginTop: '16px', textAlign: 'center' }}>
-                <div style={{
-                  background: 'var(--theme-text)',
-                  color: 'var(--theme-bg)',
-                  borderRadius: 'var(--theme-radius-button)',
-                  padding: '16px',
-                  fontSize: '15px',
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                }}>
-                  Mostrar al mesero
-                </div>
-                <div style={{ fontSize: '11px', color: 'var(--theme-text-subtle)', marginTop: '8px' }}>El mesero tomará tu pedido desde esta pantalla</div>
-              </div>
-            ) : config?.whatsapp_activo ? (
-              <div style={{ marginTop: '16px', textAlign: 'center' }}>
-                <div onClick={pedirPorWhatsApp} style={{
-                  background: '#25D366',
-                  color: 'white',
-                  borderRadius: 'var(--theme-radius-button)',
-                  padding: '16px',
-                  fontSize: '15px',
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                }}>
-                  Pedir por WhatsApp
-                </div>
-                <div style={{ fontSize: '11px', color: 'var(--theme-text-subtle)', marginTop: '8px' }}>Se abrirá WhatsApp con tu pedido listo</div>
-              </div>
-            ) : (
-              <div style={{ marginTop: '16px', textAlign: 'center' }}>
-                <div style={{
-                  background: 'var(--theme-text)',
-                  color: 'var(--theme-bg)',
-                  borderRadius: 'var(--theme-radius-button)',
-                  padding: '16px',
-                  fontSize: '15px',
-                  fontWeight: 500,
-                }}>
-                  Muestra este resumen en caja
-                </div>
-              </div>
-            )}
-          </div>
-        </Modal>
+          whatsappActivo={config?.whatsapp_activo}
+        />
         {/* Modal calificar plato */}
         {platoCalificar && (() => {
           const plato = todosLosPlatos.find((p: any) => p.id === platoCalificar)
