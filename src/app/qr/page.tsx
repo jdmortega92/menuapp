@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks'
 import { createClient } from '@/lib/supabase-browser'
+import { urlMenuPublico } from '@/lib/urls'
 import QRCode from 'qrcode'
 import BottomNav from '@/components/BottomNav'
 
@@ -22,7 +23,7 @@ export default function MiQRPage() {
   const urlMenu = `${urlBase}/${restaurante.slug}`
   const qrCanvasRef = useRef<HTMLCanvasElement>(null)
   const [qrGenerado, setQrGenerado] = useState(false)
-  const urlCompleta = `https://menuapp-iota.vercel.app/${restaurante.slug}`
+  const urlCompleta = urlMenuPublico(restaurante.slug)
 
   /**
    * Marca el menú como compartido en la base de datos.

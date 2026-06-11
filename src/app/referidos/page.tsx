@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks'
 import { createClient } from '@/lib/supabase-browser'
+import { urlRegistroRef } from '@/lib/urls'
 
 export default function ReferidosPage() {
   const router = useRouter()
@@ -51,18 +52,21 @@ export default function ReferidosPage() {
   }, [rest?.id])
 
   const codigo = rest?.codigo_referido || ''
-  const enlaceReferido = `menuapp-iota.vercel.app/registro?ref=${codigo}`
+  // URL completa (con https://) desde lib/urls — única fuente del dominio.
+  const enlaceReferido = urlRegistroRef(codigo)
+  // Versión sin esquema, solo para mostrar en pantalla.
+  const enlaceReferidoDisplay = enlaceReferido.replace(/^https:\/\//, '')
   const activos = referidos.filter(r => r.estado === 'activo').length
   const pendientes = referidos.filter(r => r.estado === 'pendiente').length
 
   function copiarEnlace() {
-    navigator.clipboard.writeText(`https://${enlaceReferido}`)
+    navigator.clipboard.writeText(enlaceReferido)
     setCopiado(true)
     setTimeout(() => setCopiado(false), 2000)
   }
 
   function compartirWhatsApp() {
-    const msg = `¡Hola! Te invito a crear el menú digital de tu restaurante con MenuApp. Es gratis para empezar y súper fácil. Regístrate con mi enlace y ambos ganamos 1 mes gratis: https://${enlaceReferido}`
+    const msg = `¡Hola! Te invito a crear el menú digital de tu restaurante con MenuApp. Es gratis para empezar y súper fácil. Regístrate con mi enlace y ambos ganamos 1 mes gratis: ${enlaceReferido}`
     window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank')
   }
 
@@ -71,7 +75,7 @@ export default function ReferidosPage() {
       navigator.share({
         title: 'MenuApp — Menú digital para tu restaurante',
         text: 'Crea tu menú digital gratis con MenuApp',
-        url: `https://${enlaceReferido}`,
+        url: enlaceReferido,
       })
     } else {
       copiarEnlace()
@@ -121,7 +125,7 @@ export default function ReferidosPage() {
           <div className="card" style={{
             padding: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           }}>
-            <div style={{ fontSize: '12px', color: 'var(--color-info)', wordBreak: 'break-all' }}>{enlaceReferido}</div>
+            <div style={{ fontSize: '12px', color: 'var(--color-info)', wordBreak: 'break-all' }}>{enlaceReferidoDisplay}</div>
             <span onClick={copiarEnlace} style={{
               fontSize: '12px', fontWeight: 500, cursor: 'pointer', flexShrink: 0, marginLeft: '10px',
               color: copiado ? 'var(--color-green)' : 'var(--color-info)',
