@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { mutate as globalMutate } from 'swr'
 import { useAuth } from '@/hooks'
 import { useCategoriasYPlatos } from '@/hooks/data/useCategoriasYPlatos'
 import { usePlatoDelDia } from '@/hooks/data/usePlatoDelDia'
@@ -17,6 +16,8 @@ import Modal from '@/components/ui/Modal'
 import CampoTexto from '@/components/ui/CampoTexto'
 import BottomNav from '@/components/BottomNav'
 import VarianteEditor, { construirTextoVinculaciones } from '@/components/menu-admin/VarianteEditor'
+import CategoriaForm, { validarCategoria } from '@/components/menu-admin/CategoriaForm'
+import { invalidateAll } from '@/lib/swr'
 import TimeRangeHelper from '@/components/ui/TimeRangeHelper'
 import Select from '@/components/ui/Select'
 import DiasSelector from '@/components/ui/DiasSelector'
@@ -25,14 +26,6 @@ import { fechaColombia, diaCodigoColombia } from '@/lib/fechas'
 import { formatoPrecio } from '@/lib/precio'
 import { formatDias } from '@/lib/dias'
 import type { DiaSemana, Variante } from '@/types'
-
-function invalidateAll(prefix: string) {
-  return globalMutate(
-    (key) => Array.isArray(key) && key[0] === prefix,
-    undefined,
-    { revalidate: true, populateCache: false },
-  )
-}
 
 // construirTextoVinculaciones se movió a components/menu-admin/VarianteEditor
 // (lo comparten los modales de borrado de aquí y las notas de fila marcada del editor).
@@ -76,12 +69,10 @@ export default function MiMenuPage() {
   const cargandoMenu = !catsAndPlatos || !configSwr
   const [tabActiva, setTabActiva] = useState<'platos' | 'combos' | 'sorprendeme'>('platos')
   const [busqueda, setBusqueda] = useState('')
+  // Puntero del form "Nueva categoría" — el borrador y su cuarteto viven en
+  // CategoriaForm (fresh-mount por apertura). onClose estable para React.memo.
   const [mostrarFormCategoria, setMostrarFormCategoria] = useState(false)
-  const [nuevaCategoria, setNuevaCategoria] = useState('')
-  const [intentoCategoria, setIntentoCategoria] = useState(false)
-  const [touchedCategoria, setTouchedCategoria] = useState<Record<string, boolean>>({})
-  const [guardandoCat, setGuardandoCat] = useState(false)
-  const [guardadoCat, setGuardadoCat] = useState(false)
+  const cerrarFormCategoria = useCallback(() => setMostrarFormCategoria(false), [])
   const [mostrarFormPlato, setMostrarFormPlato] = useState<string | null>(null)
   const [nuevoPlato, setNuevoPlato] = useState<{
     nombre: string;
@@ -1158,37 +1149,8 @@ export default function MiMenuPage() {
   }
 
   // ── Categorías ──
-  function validarCategoria(nombre: string): Record<string, string> {
-    const e: Record<string, string> = {}
-    if (!nombre.trim()) e.nombre = 'El nombre es obligatorio'
-    return e
-  }
-  async function agregarCategoria() {
-    setIntentoCategoria(true)
-    setTouchedCategoria({ nombre: true })
-    const errores = validarCategoria(nuevaCategoria)
-    if (Object.keys(errores).length > 0 || !rest?.id) return
-    setGuardandoCat(true)
-    const supabase = createClient()
-    const { data } = await supabase
-      .from('categorias')
-      .insert({ restaurante_id: rest.id, nombre: nuevaCategoria, orden: categorias.length })
-      .select()
-      .single()
-
-    if (data) {
-      await mutateCategoriasYPlatos()
-    }
-    setGuardandoCat(false)
-    setGuardadoCat(true)
-    setTimeout(() => {
-      setGuardadoCat(false)
-      setNuevaCategoria('')
-      setIntentoCategoria(false)
-      setTouchedCategoria({})
-      setMostrarFormCategoria(false)
-    }, 1200)
-  }
+  // validarCategoria y el form de crear viven en components/menu-admin/CategoriaForm
+  // (el validador se importa de allí para el form inline de renombrar).
   async function eliminarCategoria(id: string) {
     const supabase = createClient()
     const cat = categorias.find(c => c.id === id)
@@ -1769,47 +1731,21 @@ export default function MiMenuPage() {
 
             {/* Botón agregar categoría */}
             <div style={{ padding: '0 20px 12px' }}>
-              <button onClick={() => { setMostrarFormCategoria(true); setIntentoCategoria(false); setTouchedCategoria({}) }}
+              <button onClick={() => setMostrarFormCategoria(true)}
                 className="btn-primary" style={{ padding: '10px 16px', fontSize: '13px' }}>
                 + Categoría
               </button>
             </div>
 
             {/* Form nueva categoría */}
-            {mostrarFormCategoria && (() => {
-              const errores = validarCategoria(nuevaCategoria)
-              const valido = Object.keys(errores).length === 0
-              return (
-              <div style={{ padding: '0 20px', marginBottom: '14px' }}>
-                <div className="card" style={{ padding: '14px' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '10px' }}>Nueva categoría</div>
-                  <input className="input" placeholder="Ej: Postres" value={nuevaCategoria} maxLength={40}
-                    onChange={(e) => setNuevaCategoria(e.target.value)} autoFocus
-                    onBlur={() => setTouchedCategoria(prev => ({ ...prev, nombre: true }))}
-                    onKeyDown={(e) => e.key === 'Enter' && agregarCategoria()}
-                    style={{
-                      marginBottom: intentoCategoria && touchedCategoria.nombre && errores.nombre ? '4px' : '10px',
-                      borderColor: intentoCategoria && touchedCategoria.nombre && errores.nombre ? 'var(--color-danger)' : undefined,
-                    }} />
-                  {intentoCategoria && touchedCategoria.nombre && errores.nombre && (
-                    <div style={{ fontSize: '11px', color: 'var(--color-danger)', marginBottom: '10px' }}>
-                      {errores.nombre}
-                    </div>
-                  )}
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button onClick={agregarCategoria} disabled={guardandoCat || guardadoCat} className="btn-primary"
-                      style={{
-                        flex: 1, padding: '10px', fontSize: '13px',
-                        opacity: valido ? 1 : 0.5,
-                        cursor: valido ? 'pointer' : 'default',
-                        ...(valido ? {} : { transform: 'none', boxShadow: 'none' }),
-                      }}>{guardandoCat ? 'Guardando...' : guardadoCat ? '✓ Guardado' : 'Crear'}</button>
-                    <button onClick={() => { setMostrarFormCategoria(false); setIntentoCategoria(false); setTouchedCategoria({}); setNuevaCategoria('') }} className="btn-outline" style={{ flex: 1, padding: '10px', fontSize: '13px' }}>Cancelar</button>
-                  </div>
-                </div>
-              </div>
-              )
-            })()}
+            {mostrarFormCategoria && (
+              <CategoriaForm
+                restId={rest?.id}
+                ordenSiguiente={categorias.length}
+                mutateCategoriasYPlatos={mutateCategoriasYPlatos}
+                onClose={cerrarFormCategoria}
+              />
+            )}
 
             {/* Sin resultados */}
             {busqueda.trim() && totalResultados === 0 && (
