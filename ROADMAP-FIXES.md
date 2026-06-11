@@ -267,7 +267,11 @@ completa-perfil, and plato del día config. Full keyboard + ARIA support.
   - ⏳ H.1.c.2: /menu + /config migration + parametrize public hooks (in progress)
     - ✅ H.1.c.2.a: parametrize 4 hooks (usePromos, usePlatoDelDia, usePlatoGanador, useCombos) + migrate /menu + BL.9 reorder fix (closed 2026-05-13)
     - ✅ H.1.c.2.b: migrate /config to SWR (closed 2026-05-17)
-  - ⏳ H.1.c.3 / H.1.c.2.c: /dashboard, /referidos, /qr, /suscripcion mutate() (pending)
+  - ⏳ H.1.c.3 / H.1.c.2.c: dashboard + páginas chicas
+    - ✅ /referidos: hook useReferidos + codegen con mutateRestaurante (closed 2026-06-10, REFACTOR-F1)
+    - ✅ /qr: sin reads que migrar (eran writes de onboarding) → mutateRestaurante tras cada write (closed 2026-06-10, REFACTOR-F1)
+    - ✅ /suscripcion: await mutateRestaurante tras cambio de plan (closed 2026-06-10, REFACTOR-F1)
+    - ⏳ /dashboard: único pendiente — diferido a Refactor Fase 4
 
 - **Why**: Currently every page does its own `supabase.from(...).select()` in `useEffect`. No caching, no deduplication, no automatic revalidation. Navigating between dashboard tabs re-fetches everything.
 - **Recommendation**: **SWR** (lighter, simpler, by Vercel — pairs naturally with Next.js).
@@ -489,6 +493,16 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
 ```
 
 ## Items
+
+### REFACTOR-F1 ✅ Refactor Fase 1: fundaciones (libs compartidas + migraciones SWR chicas) — CLOSED
+- **Closed**: 2026-06-10. Primera fase del plan de refactor de 5 fases derivado del censo del codebase (62% del código en 4 archivos; plan: 1 fundaciones → 2 [slug] → 3 /menu → UI pass → 4 dashboard → 5 sweeps semánticos).
+- **Commits**: 8608302 (lib/fechas), 7299adb (lib/precio + lib/dias), 39905da (lib/urls + delete lib/whatsapp muerto), 861e52e (lib/analytics + CampoTexto a components/ui), b932e16 (SWR /qr /referidos /suscripcion).
+- **lib/fechas.ts**: patrón -5h centralizado desde 8 sitios en 3 archivos (fechaColombia, diaCodigoColombia). Behavior-preserving a propósito; el fix semántico con Intl/America-Bogota es Fase 5a y cambia SOLO este archivo. Heatmap helpers del dashboard intactos (mecánica distinta, BL.29).
+- **lib/precio.ts + lib/dias.ts**: formatoPrecio barrido en 49 sitios de precio ([slug] 19, menu 24, facturas 3, suscripcion 3; dashboard diferido a su fase); formatDiasShort/Full unificados en formatDias(dias, style).
+- **lib/urls.ts**: PUBLIC_BASE_URL única fuente del dominio externo (QR funcional + link de referido, output byte-idéntico); la migración a menuapp.co flipea una constante (Fase 5b). String cosmético menuapp.co del QR intacto (copy de marketing). lib/whatsapp.ts borrado (cero imports; la extracción real saldrá del inline de [slug] en Fase 2).
+- **lib/analytics.ts**: getSessionId + guard BL.34 (visitaYaLogueada/marcarVisitaLogueada, orden set-before-insert preservado). CampoTexto promovido a components/ui (flush registry queda en /menu; contrato type-level).
+- **SWR (cierra la parte S de H.1.c.2.c)**: /qr no tenía reads que migrar (eran 2 writes de flags de onboarding) → mutateRestaurante tras cada write (checklist refleja sin reload, guards ven flag fresco); /referidos → hook nuevo useReferidos + codegen imperativo con mutate (BONUS: arregla staleness real preexistente — el link se compartía con ?ref= vacío en la primera visita hasta un refocus); /suscripcion → await mutateRestaurante antes de navegar (el dashboard monta con el plan nuevo en cache). Queda SOLO /dashboard (Fase 4).
+- **Verificado**: smoke test en producción (fechas/precios/días idénticos, QR decodifica bien, link referido byte-idéntico, plan sin reload, tipeo fluido).
 
 ### BL.40 ✅ Admin: filas de variantes cortadas en móvil (~360px) — RESUELTO
 - **Found**: 2026-06-10 (testing en dispositivo real de Julian: en el editor de variantes de crear/editar plato, los botones ▲ ▼ ✕ quedaban cortados fuera del card; la fila de una sola línea [nombre flex | precio 90px | ▲ | ▼ | ✕] no entra en ~360px de ancho útil).
