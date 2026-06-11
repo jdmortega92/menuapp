@@ -10,7 +10,7 @@ import BottomNav from '@/components/BottomNav'
 
 export default function MiQRPage() {
   const router = useRouter()
-  const { usuario, restaurante: rest, cargando } = useAuth()
+  const { usuario, restaurante: rest, cargando, mutateRestaurante } = useAuth()
   const [copiado, setCopiado] = useState(false)
   const [tabFormato, setTabFormato] = useState<'mesa' | 'enlace'>('mesa')
   const [mesas, setMesas] = useState(8)
@@ -38,6 +38,9 @@ export default function MiQRPage() {
       .from('restaurantes')
       .update({ menu_compartido: true })
       .eq('id', rest.id)
+    // Refresca la fila cacheada para que el flag (y el checklist de onboarding)
+    // se actualice sin reload, y el guard idempotente no re-escriba.
+    mutateRestaurante()
   }
 
   useEffect(() => {
@@ -61,6 +64,8 @@ export default function MiQRPage() {
         .from('restaurantes')
         .update({ qr_generado: true })
         .eq('id', rest!.id)
+      // Igual que marcarMenuComoCompartido: reflejar el flag sin reload.
+      mutateRestaurante()
     }
 
     marcarQRGenerado()

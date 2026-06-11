@@ -8,7 +8,7 @@ import { formatoPrecio } from '@/lib/precio'
 
 export default function SuscripcionPage() {
   const router = useRouter()
-  const { usuario, restaurante: rest, cargando } = useAuth()
+  const { usuario, restaurante: rest, cargando, mutateRestaurante } = useAuth()
   const [periodo, setPeriodo] = useState<'mensual' | 'anual'>('mensual')
   const [cambiando, setCambiando] = useState(false)
   const planActual = (rest?.plan || 'gratis') as string
@@ -25,6 +25,9 @@ export default function SuscripcionPage() {
     setCambiando(true)
     const supabase = createClient()
     await supabase.from('restaurantes').update({ plan: nuevoPlan, periodo_plan: periodo }).eq('id', rest.id)
+    // Refresca la fila cacheada (useAuth/useRestauranteByUserId) para que el plan
+    // nuevo se refleje en todo el admin sin reload (patrón mutate de H.1.c.2.b).
+    await mutateRestaurante()
     setCambiando(false)
     router.push('/dashboard')
   }

@@ -5,51 +5,43 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks'
 import { createClient } from '@/lib/supabase-browser'
 import { urlRegistroRef } from '@/lib/urls'
+import { useReferidos } from '@/hooks/data/useReferidos'
 
 export default function ReferidosPage() {
   const router = useRouter()
-  const { usuario, restaurante: rest, cargando: cargandoAuth } = useAuth()
+  const { usuario, restaurante: rest, cargando: cargandoAuth, mutateRestaurante } = useAuth()
   const [copiado, setCopiado] = useState(false)
-  const [referidos, setReferidos] = useState<any[]>([])
-  const [cargando, setCargando] = useState(true)
+
+  // ── SWR data hook (H.1.c.2.c) ──
+  const { data: referidosData } = useReferidos(rest?.id)
+  const cargando = !rest?.id || referidosData === undefined
 
   useEffect(() => {
     if (!cargandoAuth && !usuario) router.push('/login')
   }, [cargandoAuth, usuario, router])
 
+  // Codegen imperativo: si el restaurante aún no tiene código de referido,
+  // generarlo una vez. mutateRestaurante refresca la fila cacheada para que el
+  // enlace muestre el código nuevo sin reload (patrón mutate de H.1.c.2.b).
   useEffect(() => {
-    if (!rest?.id) return
+    if (!rest?.id || rest.codigo_referido) return
 
-    async function cargar() {
+    async function generarCodigo() {
       const supabase = createClient()
-
-      // Si no tiene código, generar uno
-      if (!rest!.codigo_referido) {
-        const codigo = rest!.nombre.replace(/[^a-zA-Z]/g, '').slice(0, 4).toUpperCase() + Math.random().toString(36).slice(2, 5).toUpperCase()
-        await supabase.from('restaurantes').update({ codigo_referido: codigo }).eq('id', rest!.id)
-      }
-
-      // Cargar referidos
-      const { data: refs } = await supabase
-        .from('referidos')
-        .select('*, restaurantes!referidos_referido_id_fkey(nombre)')
-        .eq('referidor_id', rest!.id)
-        .order('created_at', { ascending: false })
-
-      if (refs) {
-        setReferidos(refs.map((r: any) => ({
-          id: r.id,
-          nombre: r.restaurantes?.nombre || 'Restaurante pendiente',
-          estado: r.estado,
-          beneficio: r.beneficio_aplicado,
-          fecha: new Date(r.created_at).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' }),
-        })))
-      }
-
-      setCargando(false)
+      const codigo = rest!.nombre.replace(/[^a-zA-Z]/g, '').slice(0, 4).toUpperCase() + Math.random().toString(36).slice(2, 5).toUpperCase()
+      await supabase.from('restaurantes').update({ codigo_referido: codigo }).eq('id', rest!.id)
+      mutateRestaurante()
     }
-    cargar()
-  }, [rest?.id])
+    generarCodigo()
+  }, [rest?.id, rest?.codigo_referido])
+
+  const referidos = (referidosData ?? []).map((r) => ({
+    id: r.id,
+    nombre: r.restaurantes?.nombre || 'Restaurante pendiente',
+    estado: r.estado,
+    beneficio: r.beneficio_aplicado,
+    fecha: new Date(r.created_at).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' }),
+  }))
 
   const codigo = rest?.codigo_referido || ''
   // URL completa (con https://) desde lib/urls — única fuente del dominio.
