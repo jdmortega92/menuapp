@@ -20,23 +20,7 @@ import { usePlatoGanador } from '@/hooks/data/usePlatoGanador'
 import { useConfigRestaurante } from '@/hooks/data/useConfigRestaurante'
 import { useHorarios } from '@/hooks/data/useHorarios'
 import { useTick } from '@/hooks/useTick'
-
-// Id de sesión por-visita (por pestaña): se crea una vez y se cachea en
-// sessionStorage; sobrevive re-renders y navegación dentro de la pestaña, y
-// muere al cerrarla → nueva visita/re-escaneo = nueva sesión. Lo comparten los
-// tres inserts de logging (visitas_menu, vistas_platos, pedidos_whatsapp) para
-// permitir un embudo real por sesión. Solo se llama en effects / callbacks
-// (cliente, post-hidratación), nunca en render.
-function getSessionId(): string {
-  if (typeof window === 'undefined') return '' // SSR guard — nunca tocar sessionStorage en el server
-  const KEY = 'menuapp_session_id'
-  let id = window.sessionStorage.getItem(KEY)
-  if (!id) {
-    id = crypto.randomUUID()
-    window.sessionStorage.setItem(KEY, id)
-  }
-  return id
-}
+import { getSessionId, visitaYaLogueada, marcarVisitaLogueada } from '@/lib/analytics'
 
 // F8.4 — Cart key helpers
 // Plain UUIDs for combos and platos without variantes; composite
@@ -171,12 +155,10 @@ export default function MenuPublicoPage() {
     if (!restaurante) return
     // Dedup por sesión y por restaurante (BL.34): StrictMode/remounts re-disparan
     // este effect y inflaban el conteo crudo 2-3x. El flag se setea ANTES del
-    // insert (los dos disparos de StrictMode son back-to-back; un flag post-insert
-    // no frena el segundo). Trade-off: si el insert falla no se reintenta en esta
-    // sesión — perder una visita es mejor que contarla 2-3 veces.
-    const guardKey = 'menuapp_visita_logged_' + restaurante.id
-    if (window.sessionStorage.getItem(guardKey)) return
-    window.sessionStorage.setItem(guardKey, '1')
+    // insert (ver invariante en lib/analytics). Trade-off: si el insert falla no
+    // se reintenta en esta sesión — perder una visita es mejor que contarla 2-3 veces.
+    if (visitaYaLogueada(restaurante.id)) return
+    marcarVisitaLogueada(restaurante.id)
     const supabase = createClient()
     supabase.from('visitas_menu').insert({
       restaurante_id: restaurante.id,
