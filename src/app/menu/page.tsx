@@ -17,6 +17,7 @@ import CampoTexto from '@/components/ui/CampoTexto'
 import BottomNav from '@/components/BottomNav'
 import VarianteEditor, { construirTextoVinculaciones } from '@/components/menu-admin/VarianteEditor'
 import CategoriaForm, { validarCategoria } from '@/components/menu-admin/CategoriaForm'
+import PlatoForm, { validarPlato, MAX_DESC, MAX_PRECIO } from '@/components/menu-admin/PlatoForm'
 import { invalidateAll } from '@/lib/swr'
 import TimeRangeHelper from '@/components/ui/TimeRangeHelper'
 import Select from '@/components/ui/Select'
@@ -73,24 +74,10 @@ export default function MiMenuPage() {
   // CategoriaForm (fresh-mount por apertura). onClose estable para React.memo.
   const [mostrarFormCategoria, setMostrarFormCategoria] = useState(false)
   const cerrarFormCategoria = useCallback(() => setMostrarFormCategoria(false), [])
+  // Puntero del form "Nuevo plato" (qué categoría lo tiene abierto) — el borrador,
+  // su cuarteto y su maquinaria de flush viven en PlatoForm (fresh-mount).
   const [mostrarFormPlato, setMostrarFormPlato] = useState<string | null>(null)
-  const [nuevoPlato, setNuevoPlato] = useState<{
-    nombre: string;
-    precio: string;
-    descripcion: string;
-    hasVariantes: boolean;
-    variantes: { nombre: string; precio: string }[];
-  }>({
-    nombre: '',
-    precio: '',
-    descripcion: '',
-    hasVariantes: false,
-    variantes: [],
-  })
-  const [intentoPlato, setIntentoPlato] = useState(false)
-  const [touchedPlato, setTouchedPlato] = useState<Record<string, boolean>>({})
-  const [guardandoPlato, setGuardandoPlato] = useState(false)
-  const [guardadoPlato, setGuardadoPlato] = useState(false)
+  const cerrarFormPlato = useCallback(() => setMostrarFormPlato(null), [])
   const [menuCategoria, setMenuCategoria] = useState<string | null>(null)
   const [editandoCategoria, setEditandoCategoria] = useState<string | null>(null)
   const [nombreEditCategoria, setNombreEditCategoria] = useState('')
@@ -124,25 +111,15 @@ export default function MiMenuPage() {
   // Registro de flush: cada CampoTexto montado registra una función que confirma su borrador
   // pendiente. Los handlers de guardado llaman flushCampos() antes de validar, para no perder
   // la última edición si el usuario teclea y da Guardar sin que dispare el blur.
+  // Desde la Fase 3 este registro cubre SOLO el panel de edición de plato; el form
+  // de crear (PlatoForm) lleva su propio registro/espejo/commits internos.
   const camposFlushRef = useRef<Set<() => void>>(new Set())
   function flushCampos() { camposFlushRef.current.forEach(f => f()) }
-  // Espejos en ref de los borradores de plato. Se sincronizan con el estado en cada render y
-  // se actualizan SINCRÓNICAMENTE al confirmar (commit), para que el guardado lea el valor
+  // Espejo en ref del borrador de edición. Se sincroniza con el estado en cada render y
+  // se actualiza SINCRÓNICAMENTE al confirmar (commit), para que el guardado lea el valor
   // recién tecleado aunque setState aún no se haya aplicado (setState es asíncrono).
-  const nuevoPlatoRef = useRef(nuevoPlato)
-  nuevoPlatoRef.current = nuevoPlato
   const editPlatoRef = useRef(editPlato)
   editPlatoRef.current = editPlato
-  function commitNuevoPlato(patch: Partial<typeof nuevoPlato>) {
-    const next = { ...nuevoPlatoRef.current, ...patch }
-    nuevoPlatoRef.current = next
-    setNuevoPlato(next)
-  }
-  function commitNuevoVariante(i: number, patch: Partial<{ nombre: string; precio: string }>) {
-    const variantes = [...nuevoPlatoRef.current.variantes]
-    variantes[i] = { ...variantes[i], ...patch }
-    commitNuevoPlato({ variantes })
-  }
   function commitEditPlato(patch: Partial<typeof editPlato>) {
     const next = { ...editPlatoRef.current, ...patch }
     editPlatoRef.current = next
@@ -728,8 +705,7 @@ export default function MiMenuPage() {
     mostrarAviso(`${cuerpo.charAt(0).toUpperCase()}${cuerpo.slice(1)}, así que ${verbo}.`)
   }
 
-  const MAX_DESC = 150
-  const MAX_PRECIO = 10_000_000
+  // MAX_DESC / MAX_PRECIO se importan de components/menu-admin/PlatoForm (Fase 3).
   function recortarImagen(imageSrc: string, pixelCrop: any): Promise<Blob> {
     return new Promise((resolve) => {
       const img = new Image()
@@ -1242,135 +1218,8 @@ export default function MiMenuPage() {
   }
 
   // ── Platos ──
-  function validarPlato(state: {
-    nombre: string;
-    precio: string;
-    hasVariantes?: boolean;
-    variantes?: { nombre: string; precio: string; _pendingDelete?: boolean }[];
-  }): Record<string, string> {
-    const e: Record<string, string> = {}
-    if (!state.nombre.trim()) e.nombre = 'El nombre es obligatorio'
-
-    if (state.hasVariantes) {
-      const variantes = state.variantes || []
-      // Solo cuentan/validan las variantes que SOBREVIVEN (las marcadas para quitar
-      // no bloquean el guardado por sus campos, y no cuentan para el mínimo de 2).
-      const sobreviven = variantes.filter(v => !v._pendingDelete)
-      if (sobreviven.length < 2) {
-        e.variantes = 'Necesitas al menos 2 variantes'
-      } else {
-        // Validar por índice ORIGINAL (las filas marcadas siguen en el array, los
-        // estilos de error están keyed por índice de render).
-        variantes.forEach((v, i) => {
-          if (v._pendingDelete) return
-          if (!v.nombre.trim()) {
-            e[`variante_${i}_nombre`] = 'Nombre obligatorio'
-          }
-          const p = parseInt(v.precio)
-          if (!v.precio || isNaN(p) || p <= 0) {
-            e[`variante_${i}_precio`] = 'Precio inválido'
-          } else if (p > MAX_PRECIO) {
-            e[`variante_${i}_precio`] = 'Precio máximo $10.000.000'
-          }
-        })
-      }
-    } else {
-      const precioNum = parseInt(state.precio)
-      if (!state.precio || isNaN(precioNum) || precioNum <= 0) {
-        e.precio = 'El precio debe ser mayor a 0'
-      } else if (precioNum > MAX_PRECIO) {
-        e.precio = 'El precio no puede superar $10.000.000'
-      }
-    }
-
-    return e
-  }
-  async function agregarPlato(categoriaId: string) {
-    // Confirmar borradores pendientes (tecleo sin blur) y leer el snapshot sincrónico.
-    flushCampos()
-    const nuevoPlato = nuevoPlatoRef.current
-    setIntentoPlato(true)
-    setTouchedPlato({ nombre: true, precio: true })
-
-    const errores = validarPlato(nuevoPlato)
-    if (Object.keys(errores).length > 0 || !rest?.id) return
-
-    setGuardandoPlato(true)
-    const supabase = createClient()
-    const cat = categorias.find(c => c.id === categoriaId)
-
-    let precioParaInsert: number
-    if (nuevoPlato.hasVariantes) {
-      const precios = nuevoPlato.variantes.map(v => parseInt(v.precio))
-      precioParaInsert = Math.min(...precios)
-    } else {
-      precioParaInsert = parseInt(nuevoPlato.precio)
-    }
-
-    const { data: platoData, error: platoError } = await supabase
-      .from('platos')
-      .insert({
-        restaurante_id: rest.id,
-        categoria_id: categoriaId,
-        nombre: nuevoPlato.nombre.trim(),
-        precio: precioParaInsert,
-        descripcion: nuevoPlato.descripcion.trim() || null,
-        disponible: !nuevoPlato.hasVariantes,
-        orden: cat ? cat.platos.length : 0,
-      })
-      .select()
-      .single()
-
-    if (platoError || !platoData) {
-      setGuardandoPlato(false)
-      console.error('Error al crear plato:', platoError)
-      return
-    }
-
-    if (nuevoPlato.hasVariantes && nuevoPlato.variantes.length > 0) {
-      const variantesParaInsert = nuevoPlato.variantes.map((v, i) => ({
-        plato_id: platoData.id,
-        nombre: v.nombre.trim(),
-        precio: parseInt(v.precio),
-        orden: i,
-      }))
-
-      const { error: variantesError } = await supabase
-        .from('plato_variantes')
-        .insert(variantesParaInsert)
-
-      if (variantesError) {
-        console.error('Error al insertar variantes, rollback plato:', variantesError)
-        await supabase.from('platos').delete().eq('id', platoData.id)
-        setGuardandoPlato(false)
-        return
-      }
-
-      const { error: activateError } = await supabase
-        .from('platos')
-        .update({ disponible: true })
-        .eq('id', platoData.id)
-
-      if (activateError) {
-        console.error('Error al activar plato:', activateError)
-      }
-    }
-
-    await mutateCategoriasYPlatos()
-
-    setGuardadoPlato(true)
-    setGuardandoPlato(false)
-    setTimeout(() => {
-      setNuevoPlato({
-        nombre: '', precio: '', descripcion: '',
-        hasVariantes: false, variantes: [],
-      })
-      setIntentoPlato(false)
-      setTouchedPlato({})
-      setGuardadoPlato(false)
-      setMostrarFormPlato(null)
-    }, 1200)
-  }
+  // validarPlato y el form de crear viven en components/menu-admin/PlatoForm
+  // (el validador se importa de allí para el panel de edición).
   async function toggleDisponible(categoriaId: string, platoId: string) {
     const cat = categorias.find(c => c.id === categoriaId)
     const plato = cat?.platos.find(p => p.id === platoId)
@@ -1810,15 +1659,7 @@ export default function MiMenuPage() {
                       )}
                     </div>
                     <div style={{ display: 'flex', gap: '12px' }}>
-                      <span onClick={() => {
-                        const opening = mostrarFormPlato !== cat.id
-                        setMostrarFormPlato(opening ? cat.id : null)
-                        if (opening) {
-                          setIntentoPlato(false)
-                          setTouchedPlato({})
-                          setNuevoPlato({ nombre: '', precio: '', descripcion: '', hasVariantes: false, variantes: [] })
-                        }
-                      }}
+                      <span onClick={() => setMostrarFormPlato(mostrarFormPlato === cat.id ? null : cat.id)}
                         style={{ fontSize: '12px', color: 'var(--color-info)', cursor: 'pointer' }}>+ Plato</span>
                       <span onClick={() => setMenuCategoria(menuCategoria === cat.id ? null : cat.id)}
                         style={{ fontSize: '12px', color: 'var(--text-tertiary)', cursor: 'pointer' }}>⋯</span>
@@ -1867,101 +1708,16 @@ export default function MiMenuPage() {
                 )}
 
                 {/* Form nuevo plato */}
-                {mostrarFormPlato === cat.id && (() => {
-                  const errores = validarPlato(nuevoPlato)
-                  const valido = Object.keys(errores).length === 0
-                  return (
-                  <div className="card" style={{ padding: '14px', marginBottom: '8px' }}>
-                    <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '10px' }}>Nuevo plato en {cat.nombre}</div>
-                    <CampoTexto className="input" placeholder="Nombre del plato" autoFocus
-                      value={nuevoPlato.nombre}
-                      onCommit={(val) => commitNuevoPlato({ nombre: val })}
-                      flushRegistry={camposFlushRef}
-                      maxLength={60}
-                      onBlur={() => setTouchedPlato(prev => ({ ...prev, nombre: true }))}
-                      style={{
-                        marginBottom: intentoPlato && touchedPlato.nombre && errores.nombre ? '4px' : '8px',
-                        borderColor: intentoPlato && touchedPlato.nombre && errores.nombre ? 'var(--color-danger)' : undefined,
-                      }} />
-                    {intentoPlato && touchedPlato.nombre && errores.nombre && (
-                      <div style={{ fontSize: '11px', color: 'var(--color-danger)', marginBottom: '8px' }}>
-                        {errores.nombre}
-                      </div>
-                    )}
-                    {!nuevoPlato.hasVariantes && (
-                      <>
-                        <CampoTexto className="input" type="number" inputMode="numeric" placeholder="Precio (ej: 18000)"
-                          value={nuevoPlato.precio}
-                          onCommit={(val) => commitNuevoPlato({ precio: val })}
-                          flushRegistry={camposFlushRef}
-                          onBlur={() => setTouchedPlato(prev => ({ ...prev, precio: true }))}
-                          style={{
-                            marginBottom: intentoPlato && touchedPlato.precio && errores.precio ? '4px' : '8px',
-                            borderColor: intentoPlato && touchedPlato.precio && errores.precio ? 'var(--color-danger)' : undefined,
-                          }} />
-                        {intentoPlato && touchedPlato.precio && errores.precio && (
-                          <div style={{ fontSize: '11px', color: 'var(--color-danger)', marginBottom: '8px' }}>
-                            {errores.precio}
-                          </div>
-                        )}
-                      </>
-                    )}
-                    <div style={{ position: 'relative', marginBottom: '10px' }}>
-                      <CampoTexto className="input" placeholder="Descripción (opcional)"
-                        value={nuevoPlato.descripcion}
-                        onCommit={(val) => commitNuevoPlato({ descripcion: val })}
-                        flushRegistry={camposFlushRef}
-                        showCounter maxLength={MAX_DESC}
-                        style={{ paddingRight: '50px' }} />
-                    </div>
-
-                    {/* Toggle hasVariantes */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px', marginBottom: '8px' }}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
-                        <input
-                          type="checkbox"
-                          checked={nuevoPlato.hasVariantes}
-                          onChange={(e) => setNuevoPlato({ ...nuevoPlato, hasVariantes: e.target.checked })}
-                        />
-                        <span>Este plato tiene variantes (ej: tamaños, sabores)</span>
-                      </label>
-                    </div>
-
-                    {/* Variantes editor — visible only when hasVariantes */}
-                    {nuevoPlato.hasVariantes && (
-                      <VarianteEditor
-                        variantes={nuevoPlato.variantes}
-                        intento={intentoPlato}
-                        errores={errores}
-                        onFieldCommit={commitNuevoVariante}
-                        onRowsChange={(variantes) => setNuevoPlato({ ...nuevoPlato, variantes })}
-                        flushRegistry={camposFlushRef}
-                        allowPendingDelete={false}
-                      />
-                    )}
-
-                    <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginBottom: '8px' }}>
-                      📷 Podrás agregar foto después de crear el plato
-                    </div>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <button onClick={() => agregarPlato(cat.id)} disabled={guardandoPlato || guardadoPlato}
-                        className="btn-primary"
-                        style={{
-                          flex: 1, padding: '10px', fontSize: '13px',
-                          opacity: valido ? 1 : 0.5,
-                          cursor: valido ? 'pointer' : 'default',
-                          ...(valido ? {} : { transform: 'none', boxShadow: 'none' }),
-                        }}>{guardandoPlato ? 'Guardando...' : guardadoPlato ? '✓ Guardado' : 'Agregar'}</button>
-                      <button onClick={() => {
-                        setMostrarFormPlato(null)
-                        setIntentoPlato(false)
-                        setTouchedPlato({})
-                        setNuevoPlato({ nombre: '', precio: '', descripcion: '', hasVariantes: false, variantes: [] })
-                      }} className="btn-outline" style={{ flex: 1, padding: '10px', fontSize: '13px' }}>Cancelar</button>
-                    </div>
-                  </div>
-                  )
-                })()}
+                {mostrarFormPlato === cat.id && (
+                  <PlatoForm
+                    restId={rest?.id}
+                    categoriaId={cat.id}
+                    categoriaNombre={cat.nombre}
+                    ordenSiguiente={categorias.find(c => c.id === cat.id)?.platos.length ?? 0}
+                    mutateCategoriasYPlatos={mutateCategoriasYPlatos}
+                    onClose={cerrarFormPlato}
+                  />
+                )}
 
                 {/* Platos */}
                 {cat.platos.map((plato, pIdx) => (
