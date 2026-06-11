@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
+import type { MouseEvent } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import { mutate } from 'swr'
 import { createClient } from '@/lib/supabase-browser'
@@ -22,7 +23,8 @@ import { useConfigRestaurante } from '@/hooks/data/useConfigRestaurante'
 import { useHorarios } from '@/hooks/data/useHorarios'
 import { useTick } from '@/hooks/useTick'
 import { getSessionId, visitaYaLogueada, marcarVisitaLogueada } from '@/lib/analytics'
-import { makeCartKey, parseCartKey, precioEfectivo, enriquecerComboPlatos } from '@/lib/cart'
+import { makeCartKey, enriquecerComboPlatos } from '@/lib/cart'
+import { useCart } from '@/hooks/useCart'
 
 export default function MenuPublicoPage() {
   const params = useParams()
@@ -33,9 +35,6 @@ export default function MenuPublicoPage() {
 
   const [busqueda, setBusqueda] = useState('')
   const [categoriaAbierta, setCategoriaAbierta] = useState<string | null>(null)
-  const [pedido, setPedido] = useState<Record<string, number>>({})
-  const [preciosPromo, setPreciosPromo] = useState<Record<string, { precioUnitario: number; etiqueta: string }>>({})
-  const [nota, setNota] = useState('')
   const [mostrarPedido, setMostrarPedido] = useState(false)
   const [mostrarSorpresa, setMostrarSorpresa] = useState(false)
   const [mostrarMenu, setMostrarMenu] = useState(esQR)
@@ -237,112 +236,28 @@ export default function MenuPublicoPage() {
     promosActivo: config?.promos_activo,
   })
 
-  function agregarAlPedido(cartKey: string) {
-    // PIEZA 3c-ii: parsear ANTES del incremento para poder consultar el índice 2x1.
-    // En el PRIMER add de un 2x1 la entrada de preciosPromo aún no existe (se escribe
-    // más abajo en esta misma fn), así que el incremento debe derivarse del ÍNDICE
-    // (has2x1), no solo de la entrada → primer add ya suma de a 2 (qty par desde el inicio).
-    const parsed = parseCartKey(cartKey)
-    const es2x1 = preciosPromo[cartKey]?.etiqueta === '2x1' || has2x1(parsed.platoId, parsed.varianteId ?? null)
-    const incremento = es2x1 ? 2 : 1
-    setPedido({ ...pedido, [cartKey]: (pedido[cartKey] || 0) + incremento })
-    // F8.7: si la key es de plato del día, registrar el precio especial (idempotente).
-    // PIEZA 3b-ii-A: si no es plato del día pero el plato/variante tiene un descuento
-    // activo, registrar el precio con descuento. PIEZA 3c-ii: si no, y tiene 2x1, registrar
-    // precioUnitario = round(base/2) (lleva 2 paga 1). MUTUAMENTE EXCLUYENTE y ordenado:
-    // día → descuento → 2x1. Día gana siempre (los items de día llevan source==='dia' y
-    // nunca deben sobrescribirse); 3a garantiza que descuento y 2x1 no coexisten por variante.
-    if (parsed.source === 'dia' && platoDia && parsed.platoId === platoDia.id) {
-      setPreciosPromo({
-        ...preciosPromo,
-        [cartKey]: { precioUnitario: platoDia.precioEspecial, etiqueta: 'Plato del día' }
-      })
-    } else {
-      const plato = todosLosPlatos.find((p: any) => p.id === parsed.platoId)
-      const pct = effDiscount(parsed.platoId, parsed.varianteId ?? null)
-      if (pct > 0 && plato) {
-        const base = precioEfectivo(plato, parsed.varianteId)
-        const precioDesc = Math.round(base * (1 - pct / 100))
-        setPreciosPromo({
-          ...preciosPromo,
-          [cartKey]: { precioUnitario: precioDesc, etiqueta: `${pct}% OFF` }
-        })
-      } else if (has2x1(parsed.platoId, parsed.varianteId ?? null) && plato) {
-        const base = precioEfectivo(plato, parsed.varianteId)
-        setPreciosPromo({
-          ...preciosPromo,
-          [cartKey]: { precioUnitario: Math.round(base / 2), etiqueta: '2x1' }
-        })
-      }
-    }
-  }
-
-  function quitarDelPedido(cartKey: string) {
-    // Si el plato tiene promo 2x1, restar de 2 en 2 para mantener múltiplos
-    const esPromo2x1 = preciosPromo[cartKey]?.etiqueta === '2x1'
-    const decremento = esPromo2x1 ? 2 : 1
-    const c = (pedido[cartKey] || 0) - decremento
-
-    if (c <= 0) {
-      const n = { ...pedido }
-      delete n[cartKey]
-      // Si se elimina totalmente, limpiar también el precio promo asociado
-      const p = { ...preciosPromo }
-      delete p[cartKey]
-      setPedido(n)
-      setPreciosPromo(p)
-    } else {
-      setPedido({ ...pedido, [cartKey]: c })
-    }
-  }
-
-  const itemsPedido = Object.entries(pedido).map(([cartKey, cantidad]) => {
-    const { platoId, varianteId, source } = parseCartKey(cartKey)
-    const plato = todosLosPlatos.find((p: any) => p.id === platoId)
-    if (!plato) return null
-    const variante = varianteId
-      ? (plato as any).variantes?.find((v: any) => v.id === varianteId)
-      : undefined
-    // Defensive: si la cartKey referencia una variante que ya no existe, descartar el item
-    if (varianteId && !variante) return null
-    // Promo cart-sync: día/ganador son specials congelados (precio capturado al
-    // agregar; NUNCA recalcular, ver comentario de día en agregarAlPedido). Para
-    // líneas normales, RE-DERIVAR descuento/2x1 contra los índices vivos
-    // (effDiscount/has2x1) en vez de leer preciosPromo congelado, para que editar o
-    // eliminar una promo en el admin se refleje en el carrito (precio, total,
-    // WhatsApp, productos). Mismo orden y cómputo que agregarAlPedido: descuento → 2x1.
-    // Si ninguna promo aplica ahora (eliminada, fuera de día/hora, promos off) →
-    // promo undefined → la línea cae al precio normal del plato/variante. La cantidad
-    // NO se toca: una promo revertida queda como N unidades a precio normal.
-    let promo: { precioUnitario: number; etiqueta: string } | undefined
-    if (source === 'dia' || source === 'ganador') {
-      promo = preciosPromo[cartKey]
-    } else {
-      const base = precioEfectivo(plato, varianteId)
-      const pct = effDiscount(platoId, varianteId ?? null)
-      if (pct > 0) {
-        promo = { precioUnitario: Math.round(base * (1 - pct / 100)), etiqueta: `${pct}% OFF` }
-      } else if (has2x1(platoId, varianteId ?? null)) {
-        promo = { precioUnitario: Math.round(base / 2), etiqueta: '2x1' }
-      } else {
-        promo = undefined
-      }
-    }
-    return { plato, variante, cantidad, promo, cartKey }
-  }).filter((i: any) => i !== null) as Array<{
-    plato: any
-    variante?: any
-    cantidad: number
-    promo?: { precioUnitario: number; etiqueta: string }
-    cartKey: string
-  }>
-  const totalPedido = itemsPedido.reduce((sum, i) => {
-    const unitPrice = i.promo
-      ? i.promo.precioUnitario
-      : (i.variante ? i.variante.precio : i.plato.precio)
-    return sum + unitPrice * i.cantidad
-  }, 0)
-  const totalProductos = itemsPedido.reduce((sum, i) => sum + i.cantidad, 0)
+  // Carrito extraído a useCart (Refactor Fase 2, con fix BL.28: stepping 2x1
+  // consulta el índice vivo). Única fuente de pedido/nota/totales/WhatsApp.
+  const {
+    pedido,
+    nota,
+    setNota,
+    agregarAlPedido,
+    quitarDelPedido,
+    itemsPedido,
+    totalPedido,
+    totalProductos,
+    pedirPorWhatsApp,
+    limpiarNoDisponibles,
+  } = useCart({
+    todosLosPlatos,
+    platoDia,
+    effDiscount,
+    has2x1,
+    restaurante,
+    esQR,
+    qrMesa,
+  })
 
   const [sorpresaPlatos, setSorpresaPlatos] = useState<typeof todosLosPlatos>([])
   function sorprendeme() {
@@ -381,51 +296,34 @@ export default function MenuPublicoPage() {
     setMostrarSorpresa(true)
   }
 
-  function pedirPorWhatsApp() {
-    // Registrar pedido
-    const supabasePedido = createClient()
-    supabasePedido.from('pedidos_whatsapp').insert({
-      restaurante_id: restaurante.id,
-      origen: esQR ? 'qr' : 'enlace',
-      mesa: qrMesa || null,
-      fecha: fechaColombia(),
-      total: totalPedido,
-      nota: nota || null,
-      session_id: getSessionId(),
-      productos: itemsPedido.map(i => ({
-        nombre: i.variante ? `${i.plato.nombre} (${i.variante.nombre})` : i.plato.nombre,
-        cantidad: i.cantidad,
-        // Precio efectivamente cobrado (promo-aware): misma expresión que la línea del
-        // mensaje de WhatsApp, para que sum(precio*cantidad) coincida con total.
-        precio: i.promo ? i.promo.precioUnitario : (i.variante ? i.variante.precio : i.plato.precio),
-        etiqueta: i.promo ? i.promo.etiqueta : null,
-      })),
-    }).then(({ error }: any) => {
-
-    })
-    const lineas = itemsPedido.map(i => {
-      const nombre = i.variante ? `${i.plato.nombre} (${i.variante.nombre})` : i.plato.nombre
-      const precioUnit = i.promo ? i.promo.precioUnitario : (i.variante ? i.variante.precio : i.plato.precio)
-      const etiqueta = i.promo ? ` (${i.promo.etiqueta})` : ''
-      return `- ${i.cantidad} ${nombre}${etiqueta} $${formatoPrecio(precioUnit * i.cantidad)}`
-    })
-    let msg = `Hola! Vi tu menú en ${restaurante.nombre} y quiero pedir:\n${lineas.join('\n')}`
-    if (nota) msg += `\nNota: ${nota}`
-    msg += `\nTotal: $${formatoPrecio(totalPedido)}`
-    window.open(`https://wa.me/57${restaurante.whatsapp}?text=${encodeURIComponent(msg)}`, '_blank')
-  }
-
-  function Qty({ cartKey }: { cartKey: string }) {
-    const c = pedido[cartKey] || 0
-    return c > 0 ? (
+  // Control presentacional de cantidad (+/−). El stopPropagation vive en los
+  // call sites (qtyProps): las tarjetas que lo hospedan son clickeables.
+  function QtyControl({ count, onAdd, onRemove, color }: {
+    count: number
+    onAdd: (e: MouseEvent) => void
+    onRemove: (e: MouseEvent) => void
+    color: string
+  }) {
+    return count > 0 ? (
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <div onClick={(e) => { e.stopPropagation(); quitarDelPedido(cartKey) }} style={{ width: '26px', height: '26px', borderRadius: '50%', border: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', cursor: 'pointer', color: 'var(--text-secondary)' }}>-</div>
-        <span style={{ fontSize: '14px', fontWeight: 500, minWidth: '16px', textAlign: 'center' }}>{c}</span>
-        <div onClick={(e) => { e.stopPropagation(); agregarAlPedido(cartKey) }} style={{ width: '26px', height: '26px', borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '14px', cursor: 'pointer' }}>+</div>
+        <div onClick={onRemove} style={{ width: '26px', height: '26px', borderRadius: '50%', border: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', cursor: 'pointer', color: 'var(--text-secondary)' }}>-</div>
+        <span style={{ fontSize: '14px', fontWeight: 500, minWidth: '16px', textAlign: 'center' }}>{count}</span>
+        <div onClick={onAdd} style={{ width: '26px', height: '26px', borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '14px', cursor: 'pointer' }}>+</div>
       </div>
     ) : (
-      <div onClick={(e) => { e.stopPropagation(); agregarAlPedido(cartKey) }} style={{ width: '26px', height: '26px', borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '14px', cursor: 'pointer' }}>+</div>
+      <div onClick={onAdd} style={{ width: '26px', height: '26px', borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '14px', cursor: 'pointer' }}>+</div>
     )
+  }
+
+  // Props estándar de QtyControl para una cartKey: count del carrito + handlers
+  // con stopPropagation (un solo lugar, seis call sites).
+  function qtyProps(cartKey: string) {
+    return {
+      count: pedido[cartKey] || 0,
+      onAdd: (e: MouseEvent) => { e.stopPropagation(); agregarAlPedido(cartKey) },
+      onRemove: (e: MouseEvent) => { e.stopPropagation(); quitarDelPedido(cartKey) },
+      color,
+    }
   }
 
   const [resenasReales, setResenasReales] = useState<any[]>([])
@@ -1031,14 +929,14 @@ export default function MenuPublicoPage() {
                       return (
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
                           <span style={{ fontSize: '14px', fontWeight: 500, color: '#B8860B' }}>${formatoPrecio(varianteLocked.precio)}</span>
-                          <Qty cartKey={cartKeyGanador} />
+                          <QtyControl {...qtyProps(cartKeyGanador)} />
                         </div>
                       )
                     }
                     return (
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
                         <span style={{ fontSize: '14px', fontWeight: 500, color: '#B8860B' }}>{ganadorTieneVariantes ? 'desde ' : ''}${formatoPrecio(platoGanador.precio)}</span>
-                        {ganadorTieneVariantes ? null : <Qty cartKey={makeCartKey(platoGanador.id, undefined, 'ganador')} />}
+                        {ganadorTieneVariantes ? null : <QtyControl {...qtyProps(makeCartKey(platoGanador.id, undefined, 'ganador'))} />}
                       </div>
                     )
                   })()}
@@ -1126,7 +1024,7 @@ export default function MenuPublicoPage() {
                       )}
                     </div>
                     {(!varianteLocked && platoDiaTieneVariantes) ? null : (
-                      <Qty cartKey={cartKeyDia} />
+                      <QtyControl {...qtyProps(cartKeyDia)} />
                     )}
                   </div>
                 </div>
@@ -1253,7 +1151,7 @@ export default function MenuPublicoPage() {
                       )}
                       {plato.variantes && plato.variantes.length > 0
                         ? null // Card click abre el modal; sin Qty inline para platos con variantes
-                        : <Qty cartKey={esEstePlatoElDia ? makeCartKey(plato.id, undefined, 'dia') : plato.id} />}
+                        : <QtyControl {...qtyProps(esEstePlatoElDia ? makeCartKey(plato.id, undefined, 'dia') : plato.id)} />}
                     </div>
                   </div>
                 </div>
@@ -1329,7 +1227,7 @@ export default function MenuPublicoPage() {
                     <span style={{ fontSize: '11px', color: 'var(--color-green)', fontWeight: 500 }}>-${formatoPrecio(combo.precioIndividual - combo.precio)}</span>
                   </div>
                   <div onClick={(e) => e.stopPropagation()}>
-                    <Qty cartKey={combo.id} />
+                    <QtyControl {...qtyProps(combo.id)} />
                   </div>
                 </div>
                 <div style={{ fontSize: '11px', color: color, marginTop: '6px', fontWeight: 500 }}>Ver detalles →</div>
@@ -1734,7 +1632,7 @@ export default function MenuPublicoPage() {
                     {plato.disponible
                       ? (plato.variantes && plato.variantes.length > 0
                           ? null // Card click abre el modal; sin Qty inline para platos con variantes
-                          : <Qty cartKey={esEstePlatoElDia ? makeCartKey(plato.id, undefined, 'dia') : plato.id} />)
+                          : <QtyControl {...qtyProps(esEstePlatoElDia ? makeCartKey(plato.id, undefined, 'dia') : plato.id)} />)
                       : <span style={{ fontSize: '10px', color: 'var(--color-danger)', fontWeight: 500 }}>Agotado</span>}
                   </div>
                 </div>
@@ -1756,17 +1654,7 @@ export default function MenuPublicoPage() {
               <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--color-warning)', marginBottom: '4px' }}>Algunos platos ya no están disponibles</div>
               <div style={{ fontSize: '11px', color: 'var(--theme-text-muted)', marginBottom: '8px' }}>Estos platos pertenecen a categorías fuera de horario y se eliminarán del pedido.</div>
               <div onClick={() => {
-                const nuevoPedido = { ...pedido }
-                const nuevosPrecios = { ...preciosPromo }
-                Object.keys(nuevoPedido).forEach(cartKey => {
-                  const { platoId } = parseCartKey(cartKey)
-                  if (!platosVisiblesIds.has(platoId) && !combosVisibles.some((c: any) => c.id === platoId)) {
-                    delete nuevoPedido[cartKey]
-                    delete nuevosPrecios[cartKey]
-                  }
-                })
-                setPedido(nuevoPedido)
-                setPreciosPromo(nuevosPrecios)
+                limpiarNoDisponibles((id) => platosVisiblesIds.has(id) || combosVisibles.some((c: any) => c.id === id))
               }} style={{ fontSize: '12px', color: 'var(--color-warning)', fontWeight: 500, cursor: 'pointer' }}>
                 Limpiar platos no disponibles →
               </div>
