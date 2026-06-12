@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks'
 import { useCategoriasYPlatos } from '@/hooks/data/useCategoriasYPlatos'
@@ -10,20 +10,18 @@ import { usePromos } from '@/hooks/data/usePromos'
 import { useConfigRestaurante } from '@/hooks/data/useConfigRestaurante'
 import { usePlatoGanador } from '@/hooks/data/usePlatoGanador'
 import { createClient } from '@/lib/supabase-browser'
-import TimePicker from '@/components/ui/TimePicker'
 import CropModal from '@/components/ui/CropModal'
 import Modal from '@/components/ui/Modal'
 import BottomNav from '@/components/BottomNav'
-import VarianteEditor, { construirTextoVinculaciones } from '@/components/menu-admin/VarianteEditor'
-import CategoriaForm, { validarCategoria } from '@/components/menu-admin/CategoriaForm'
-import PlatoForm, { MAX_DESC, MAX_PRECIO } from '@/components/menu-admin/PlatoForm'
-import PlatoEditPanel from '@/components/menu-admin/PlatoEditPanel'
+import { construirTextoVinculaciones } from '@/components/menu-admin/VarianteEditor'
+import CategoriaForm from '@/components/menu-admin/CategoriaForm'
+import CategoriaSection from '@/components/menu-admin/CategoriaSection'
+import HorarioCategoriaModal from '@/components/menu-admin/HorarioCategoriaModal'
 import PlatoDelDiaForm from '@/components/menu-admin/PlatoDelDiaForm'
 import PlatoGanadorForm from '@/components/menu-admin/PlatoGanadorForm'
 import ComboForm from '@/components/menu-admin/ComboForm'
 import PromoForm from '@/components/menu-admin/PromoForm'
 import { invalidateAll } from '@/lib/swr'
-import TimeRangeHelper from '@/components/ui/TimeRangeHelper'
 import { formato12h } from '@/lib/time'
 import { formatoPrecio } from '@/lib/precio'
 import { formatDias } from '@/lib/dias'
@@ -71,12 +69,9 @@ export default function MiMenuPage() {
   const [mostrarFormPlato, setMostrarFormPlato] = useState<string | null>(null)
   const cerrarFormPlato = useCallback(() => setMostrarFormPlato(null), [])
   const [menuCategoria, setMenuCategoria] = useState<string | null>(null)
+  // Puntero del rename inline de categoría — nombre + cuarteto viven en el
+  // CategoriaRenameForm privado de CategoriaSection (fresh-mount por apertura).
   const [editandoCategoria, setEditandoCategoria] = useState<string | null>(null)
-  const [nombreEditCategoria, setNombreEditCategoria] = useState('')
-  const [intentoRename, setIntentoRename] = useState(false)
-  const [touchedRename, setTouchedRename] = useState<Record<string, boolean>>({})
-  const [guardandoRename, setGuardandoRename] = useState(false)
-  const [guardadoRename, setGuardadoRename] = useState(false)
   // Puntero del panel de edición de plato — el borrador, originalVariantes, el
   // cuarteto, TODA la maquinaria de flush (registro/espejo/commits) y el modal
   // cascadeWarning viven en PlatoEditPanel (fresh-mount, siembra desde la prop).
@@ -142,11 +137,43 @@ export default function MiMenuPage() {
   // otro form ya no cuenta como "activo".
   const platoDiaActivo = !!platoDiaSwr?.activo
   const platoGanadorActivo = !!platoGanadorSwr?.activo
+  // Puntero del modal de horario de categoría — inicio/fin + guardando/guardado
+  // viven en HorarioCategoriaModal (fresh-mount, siembra desde la categoría).
   const [horarioCategoria, setHorarioCategoria] = useState<string | null>(null)
-  const [guardandoHorarioCat, setGuardandoHorarioCat] = useState(false)
-  const [guardadoHorarioCat, setGuardadoHorarioCat] = useState(false)
-  const [horarioCatInicio, setHorarioCatInicio] = useState('')
-  const [horarioCatFin, setHorarioCatFin] = useState('')
+  const cerrarHorarioCategoria = useCallback(() => setHorarioCategoria(null), [])
+
+  // ── Callbacks estables para las filas/secciones memoizadas (BL.13) ──
+  // Los handlers que leen datos vivos (categorias/combos/promos/SWR) se delegan
+  // vía ref a la versión del ÚLTIMO render: identidad constante para React.memo
+  // sin closures viejos (el wrapper lee liveHandlers.current al momento del
+  // click, nunca al momento de crearse). Los que solo tocan setters usan
+  // updates funcionales y son estables por sí mismos.
+  const liveHandlers = useRef({} as {
+    moverCategoria: (id: string, direccion: 'arriba' | 'abajo') => void
+    moverPlato: (categoriaId: string, platoId: string, direccion: 'arriba' | 'abajo') => void
+    toggleDisponible: (categoriaId: string, platoId: string) => void
+    requestDeletePlato: (categoriaId: string, platoId: string) => void
+    requestDeleteCategoria: (catId: string) => void
+  })
+  liveHandlers.current = {
+    moverCategoria,
+    moverPlato,
+    toggleDisponible,
+    requestDeletePlato,
+    requestDeleteCategoria,
+  }
+  const onMoverCategoria = useCallback((id: string, d: 'arriba' | 'abajo') => liveHandlers.current.moverCategoria(id, d), [])
+  const onMoverPlato = useCallback((c: string, p: string, d: 'arriba' | 'abajo') => liveHandlers.current.moverPlato(c, p, d), [])
+  const onToggleDisponible = useCallback((c: string, p: string) => liveHandlers.current.toggleDisponible(c, p), [])
+  const onRequestDeletePlato = useCallback((c: string, p: string) => liveHandlers.current.requestDeletePlato(c, p), [])
+  const onRequestDeleteCategoria = useCallback((c: string) => liveHandlers.current.requestDeleteCategoria(c), [])
+  const onToggleExpand = useCallback((platoId: string) => setPlatoExpandido(prev => prev === platoId ? null : platoId), [])
+  const onToggleFormPlato = useCallback((catId: string) => setMostrarFormPlato(prev => prev === catId ? null : catId), [])
+  const onToggleMenuCategoria = useCallback((catId: string) => setMenuCategoria(prev => prev === catId ? null : catId), [])
+  const onCerrarMenuCategoria = useCallback(() => setMenuCategoria(null), [])
+  const onAbrirRename = useCallback((catId: string) => { setEditandoCategoria(catId); setMenuCategoria(null) }, [])
+  const onCerrarRename = useCallback(() => setEditandoCategoria(null), [])
+  const onAbrirHorario = useCallback((catId: string) => { setHorarioCategoria(catId); setMenuCategoria(null) }, [])
 
   // getHorarioPlato + horariosPorPlato + todosPlatos viven más abajo,
   // tras la declaración de `categorias` (useMemo) — ver BL.12.
@@ -186,24 +213,9 @@ export default function MiMenuPage() {
     return afectados
   }
 
-  async function guardarHorarioCategoria() {
-    if (!horarioCategoria || !rest?.id) return
+  // El guardado del horario de categoría vive en HorarioCategoriaModal.
 
-    setGuardandoHorarioCat(true)
-    const supabase = createClient()
-    await supabase.from('categorias').update({
-      hora_inicio: horarioCatInicio || null,
-      hora_fin: horarioCatFin || null,
-    }).eq('id', horarioCategoria)
-    await mutateCategoriasYPlatos()
-    setGuardandoHorarioCat(false)
-    setGuardadoHorarioCat(true)
-    setTimeout(() => {
-      setGuardadoHorarioCat(false)
-      setHorarioCategoria(null)
-    }, 1200)
-  }
-  
+
   async function actualizarSorprendemeCats(nuevas: string[]) {
     setSorprendemeCatsMenu(nuevas)
     if (!rest?.id) return
@@ -567,24 +579,27 @@ export default function MiMenuPage() {
     await limpiarVinculosVacios()
     setMenuCategoria(null)
   }
-  async function renombrarCategoria(id: string) {
-    setIntentoRename(true)
-    setTouchedRename({ nombre: true })
-    const errores = validarCategoria(nombreEditCategoria)
-    if (Object.keys(errores).length > 0) return
-    setGuardandoRename(true)
-    const supabase = createClient()
-    await supabase.from('categorias').update({ nombre: nombreEditCategoria }).eq('id', id)
-    await mutateCategoriasYPlatos()
-    setGuardandoRename(false)
-    setGuardadoRename(true)
-    setTimeout(() => {
-      setGuardadoRename(false)
-      setEditandoCategoria(null)
-      setNombreEditCategoria('')
-      setIntentoRename(false)
-      setTouchedRename({})
-    }, 1200)
+  // renombrarCategoria vive en el CategoriaRenameForm de CategoriaSection.
+  // Apertura del modal de confirmación de borrado de categoría: los conteos se
+  // computan acá (sobre `categorias` SIN filtrar — el borrado afecta todos los
+  // platos, no solo los visibles bajo una búsqueda activa) y el modal queda en
+  // la página; CategoriaSection solo dispara onRequestDeleteCategoria(catId).
+  function requestDeleteCategoria(catId: string) {
+    const cat = categorias.find(c => c.id === catId)
+    if (!cat) return
+    const categoryPlatoIds = cat.platos.map(p => p.id)
+    const combosCount = combos.filter(c => c.platosIds.some((id: string) => categoryPlatoIds.includes(id))).length
+    const promosCount = promos.filter(p => p.activo && p.platosIds.some((id: string) => categoryPlatoIds.includes(id))).length
+    const esDiaActual = platoDiaActivo && categoryPlatoIds.includes(platoDiaSwr?.plato_id)
+    const esGanadorActual = platoGanadorActivo && categoryPlatoIds.includes(platoGanadorSwr?.plato_id)
+    setMenuCategoria(null)
+    setCategoriaDeleteWarning({
+      categoriaId: catId,
+      nombre: cat.nombre,
+      platosCount: cat.platos.length,
+      combosCount, promosCount, esDiaActual, esGanadorActual,
+      onConfirm: () => eliminarCategoria(catId),
+    })
   }
   async function moverCategoria(id: string, direccion: 'arriba' | 'abajo') {
     const idx = categorias.findIndex(c => c.id === id)
@@ -683,6 +698,28 @@ export default function MiMenuPage() {
     if (platoExpandido === platoId) {
       setPlatoExpandido(null)
     }
+  }
+  // Apertura del modal de confirmación de borrado de PLATO: conteos EN MEMORIA
+  // (sin queries) — combos/promos por platosIds, día/ganador por el registro
+  // SWR guardado; promos: solo ACTIVAS. PlatoCard solo dispara
+  // onRequestDeletePlato(categoriaId, platoId).
+  function requestDeletePlato(categoriaId: string, platoId: string) {
+    const plato = categorias.find(c => c.id === categoriaId)?.platos.find(p => p.id === platoId)
+    if (!plato) return
+    const combosCount = combos.filter(c => c.platosIds.includes(platoId)).length
+    const promosCount = promos.filter(p => p.activo && p.platosIds.includes(platoId)).length
+    const esDiaActual = platoDiaActivo && platoDiaSwr?.plato_id === platoId
+    const esGanadorActual = platoGanadorActivo && platoGanadorSwr?.plato_id === platoId
+    setPlatoDeleteWarning({
+      categoriaId,
+      platoId,
+      nombre: plato.nombre,
+      combosCount,
+      promosCount,
+      esDiaActual,
+      esGanadorActual,
+      onConfirm: () => eliminarPlato(categoriaId, platoId),
+    })
   }
   // El guardado de edición (diff de variantes, cascadeWarning, doSave) vive en
   // components/menu-admin/PlatoEditPanel. La limpieza post-cascada sigue siendo
@@ -832,207 +869,44 @@ export default function MiMenuPage() {
               </div>
             )}
 
-            {/* Categorías */}
+            {/* Categorías — secciones memoizadas (BL.13): un render de página
+                salta secciones y filas intactas; ver contrato en CategoriaSection. */}
             {categoriasFiltradas.map((cat, catIdx) => (
-              <div key={cat.id} style={{ padding: '0 20px', marginBottom: '14px', position: 'relative' }}>
-
-                {/* Header categoría */}
-                {editandoCategoria === cat.id ? (() => {
-                  const errores = validarCategoria(nombreEditCategoria)
-                  const valido = Object.keys(errores).length === 0
-                  return (
-                  <div style={{ marginBottom: '10px' }}>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <input className="input" value={nombreEditCategoria} maxLength={40} onChange={(e) => setNombreEditCategoria(e.target.value)}
-                        autoFocus
-                        onBlur={() => setTouchedRename(prev => ({ ...prev, nombre: true }))}
-                        onKeyDown={(e) => e.key === 'Enter' && renombrarCategoria(cat.id)}
-                        style={{
-                          flex: 1,
-                          borderColor: intentoRename && touchedRename.nombre && errores.nombre ? 'var(--color-danger)' : undefined,
-                        }} />
-                      <button onClick={() => renombrarCategoria(cat.id)} disabled={guardandoRename || guardadoRename} className="btn-primary"
-                        style={{
-                          padding: '8px 14px', fontSize: '12px',
-                          opacity: valido ? 1 : 0.5,
-                          cursor: valido ? 'pointer' : 'default',
-                          ...(valido ? {} : { transform: 'none', boxShadow: 'none' }),
-                        }}>{guardandoRename ? 'Guardando...' : guardadoRename ? '✓ Guardado' : 'OK'}</button>
-                      <button onClick={() => { setEditandoCategoria(null); setIntentoRename(false); setTouchedRename({}); setNombreEditCategoria('') }} className="btn-outline" style={{ padding: '8px 14px', fontSize: '12px' }}>✕</button>
-                    </div>
-                    {intentoRename && touchedRename.nombre && errores.nombre && (
-                      <div style={{ fontSize: '11px', color: 'var(--color-danger)', marginTop: '4px' }}>
-                        {errores.nombre}
-                      </div>
-                    )}
-                  </div>
-                  )
-                })() : (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      {/* Flechas mover categoría */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
-                        <span onClick={() => moverCategoria(cat.id, 'arriba')}
-                          style={{ fontSize: '10px', cursor: catIdx > 0 ? 'pointer' : 'default', color: catIdx > 0 ? 'var(--text-secondary)' : 'var(--border-light)', lineHeight: 1 }}>▲</span>
-                        <span onClick={() => moverCategoria(cat.id, 'abajo')}
-                          style={{ fontSize: '10px', cursor: catIdx < categorias.length - 1 ? 'pointer' : 'default', color: catIdx < categorias.length - 1 ? 'var(--text-secondary)' : 'var(--border-light)', lineHeight: 1 }}>▼</span>
-                      </div>
-                      <span style={{ fontSize: '14px', fontWeight: 500 }}>{cat.nombre}</span>
-                      <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', background: 'var(--bg-tertiary)', padding: '2px 6px', borderRadius: '4px' }}>{cat.platos.length}</span>
-                      {cat.hora_inicio && cat.hora_fin && (
-                        <span style={{ fontSize: '10px', color: 'var(--color-info)', background: 'var(--color-info-light)', padding: '2px 6px', borderRadius: '4px' }}>
-                          {formato12h(cat.hora_inicio)}–{formato12h(cat.hora_fin)}
-                        </span>
-                      )}
-                    </div>
-                    <div style={{ display: 'flex', gap: '12px' }}>
-                      <span onClick={() => setMostrarFormPlato(mostrarFormPlato === cat.id ? null : cat.id)}
-                        style={{ fontSize: '12px', color: 'var(--color-info)', cursor: 'pointer' }}>+ Plato</span>
-                      <span onClick={() => setMenuCategoria(menuCategoria === cat.id ? null : cat.id)}
-                        style={{ fontSize: '12px', color: 'var(--text-tertiary)', cursor: 'pointer' }}>⋯</span>
-                    </div>
-                  </div>
-                )}
-
-                {/* Menú ⋯ categoría */}
-                {menuCategoria === cat.id && (
-                  <>
-                    <div onClick={() => setMenuCategoria(null)} style={{ position: 'fixed', inset: 0, zIndex: 60 }} />
-                    <div style={{
-                      position: 'absolute', right: '20px', top: '30px', zIndex: 70,
-                      background: 'var(--bg-secondary)', border: '1px solid var(--border-light)',
-                      borderRadius: 'var(--radius-sm)', overflow: 'hidden', width: '180px',
-                      boxShadow: 'var(--shadow-lg)', animation: 'scaleIn 0.15s ease',
-                    }}>
-                      <div onClick={() => { setNombreEditCategoria(cat.nombre); setEditandoCategoria(cat.id); setMenuCategoria(null); setIntentoRename(false); setTouchedRename({}) }}
-                        style={{ padding: '10px 14px', fontSize: '13px', cursor: 'pointer', borderBottom: '1px solid var(--border-light)' }}>Renombrar</div>
-                      <div onClick={() => {
-                        const c = categorias.find(x => x.id === cat.id) as any
-                        setHorarioCatInicio(c?.hora_inicio || '')
-                        setHorarioCatFin(c?.hora_fin || '')
-                        setHorarioCategoria(cat.id)
-                        setMenuCategoria(null)
-                      }}
-                        style={{ padding: '10px 14px', fontSize: '13px', cursor: 'pointer', borderBottom: '1px solid var(--border-light)' }}>Horario de visibilidad</div>
-                      <div onClick={() => {
-                        const categoryPlatoIds = cat.platos.map(p => p.id)
-                        const combosCount = combos.filter(c => c.platosIds.some((id: string) => categoryPlatoIds.includes(id))).length
-                        const promosCount = promos.filter(p => p.activo && p.platosIds.some((id: string) => categoryPlatoIds.includes(id))).length
-                        const esDiaActual = platoDiaActivo && categoryPlatoIds.includes(platoDiaSwr?.plato_id)
-                        const esGanadorActual = platoGanadorActivo && categoryPlatoIds.includes(platoGanadorSwr?.plato_id)
-                        setMenuCategoria(null)
-                        setCategoriaDeleteWarning({
-                          categoriaId: cat.id,
-                          nombre: cat.nombre,
-                          platosCount: cat.platos.length,
-                          combosCount, promosCount, esDiaActual, esGanadorActual,
-                          onConfirm: () => eliminarCategoria(cat.id),
-                        })
-                      }}
-                        style={{ padding: '10px 14px', fontSize: '13px', color: 'var(--color-danger)', cursor: 'pointer' }}>Eliminar categoría</div>
-                    </div>
-                  </>
-                )}
-
-                {/* Form nuevo plato */}
-                {mostrarFormPlato === cat.id && (
-                  <PlatoForm
-                    restId={rest?.id}
-                    categoriaId={cat.id}
-                    categoriaNombre={cat.nombre}
-                    ordenSiguiente={categorias.find(c => c.id === cat.id)?.platos.length ?? 0}
-                    mutateCategoriasYPlatos={mutateCategoriasYPlatos}
-                    onClose={cerrarFormPlato}
-                  />
-                )}
-
-                {/* Platos */}
-                {cat.platos.map((plato, pIdx) => (
-                  <div key={plato.id} className="card" style={{ marginBottom: '8px', opacity: plato.disponible ? 1 : 0.5, overflow: 'hidden' }}>
-
-                    {/* Vista normal del plato */}
-                    <div
-                      onClick={() => setPlatoExpandido(platoExpandido === plato.id ? null : plato.id)}
-                      style={{ padding: '12px', display: 'flex', gap: '12px', cursor: 'pointer' }}
-                    >
-                      <div style={{
-                        width: '52px', height: '52px', borderRadius: '8px', background: 'var(--bg-tertiary)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: '18px', fontWeight: 500, color: 'var(--text-tertiary)', flexShrink: 0,
-                        overflow: 'hidden',
-                      }}>
-                        {plato.foto_url ? (
-                          <img src={plato.foto_url} alt={plato.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        ) : plato.nombre.charAt(0)}
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
-                          <div style={{ fontSize: '13px', fontWeight: 500 }}>{plato.nombre}</div>
-                          <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                            {/* Flechas mover plato */}
-                            <span onClick={(e) => { e.stopPropagation(); moverPlato(cat.id, plato.id, 'arriba') }}
-                              style={{ fontSize: '9px', cursor: pIdx > 0 ? 'pointer' : 'default', color: pIdx > 0 ? 'var(--text-secondary)' : 'var(--border-light)', padding: '2px' }}>▲</span>
-                            <span onClick={(e) => { e.stopPropagation(); moverPlato(cat.id, plato.id, 'abajo') }}
-                              style={{ fontSize: '9px', cursor: pIdx < cat.platos.length - 1 ? 'pointer' : 'default', color: pIdx < cat.platos.length - 1 ? 'var(--text-secondary)' : 'var(--border-light)', padding: '2px' }}>▼</span>
-                            <span onClick={(e) => { e.stopPropagation(); toggleDisponible(cat.id, plato.id) }}
-                              style={{ fontSize: '11px', color: 'var(--color-info)', cursor: 'pointer', marginLeft: '4px' }}>
-                              {plato.disponible ? 'Agotar' : 'Activar'}
-                            </span>
-                            <span onClick={(e) => {
-                              e.stopPropagation()
-                              // Conteos EN MEMORIA (sin queries): combos/promos por platosIds,
-                              // día/ganador por la config local. Promos: solo ACTIVAS.
-                              const combosCount = combos.filter(c => c.platosIds.includes(plato.id)).length
-                              const promosCount = promos.filter(p => p.activo && p.platosIds.includes(plato.id)).length
-                              const esDiaActual = platoDiaActivo && platoDiaSwr?.plato_id === plato.id
-                              const esGanadorActual = platoGanadorActivo && platoGanadorSwr?.plato_id === plato.id
-                              setPlatoDeleteWarning({
-                                categoriaId: cat.id,
-                                platoId: plato.id,
-                                nombre: plato.nombre,
-                                combosCount,
-                                promosCount,
-                                esDiaActual,
-                                esGanadorActual,
-                                onConfirm: () => eliminarPlato(cat.id, plato.id),
-                              })
-                            }}
-                              style={{ fontSize: '11px', color: 'var(--color-danger)', cursor: 'pointer' }}>✕</span>
-                          </div>
-                        </div>
-                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                          {plato.variantes && plato.variantes.length > 0 ? 'desde ' : ''}${formatoPrecio(plato.precio)}
-                          {plato.descripcion && <span style={{ marginLeft: '6px', color: 'var(--text-tertiary)' }}>· {plato.descripcion.length > 30 ? plato.descripcion.slice(0, 30) + '...' : plato.descripcion}</span>}
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '5px' }}>
-                          <span className={`badge ${plato.disponible ? 'badge-success' : 'badge-danger'}`}>
-                            {plato.disponible ? 'Disponible' : 'Agotado'}
-                          </span>
-                          <span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>toca para editar</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Panel edición expandido */}
-                    {platoExpandido === plato.id && (
-                      <PlatoEditPanel
-                        plato={plato}
-                        categoriaId={cat.id}
-                        combos={combos}
-                        promos={promos}
-                        diaVarianteId={platoDiaActivo ? platoDiaSwr?.variante_id ?? null : null}
-                        ganadorVarianteId={platoGanadorActivo ? platoGanadorSwr?.variante_id ?? null : null}
-                        esBasico={esBasico}
-                        subiendoFoto={subiendoFoto}
-                        onSelectFoto={seleccionarFoto}
-                        mutateCategoriasYPlatos={mutateCategoriasYPlatos}
-                        onCascadeCleanup={limpiarTrasCascada}
-                        onClose={cerrarEditPlato}
-                      />
-                    )}
-                  </div>
-                ))}
-              </div>
+              <CategoriaSection
+                key={cat.id}
+                cat={cat}
+                catIdx={catIdx}
+                totalCategorias={categorias.length}
+                renombrando={editandoCategoria === cat.id}
+                menuAbierto={menuCategoria === cat.id}
+                formPlatoAbierto={mostrarFormPlato === cat.id}
+                ordenSiguientePlato={categorias.find(c => c.id === cat.id)?.platos.length ?? 0}
+                platoExpandido={platoExpandido}
+                restId={rest?.id}
+                combos={combos}
+                promos={promos}
+                diaVarianteId={platoDiaActivo ? platoDiaSwr?.variante_id ?? null : null}
+                ganadorVarianteId={platoGanadorActivo ? platoGanadorSwr?.variante_id ?? null : null}
+                esBasico={esBasico}
+                subiendoFoto={subiendoFoto}
+                mutateCategoriasYPlatos={mutateCategoriasYPlatos}
+                onMoverCategoria={onMoverCategoria}
+                onToggleMenuCategoria={onToggleMenuCategoria}
+                onCerrarMenuCategoria={onCerrarMenuCategoria}
+                onAbrirRename={onAbrirRename}
+                onCerrarRename={onCerrarRename}
+                onAbrirHorario={onAbrirHorario}
+                onRequestDeleteCategoria={onRequestDeleteCategoria}
+                onToggleFormPlato={onToggleFormPlato}
+                onCerrarFormPlato={cerrarFormPlato}
+                onToggleExpand={onToggleExpand}
+                onMoverPlato={onMoverPlato}
+                onToggleDisponible={onToggleDisponible}
+                onRequestDeletePlato={onRequestDeletePlato}
+                onSelectFoto={seleccionarFoto}
+                onCascadeCleanup={limpiarTrasCascada}
+                onCerrarEditPlato={cerrarEditPlato}
+              />
             ))}
           </>
         )}
@@ -1346,83 +1220,15 @@ export default function MiMenuPage() {
         {horarioCategoria && (() => {
           const cat = categorias.find(c => c.id === horarioCategoria)
           return (
-            <Modal
-              isOpen={!!horarioCategoria}
-              onClose={() => setHorarioCategoria(null)}
-              title={`Horario de "${cat?.nombre || ''}"`}
-              maxWidth={500}
-            >
-              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '14px' }}>
-                Define en qué horario esta categoría es visible en el menú. Déjalo vacío para que se muestre siempre.
-              </div>
-
-              <div style={{ marginBottom: '14px' }}>
-                <label className="label">Horario de visibilidad</label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
-                  <TimePicker
-                    value={horarioCatInicio}
-                    onChange={(v) => setHorarioCatInicio(v)}
-                  />
-                  <span style={{ color: 'var(--text-tertiary)', fontSize: '13px' }}>—</span>
-                  <TimePicker
-                    value={horarioCatFin}
-                    onChange={(v) => setHorarioCatFin(v)}
-                  />
-                </div>
-                <TimeRangeHelper
-                  start={horarioCatInicio}
-                  end={horarioCatFin}
-                  verb={`"${cat?.nombre || ''}" visible`}
-                />
-              </div>
-
-              {(() => {
-                const avisoHorario = horarioCategoria && horarioCatInicio && horarioCatFin
-                  ? detectarAfectados(horarioCategoria)
-                  : []
-                return (
-                  <>
-                    {avisoHorario.length > 0 && (
-                      <div style={{ marginBottom: '14px', background: 'var(--color-warning-light)', border: '1px solid var(--color-warning)', borderRadius: '8px', padding: '12px' }}>
-                        <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--color-warning)', marginBottom: '8px' }}>
-                          Esto afectará otras funciones
-                        </div>
-                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '10px' }}>
-                          Al asignar horario a "{cat?.nombre}", lo siguiente solo será visible de {formato12h(horarioCatInicio)} a {formato12h(horarioCatFin)}:
-                        </div>
-                        {avisoHorario.map((a, i) => (
-                          <div key={i} style={{ fontSize: '12px', color: 'var(--text-primary)', padding: '6px 0', borderBottom: i < avisoHorario.length - 1 ? '1px solid var(--border-light)' : 'none', display: 'flex', gap: '6px', alignItems: 'start' }}>
-                            <span style={{ color: 'var(--color-warning)' }}>⚠</span>
-                            <span>{a}</span>
-                          </div>
-                        ))}
-                        <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '10px' }}>
-                          Puedes revisar combos, promos y sorpréndeme después si necesitas ajustarlos.
-                        </div>
-                      </div>
-                    )}
-
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <button
-                        onClick={guardarHorarioCategoria}
-                        disabled={guardandoHorarioCat}
-                        className="btn-primary"
-                        style={{ flex: 1, padding: '12px', fontSize: '13px' }}
-                      >
-                        {guardandoHorarioCat ? 'Guardando...' : guardadoHorarioCat ? '✓ Guardado' : 'Guardar'}
-                      </button>
-                      <button
-                        onClick={() => { setHorarioCatInicio(''); setHorarioCatFin('') }}
-                        className="btn-outline"
-                        style={{ padding: '12px 16px', fontSize: '13px' }}
-                      >
-                        Limpiar
-                      </button>
-                    </div>
-                  </>
-                )
-              })()}
-            </Modal>
+            <HorarioCategoriaModal
+              catId={horarioCategoria}
+              catNombre={cat?.nombre || ''}
+              inicioInicial={cat?.hora_inicio || ''}
+              finInicial={cat?.hora_fin || ''}
+              afectados={detectarAfectados(horarioCategoria)}
+              mutateCategoriasYPlatos={mutateCategoriasYPlatos}
+              onClose={cerrarHorarioCategoria}
+            />
           )
         })()}
 
