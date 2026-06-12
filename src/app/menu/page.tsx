@@ -18,12 +18,12 @@ import VarianteEditor, { construirTextoVinculaciones } from '@/components/menu-a
 import CategoriaForm, { validarCategoria } from '@/components/menu-admin/CategoriaForm'
 import PlatoForm, { MAX_DESC, MAX_PRECIO } from '@/components/menu-admin/PlatoForm'
 import PlatoEditPanel from '@/components/menu-admin/PlatoEditPanel'
+import PlatoDelDiaForm from '@/components/menu-admin/PlatoDelDiaForm'
 import { invalidateAll } from '@/lib/swr'
 import TimeRangeHelper from '@/components/ui/TimeRangeHelper'
 import Select from '@/components/ui/Select'
 import DiasSelector from '@/components/ui/DiasSelector'
 import { formato12h } from '@/lib/time'
-import { fechaColombia, diaCodigoColombia } from '@/lib/fechas'
 import { formatoPrecio } from '@/lib/precio'
 import { formatDias } from '@/lib/dias'
 import type { DiaSemana, Variante } from '@/types'
@@ -146,11 +146,8 @@ export default function MiMenuPage() {
     setAviso(msg)
     setTimeout(() => setAviso(null), 3500)
   }
-  const [platoDiaConfig, setPlatoDiaConfig] = useState({ platoId: '', varianteId: '', precioEspecial: '', horaInicio: '11:00', horaFin: '15:00' })
-  const [guardandoPlatoDia, setGuardandoPlatoDia] = useState(false)
-  const [guardadoPlatoDia, setGuardadoPlatoDia] = useState(false)
-  const [intentoPlatoDia, setIntentoPlatoDia] = useState(false)
-  const [touchedPlatoDia, setTouchedPlatoDia] = useState<Record<string, boolean>>({})
+  // El form del plato del día (borrador + cuarteto) vive en PlatoDelDiaForm,
+  // montado con key={platoDiaSwr?.id ?? 'new'} — sin estado puntero.
   const [sorprendemeCatsMenu, setSorprendemeCatsMenu] = useState<string[]>([])
   const [platoGanadorConfig, setPlatoGanadorConfig] = useState({ platoId: '', varianteId: '', titulo: 'Recomendado del chef', descripcion: '' })
   // "Hay plato del día/ganador ACTIVO" se deriva de SWR (Fase 3) — antes eran
@@ -234,61 +231,7 @@ export default function MiMenuPage() {
     await mutateConfig()
   }
   
-  function validarPlatoDia(
-    state: { platoId: string; varianteId: string; precioEspecial: string },
-    otherActive?: { activo: boolean; platoId: string },
-    variantes?: { id: string }[]
-  ): Record<string, string> {
-    const e: Record<string, string> = {}
-    if (!state.platoId) e.platoId = 'Selecciona un plato'
-    const v = parseInt(state.precioEspecial)
-    if (!state.precioEspecial || isNaN(v) || v <= 0) e.precioEspecial = 'El precio especial debe ser mayor a 0'
-    else if (v > MAX_PRECIO) e.precioEspecial = 'El precio especial no puede superar $10.000.000'
-
-    if (state.platoId && otherActive?.activo && otherActive.platoId === state.platoId) {
-      e.platoId = 'Este plato ya está configurado como plato ganador. Selecciona otro o desactiva el plato ganador primero.'
-    }
-
-    if (state.varianteId && variantes && !variantes.some(x => x.id === state.varianteId)) {
-      e.varianteId = 'Variante seleccionada inválida'
-    }
-
-    return e
-  }
-  async function guardarPlatoDia() {
-    setIntentoPlatoDia(true)
-    setTouchedPlatoDia({ platoId: true, precioEspecial: true })
-    const variantesActuales = todosPlatos.find(p => p.id === platoDiaConfig.platoId)?.variantes ?? []
-    const errores = validarPlatoDia(platoDiaConfig, {
-      activo: platoGanadorActivo,
-      platoId: platoGanadorConfig.platoId,
-    }, variantesActuales)
-    if (Object.keys(errores).length > 0 || !rest?.id) return
-    setGuardandoPlatoDia(true)
-    const supabase = createClient()
-
-    // Borrar cualquier plato del día anterior (activo o no) para garantizar
-    // exactamente 0 o 1 fila por restaurante — maybeSingle() en el hook
-    // lanza error con múltiples filas y SWR devolvería null silenciosamente.
-    await supabase.from('plato_del_dia').delete().eq('restaurante_id', rest.id)
-
-    // Insertar nuevo
-    await supabase.from('plato_del_dia').insert({
-      restaurante_id: rest.id,
-      plato_id: platoDiaConfig.platoId,
-      variante_id: platoDiaConfig.varianteId || null,
-      precio_especial: parseInt(platoDiaConfig.precioEspecial),
-      horario_inicio: platoDiaConfig.horaInicio,
-      horario_fin: platoDiaConfig.horaFin,
-      activo: true,
-      fecha: fechaColombia(),
-    })
-
-    await invalidateAll('plato-del-dia')
-    setGuardandoPlatoDia(false)
-    setGuardadoPlatoDia(true)
-    setTimeout(() => setGuardadoPlatoDia(false), 1200)
-  }
+  // validarPlatoDia, guardar y desactivar viven en components/menu-admin/PlatoDelDiaForm.
 
   function validarPlatoGanador(
     state: { platoId: string },
@@ -308,7 +251,7 @@ export default function MiMenuPage() {
     setTouchedGanador({ platoId: true, titulo: true })
     const errores = validarPlatoGanador(platoGanadorConfig, {
       activo: platoDiaActivo,
-      platoId: platoDiaConfig.platoId,
+      platoId: platoDiaSwr?.plato_id || '',
     })
     if (Object.keys(errores).length > 0 || !rest?.id) return
     setGuardandoGanador(true)
@@ -339,14 +282,6 @@ export default function MiMenuPage() {
     await supabase.from('plato_ganador').delete().eq('restaurante_id', rest.id)
     setPlatoGanadorConfig({ platoId: '', varianteId: '', titulo: 'Recomendado del chef', descripcion: '' })
     await invalidateAll('plato-ganador')
-  }
-
-  async function desactivarPlatoDia() {
-    if (!rest?.id) return
-    const supabase = createClient()
-    await supabase.from('plato_del_dia').delete().eq('restaurante_id', rest.id)
-    setPlatoDiaConfig({ platoId: '', varianteId: '', precioEspecial: '', horaInicio: '11:00', horaFin: '15:00' })
-    await invalidateAll('plato-del-dia')
   }
 
   // Dos promos entran en conflicto si comparten ≥1 plato Y ≥1 día Y ≥1 variante de ese plato.
@@ -838,21 +773,9 @@ export default function MiMenuPage() {
     }))
   }, [todosPlatos])
 
-  // ── Seed form configs from SWR ──
-  // Solo siembran los BORRADORES de los forms día/ganador (se van con sus forms
-  // en Fase 3); el "activo" ya se deriva de SWR directamente.
-  useEffect(() => {
-    if (platoDiaSwr?.activo) {
-      setPlatoDiaConfig({
-        platoId: platoDiaSwr.plato_id || '',
-        varianteId: platoDiaSwr.variante_id ?? '',
-        precioEspecial: platoDiaSwr.precio_especial?.toString() || '',
-        horaInicio: platoDiaSwr.horario_inicio || '11:00',
-        horaFin: platoDiaSwr.horario_fin || '15:00',
-      })
-    }
-  }, [platoDiaSwr])
-
+  // ── Seed form config from SWR ──
+  // Solo siembra el BORRADOR del form ganador (se va con su form en Fase 3);
+  // el día ya siembra por initializer en PlatoDelDiaForm (montado keyed).
   useEffect(() => {
     if (platoGanadorSwr?.activo) {
       setPlatoGanadorConfig({
@@ -1090,7 +1013,6 @@ export default function MiMenuPage() {
       await invalidateAll('plato-ganador')
     }
     if (eraDia) {
-      setPlatoDiaConfig({ platoId: '', varianteId: '', precioEspecial: '', horaInicio: '11:00', horaFin: '15:00' })
       await invalidateAll('plato-del-dia')
     }
     await supabase.from('categorias').delete().eq('id', id)
@@ -1208,7 +1130,6 @@ export default function MiMenuPage() {
       await invalidateAll('plato-ganador')
     }
     if (eraDia) {
-      setPlatoDiaConfig({ platoId: '', varianteId: '', precioEspecial: '', horaInicio: '11:00', horaFin: '15:00' })
       await invalidateAll('plato-del-dia')
     }
     await mutateCategoriasYPlatos()
@@ -2260,238 +2181,27 @@ export default function MiMenuPage() {
             )}
 
             {/* === PLATO DEL DÍA === */}
-            {subTab === 'plato-dia' && (() => {
-              const variantesActualesDia = todosPlatos.find(p => p.id === platoDiaConfig.platoId)?.variantes ?? []
-              const errores = validarPlatoDia(platoDiaConfig, {
-                activo: platoGanadorActivo,
-                platoId: platoGanadorConfig.platoId,
-              }, variantesActualesDia)
-              const valido = Object.keys(errores).length === 0
-              // Nota contextual (informativa, NO bloquea guardado): el plato del día es
-              // de un solo día (hoy), así que el cruce con promos solo puede ocurrir hoy.
-              // Mapear "hoy" (offset Colombia, igual que guardarPlatoDia) a código de día
-              // y comprobar si el plato tiene alguna promo descuento ACTIVA ese día.
-              const codigoHoy = diaCodigoColombia()
-              const platoDiaTienePromoHoy = !!platoDiaConfig.platoId && promos.some(p =>
-                p.activo && (p.tipo === 'descuento' || p.tipo === 'dos_por_uno') &&
-                (p.dias || []).includes(codigoHoy) &&
-                (p.promoPlatos || []).some((pp: any) => pp.plato_id === platoDiaConfig.platoId))
-              return (
-              <div style={{ padding: '14px 20px' }}>
-                <div className="card" style={{ padding: '14px', marginBottom: '14px' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '10px' }}>Configurar plato del día</div>
-                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px' }}>Selecciona un plato:</div>
-                  {(() => {
-                    const platoDiaErrorVisible = !!(
-                      (intentoPlatoDia && touchedPlatoDia.platoId && errores.platoId) ||
-                      (platoDiaConfig.platoId && platoGanadorActivo && platoGanadorConfig.platoId === platoDiaConfig.platoId)
-                    )
-                    return (
-                      <>
-                        <div style={{ marginBottom: platoDiaErrorVisible ? '4px' : '8px' }}>
-                          <Select
-                            className="input"
-                            value={platoDiaConfig.platoId}
-                            onChange={(v) => {
-                              const platoNuevo = todosPlatos.find(p => p.id === v)
-                              const nuevaVariante = (platoNuevo?.variantes && platoNuevo.variantes.length > 0)
-                                ? platoNuevo.variantes[0].id
-                                : ''
-                              setPlatoDiaConfig({ ...platoDiaConfig, platoId: v, varianteId: nuevaVariante })
-                              setTouchedPlatoDia(prev => ({ ...prev, platoId: true }))
-                            }}
-                            options={platoDiaOptions}
-                            placeholder="Seleccionar plato"
-                            required
-                            error={platoDiaErrorVisible}
-                            ariaDescribedBy={platoDiaErrorVisible ? 'plato-dia-error' : undefined}
-                          />
-                        </div>
-                        {platoDiaErrorVisible && (
-                          <div id="plato-dia-error" style={{ fontSize: '11px', color: 'var(--color-danger)', marginBottom: '8px' }}>
-                            {errores.platoId}
-                          </div>
-                        )}
-                      </>
-                    )
-                  })()}
-                  {platoDiaConfig.platoId && (() => {
-                    const h = getHorarioPlato(platoDiaConfig.platoId)
-                    if (!h) return null
-                    return (
-                      <div style={{ fontSize: '11px', color: 'var(--color-warning)', background: 'var(--color-warning-light)', padding: '8px 10px', borderRadius: '6px', marginBottom: '8px' }}>
-                        ⚠ Este plato pertenece a una categoría visible solo de {formato12h(h.hora_inicio)} a {formato12h(h.hora_fin)}. El plato del día solo se mostrará en ese horario.
-                      </div>
-                    )
-                  })()}
-                  {platoDiaTienePromoHoy && (
-                    <div style={{ fontSize: '11px', color: 'var(--color-warning)', background: 'var(--color-warning-light)', padding: '8px 10px', borderRadius: '6px', marginBottom: '8px' }}>
-                      ⚠ Este plato tiene promociones activas hoy. El precio del Plato del día tendrá prioridad mientras esté activo.
-                    </div>
-                  )}
-                  {(() => {
-                    const platoSel = todosPlatos.find(p => p.id === platoDiaConfig.platoId)
-                    const variantes = platoSel?.variantes ?? []
-                    if (variantes.length === 0) return null
-                    const opciones = [
-                      { value: '', label: <span style={{ color: 'var(--text-tertiary)' }}>Sin variante específica</span> },
-                      ...variantes.map(v => ({
-                        value: v.id,
-                        label: <span>{v.nombre} <span style={{ color: 'var(--text-tertiary)' }}>— ${formatoPrecio(v.precio)}</span></span>,
-                        searchText: `${v.nombre} ${v.precio}`.toLowerCase(),
-                      })),
-                    ]
-                    return (
-                      <>
-                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Variante:</div>
-                        <div style={{ marginBottom: '8px' }}>
-                          <Select
-                            className="input"
-                            value={platoDiaConfig.varianteId}
-                            onChange={(v) => setPlatoDiaConfig({ ...platoDiaConfig, varianteId: v })}
-                            options={opciones}
-                            placeholder="Sin variante específica"
-                          />
-                        </div>
-                      </>
-                    )
-                  })()}
-                  <input className="input" type="number" placeholder="Precio especial" value={platoDiaConfig.precioEspecial}
-                    onChange={(e) => setPlatoDiaConfig({ ...platoDiaConfig, precioEspecial: e.target.value })}
-                    onBlur={() => setTouchedPlatoDia(prev => ({ ...prev, precioEspecial: true }))}
-                    style={{
-                      marginBottom: intentoPlatoDia && touchedPlatoDia.precioEspecial && errores.precioEspecial ? '4px' : '8px',
-                      borderColor: intentoPlatoDia && touchedPlatoDia.precioEspecial && errores.precioEspecial ? 'var(--color-danger)' : undefined,
-                    }} />
-                  {intentoPlatoDia && touchedPlatoDia.precioEspecial && errores.precioEspecial && (
-                    <div style={{ fontSize: '11px', color: 'var(--color-danger)', marginBottom: '8px' }}>
-                      {errores.precioEspecial}
-                    </div>
-                  )}
-                  {(() => {
-                    const platoSeleccionado = categorias
-                      .flatMap(c => c.platos)
-                      .find(p => p.id === platoDiaConfig.platoId)
-
-                    if (!platoSeleccionado) return null
-
-                    const precioEspNum = parseInt(platoDiaConfig.precioEspecial || '0')
-                    if (precioEspNum <= 0) return null
-
-                    const varianteLocked = platoDiaConfig.varianteId
-                      ? platoSeleccionado.variantes?.find(v => v.id === platoDiaConfig.varianteId)
-                      : null
-                    const precioReferencia = varianteLocked ? varianteLocked.precio : platoSeleccionado.precio
-
-                    if (precioEspNum >= precioReferencia) {
-                      return (
-                        <div style={{
-                          background: 'var(--color-warning-light)',
-                          border: '1px solid var(--color-warning)',
-                          padding: '8px 12px',
-                          borderRadius: '6px',
-                          fontSize: '11px',
-                          color: 'var(--color-warning)',
-                          marginTop: '6px',
-                          marginBottom: '8px',
-                        }}>
-                          ⚠️ El precio especial es igual o mayor al precio original (${formatoPrecio(precioReferencia)}). ¿Es correcto?
-                        </div>
-                      )
-                    }
-                    return null
-                  })()}
-                  <div style={{ marginBottom: '12px' }}>
-                    <label className="label">Horario del plato del día</label>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
-                      <TimePicker
-                        value={platoDiaConfig.horaInicio}
-                        onChange={(v) => setPlatoDiaConfig({ ...platoDiaConfig, horaInicio: v })}
-                      />
-                      <span style={{ color: 'var(--text-tertiary)', fontSize: '13px' }}>—</span>
-                      <TimePicker
-                        value={platoDiaConfig.horaFin}
-                        onChange={(v) => setPlatoDiaConfig({ ...platoDiaConfig, horaFin: v })}
-                      />
-                    </div>
-                    <TimeRangeHelper
-                      start={platoDiaConfig.horaInicio}
-                      end={platoDiaConfig.horaFin}
-                      verb="Disponible"
-                    />
-                  </div>
-
-                  {platoDiaConfig.platoId && platoDiaConfig.precioEspecial && (() => {
-                    const platoPreview = todosPlatos.find(p => p.id === platoDiaConfig.platoId)
-                    if (!platoPreview) return null
-                    const varianteLockedPreview = platoDiaConfig.varianteId
-                      ? platoPreview.variantes?.find(v => v.id === platoDiaConfig.varianteId)
-                      : null
-                    const tieneVariantesPreview = !!(platoPreview.variantes && platoPreview.variantes.length > 0)
-                    return (
-                      <div style={{
-                        background: 'var(--color-accent-light)', borderRadius: '8px', padding: '12px', marginBottom: '10px',
-                      }}>
-                        <div style={{ fontSize: '11px', fontWeight: 500, color: 'var(--color-accent)', marginBottom: '4px' }}>Vista previa</div>
-                        <div style={{ fontSize: '14px', fontWeight: 500 }}>
-                          {platoPreview.nombre}{varianteLockedPreview ? ` · ${varianteLockedPreview.nombre}` : ''}
-                        </div>
-                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px' }}>
-                          {varianteLockedPreview ? (
-                            <>
-                              <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', textDecoration: 'line-through' }}>
-                                ${formatoPrecio(varianteLockedPreview.precio)}
-                              </span>
-                              <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--color-accent)' }}>
-                                ${formatoPrecio(parseInt(platoDiaConfig.precioEspecial))}
-                              </span>
-                            </>
-                          ) : tieneVariantesPreview ? (
-                            <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--color-accent)' }}>
-                              desde ${formatoPrecio(platoPreview.precio)}
-                            </span>
-                          ) : (
-                            <>
-                              <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', textDecoration: 'line-through' }}>
-                                ${formatoPrecio(platoPreview.precio)}
-                              </span>
-                              <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--color-accent)' }}>
-                                ${formatoPrecio(parseInt(platoDiaConfig.precioEspecial))}
-                              </span>
-                            </>
-                          )}
-                        </div>
-                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                          {formato12h(platoDiaConfig.horaInicio)} — {formato12h(platoDiaConfig.horaFin)}
-                        </div>
-                      </div>
-                    )
-                  })()}
-
-                  <button onClick={guardarPlatoDia} disabled={guardandoPlatoDia || guardadoPlatoDia} className="btn-primary"
-                    style={{
-                      width: '100%', padding: '12px', fontSize: '13px',
-                      opacity: valido ? 1 : 0.5,
-                      cursor: valido ? 'pointer' : 'default',
-                      ...(valido ? {} : { transform: 'none', boxShadow: 'none' }),
-                    }}>
-                    {guardandoPlatoDia ? 'Guardando...' : guardadoPlatoDia ? '✓ Guardado' : platoDiaActivo ? 'Actualizar plato del día' : 'Guardar plato del día'}
-                  </button>
-                  {platoDiaActivo && (
-                    <button onClick={desactivarPlatoDia} className="btn-outline" style={{ width: '100%', padding: '12px', fontSize: '13px', marginTop: '8px', color: 'var(--color-danger)' }}>
-                      Desactivar plato del día
-                    </button>
-                  )}
-                </div>
-              </div>
-              )
-            })()}
+            {/* Keyed fresh-mount: remonta al cambiar el registro guardado; gateado
+                hasta que SWR resuelva (undefined = cargando, null = sin fila). */}
+            {subTab === 'plato-dia' && platoDiaSwr !== undefined && (
+              <PlatoDelDiaForm
+                key={platoDiaSwr?.id ?? 'new'}
+                restId={rest?.id}
+                todosPlatos={todosPlatos}
+                horariosPorPlato={horariosPorPlato}
+                platoDiaOptions={platoDiaOptions}
+                promos={promos}
+                initial={platoDiaSwr}
+                ganadorActivo={platoGanadorActivo}
+                ganadorPlatoId={platoGanadorSwr?.plato_id || ''}
+              />
+            )}
 
             {/* === PLATO GANADOR === */}
             {subTab === 'plato-ganador' && (() => {
               const errores = validarPlatoGanador(platoGanadorConfig, {
                 activo: platoDiaActivo,
-                platoId: platoDiaConfig.platoId,
+                platoId: platoDiaSwr?.plato_id || '',
               })
               const valido = Object.keys(errores).length === 0
               const tituloOptions = [
@@ -2503,7 +2213,7 @@ export default function MiMenuPage() {
               ]
               const platoGanadorErrorVisible = !!(
                 (intentoGanador && touchedGanador.platoId && errores.platoId) ||
-                (platoGanadorConfig.platoId && platoDiaActivo && platoDiaConfig.platoId === platoGanadorConfig.platoId)
+                (platoGanadorConfig.platoId && platoDiaActivo && platoDiaSwr?.plato_id === platoGanadorConfig.platoId)
               )
               return (
               <div style={{ padding: '14px 20px' }}>
