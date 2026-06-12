@@ -10,8 +10,8 @@ import { usePromos } from '@/hooks/data/usePromos'
 import { useConfigRestaurante } from '@/hooks/data/useConfigRestaurante'
 import { usePlatoGanador } from '@/hooks/data/usePlatoGanador'
 import { createClient } from '@/lib/supabase-browser'
-import Cropper from 'react-easy-crop'
 import TimePicker from '@/components/ui/TimePicker'
+import CropModal from '@/components/ui/CropModal'
 import Modal from '@/components/ui/Modal'
 import BottomNav from '@/components/BottomNav'
 import VarianteEditor, { construirTextoVinculaciones } from '@/components/menu-admin/VarianteEditor'
@@ -104,14 +104,9 @@ export default function MiMenuPage() {
     onConfirm: () => void;
   } | null>(null)
   const [subiendoFoto, setSubiendoFoto] = useState(false)
+  // Puntero del modal de recorte — crop/zoom/croppedAreaPixels viven en
+  // components/ui/CropModal (fresh-mount por apertura).
   const [cropModal, setCropModal] = useState<{ imagen: string; platoId: string; categoriaId: string } | null>(null)
-  const [crop, setCrop] = useState({ x: 0, y: 0 })
-  const [zoom, setZoom] = useState(1)
-  const [croppedAreaPixels, setCroppedAreaPixels] = useState<any>(null)
-
-  const onCropComplete = useCallback((croppedArea: any, croppedAreaPixels: any) => {
-    setCroppedAreaPixels(croppedAreaPixels)
-  }, [])
   const [subTab, setSubTab] = useState<'combos' | 'promos' | 'plato-dia' | 'plato-ganador'>('combos')
   // Punteros del form de combo (crear/editar) — el borrador, su cuarteto y la
   // búsqueda de platos viven en ComboForm (fresh-mount keyed en editandoComboId).
@@ -334,24 +329,7 @@ export default function MiMenuPage() {
   }
 
   // MAX_DESC / MAX_PRECIO se importan de components/menu-admin/PlatoForm (Fase 3).
-  function recortarImagen(imageSrc: string, pixelCrop: any): Promise<Blob> {
-    return new Promise((resolve) => {
-      const img = new Image()
-      img.onload = () => {
-        const canvas = document.createElement('canvas')
-        const ctx = canvas.getContext('2d')!
-        canvas.width = 800
-        canvas.height = 450
-        ctx.drawImage(
-          img,
-          pixelCrop.x, pixelCrop.y, pixelCrop.width, pixelCrop.height,
-          0, 0, 800, 450
-        )
-        canvas.toBlob((blob) => resolve(blob!), 'image/jpeg', 0.82)
-      }
-      img.src = imageSrc
-    })
-  }
+  // recortarImagen vive en lib/imagen; la UI de recorte en components/ui/CropModal.
 
   // useCallback: baja estable a PlatoEditPanel (React.memo) como onSelectFoto.
   const seleccionarFoto = useCallback((platoId: string, categoriaId: string, file: File) => {
@@ -361,19 +339,17 @@ export default function MiMenuPage() {
     }
     const url = URL.createObjectURL(file)
     setCropModal({ imagen: url, platoId, categoriaId })
-    setCrop({ x: 0, y: 0 })
-    setZoom(1)
   }, [])
 
-  async function confirmarRecorte() {
-    if (!cropModal || !croppedAreaPixels || !rest?.id) return
+  // Mitad de SUBIDA del pipeline de foto: el blob ya viene recortado por
+  // CropModal (Listo → onConfirm). Storage path + update + mutate son de /menu.
+  async function confirmarRecorte(blob: Blob) {
+    if (!cropModal || !rest?.id) return
     setSubiendoFoto(true)
     setCropModal(null)
 
     const supabase = createClient()
     const path = `${rest.id}/platos/${cropModal.platoId}.jpg`
-
-    const blob = await recortarImagen(cropModal.imagen, croppedAreaPixels)
 
     const { error: uploadError } = await supabase.storage
       .from('imagenes')
@@ -1620,42 +1596,15 @@ export default function MiMenuPage() {
 
         {/* Modal recorte de imagen */}
         {cropModal && (
-          <>
-            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 80 }} />
-            <div style={{ position: 'fixed', inset: 0, zIndex: 90, display: 'flex', flexDirection: 'column', maxWidth: '500px', minWidth: '320px', margin: '0 auto' }}>
-              {/* Header */}
-              <div style={{ padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span onClick={() => setCropModal(null)} style={{ fontSize: '14px', color: 'white', cursor: 'pointer' }}>Cancelar</span>
-                <span style={{ fontSize: '15px', fontWeight: 500, color: 'white' }}>Ajustar foto</span>
-                <span onClick={confirmarRecorte} style={{ fontSize: '14px', color: '#4CAF50', fontWeight: 500, cursor: 'pointer' }}>Listo</span>
-              </div>
-
-              {/* Área de recorte */}
-              <div style={{ position: 'relative', flex: 1 }}>
-                <Cropper
-                  image={cropModal.imagen}
-                  crop={crop}
-                  zoom={zoom}
-                  aspect={16 / 9}
-                  onCropChange={setCrop}
-                  onZoomChange={setZoom}
-                  onCropComplete={onCropComplete}
-                />
-              </div>
-
-              {/* Controles */}
-              <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', width: '100%', maxWidth: '300px' }}>
-                  <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)' }}>-</span>
-                  <input type="range" min={1} max={3} step={0.1} value={zoom}
-                    onChange={(e) => setZoom(Number(e.target.value))}
-                    style={{ flex: 1, accentColor: '#4CAF50' }} />
-                  <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)' }}>+</span>
-                </div>
-                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)' }}>Arrastra para ajustar · Zoom para acercar</div>
-              </div>
-            </div>
-          </>
+          <CropModal
+            imagen={cropModal.imagen}
+            aspect={16 / 9}
+            titulo="Ajustar foto"
+            anchoSalida={800}
+            altoSalida={450}
+            onConfirm={confirmarRecorte}
+            onCancel={() => setCropModal(null)}
+          />
         )}
         <BottomNav />
 
