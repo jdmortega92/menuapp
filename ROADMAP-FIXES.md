@@ -460,7 +460,7 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
 - Edge case 2: User deletes a photo to free up a slot — should be allowed without restriction.
 - UI: when limit reached, show prominent message: "Has alcanzado el límite de 5 fotos en plan gratis. Actualiza a Básico para fotos ilimitadas." with link to upgrade.
 
-**Where**: src/app/menu/page.tsx — modify the `esBasico` photo upload gate.
+**Where**: src/app/menu/page.tsx — modify the `esBasico` photo upload gate. (Nota post-F3 2026-06-12: el gate ahora se RENDERIZA en src/components/menu-admin/PlatoEditPanel.tsx — prop `esBasico` que la página computa y baja; el contador de 5 fotos tocaría la página y/o el panel.)
 
 **Acceptance criteria**:
 - Free plan user can upload up to 5 photos across all dishes.
@@ -493,6 +493,19 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
 ```
 
 ## Items
+
+### REFACTOR-F3 ✅ Refactor Fase 3: descomposición de /menu/page.tsx (admin) — CLOSED
+- **Closed**: 2026-06-12. Tercera fase del plan de refactor. La página pasó de 3.945 a ~1.420 líneas (−64%) y de 72 a 19 useState (solo punteros, búsqueda, warnings y UI de tabs) en 12 commits (18a909d → 09e53ca). Cierra BL.13 (criterio de aceptación verificado en dispositivo: cero lag de tipeo; una tecla en cualquier form re-renderiza SOLO el subtree de ese form).
+- **Commits**: 18a909d (VarianteEditor compartido), 3e2e5c9 (CategoriaForm, form plantilla), 4b137e6 (PlatoForm), 5e23ed2 (PlatoEditPanel), d77ab8d (prep: día/ganador derivados de SWR), a2cc824 (PlatoDelDiaForm), d4f696b (PlatoGanadorForm), 59e976c (ComboForm), 5279827 (PromoForm), 468fa8f (CropModal + lib/imagen), 1462304 (/config adopta CropModal), 09e53ca (memo de filas/secciones + riders rename/horario).
+- **VarianteEditor compartido** (components/menu-admin/): mata la duplicación ~95% entre filas de variantes de crear y editar que BL.40 tuvo que parchear DOS veces a mano. Modo allowPendingDelete parametriza el ✕ (filtrar directo vs marcar _pendingDelete con Deshacer); la validación min-2-sobrevivientes queda fuera (validarPlato del dueño). construirTextoVinculaciones se exporta desde aquí.
+- **Plantilla de form fresh-mount** (establecida en CategoriaForm, copiada en PlatoForm/PlatoEditPanel/ComboForm/PromoForm + el CategoriaRenameForm privado de CategoriaSection y HorarioCategoriaModal): la página conserva SOLO el puntero (mostrar/editando) y monta condicional; el form posee borrador + cuarteto intento/touched/guardando/guardado, validador como export module-level, React.memo, onClose estable (useCallback) — el fresh-mount reemplaza TODOS los resets manuales de abrir/cancelar/timer. Combo/promo: un solo form para crear/editar, keyed en editandoXId ?? 'new', siembra desde xInicial en el initializer; wasActive del registro inicial (editar un combo/promo pausado lo deja pausado).
+- **Día/ganador con keyed fresh-mount en el id del registro SWR** (key={swr?.id ?? 'new'}, gateado en swr !== undefined): los efectos de seeding murieron — una revalidación de fondo del MISMO registro ya NO pisa una edición en curso (mejora real vs antes). Como esos guardados son delete+insert (id nuevo → remount), el tick "✓ Guardado" se muestra ANTES y el invalidateAll corre dentro del timeout de 1.2s (reorden tick-before-invalidate; sin él, el remount mataba el tick).
+- **Flush co-locado**: registro + espejo en ref + commits + guardado viven los CUATRO dentro de PlatoForm y PlatoEditPanel (un registro local cada uno); el registro de página se ELIMINÓ. El invariante de lectura sincrónica (flush → leer ref → validar) ya no puede romperse desde la página. cascadeWarning (estado + modal + continuación que reanuda doSave) vive entero en PlatoEditPanel — la continuación nunca cruza un límite de componente (nota: Modal no es portal y el panel tiene fadeInUp con transform; seguro porque el modal solo abre post-click de Guardar).
+- **Commit 5 (prep SWR)**: platoDiaActivo/platoGanadorActivo pasaron de espejos locales a derives de SWR; todos los consumidores de página (borrados, warnings, detectarAfectados, cross-check día↔ganador) leen el registro GUARDADO. BONUS: arregla un bug latente — con un borrador de ganador sin guardar, el pre-delete FK de eliminarPlato/eliminarCategoria podía apuntar a la fila EQUIVOCADA (la del draft) y el DELETE de platos fallaba por FK; ahora siempre apunta a la fila guardada. Cambio semántico aceptado: un borrador sin guardar ya no bloquea ni marca nada.
+- **PromoForm**: detectarConflictoPromo/validarPromo con parámetros explícitos (state, promos, excludeId, todosPlatos) — auto-exclusión vía promoInicial?.id, corre contra la PROP promos viva. Advertencia preservada en comentario: limpiarPromosVacias es SOLO de los handlers de borrado, nunca de un guardado/efecto (la ventana de junction vacío de actualizar se comería la promo en edición).
+- **CropModal compartido (components/ui/) + lib/imagen.ts**: recortarImagen parametrizado (ancho/alto, JPEG 0.82); el modal posee crop/zoom/croppedAreaPixels y entrega el BLOB por onConfirm; upload/persistencia por página. /menu (platos 800×450 16:9) y /config (logo 400×400 redondo, banner 1200×400 3:1) usan el MISMO componente; react-easy-crop ahora tiene un solo importador.
+- **Commit 12 (payoff BL.13)**: CategoriaSection + PlatoCard memoizados (components/menu-admin/) con contrato de props escalar-o-estable; callbacks de fila estables vía ref-delegation (liveHandlers.current re-asignado por render, wrappers congelados — sin closures viejos NI identidades cambiantes); riders CategoriaRenameForm (privado de la sección) y HorarioCategoriaModal (recibe afectados YA computados por detectarAfectados, que sigue en la página). Fix lateral: los conteos del warning de borrar categoría ahora se computan sobre `categorias` SIN filtrar (antes, con búsqueda activa, contaban solo los platos visibles aunque el borrado destruye todos).
+- **Commit 13 (CampoTexto a combo/promo/categoría) evaluado y OMITIDO**: verificado en dispositivo cero lag de tipeo tras el commit 12 — con el estado form-local, una tecla solo re-renderiza el form; la necesidad medida nunca se materializó. Revisitable si un profiler futuro dice lo contrario (el costo residual sería la lista de selección de platos O(platos) dentro de ComboForm/PromoForm).
 
 ### REFACTOR-F2 ✅ Refactor Fase 2: descomposición de [slug]/page.tsx (menú público) — CLOSED
 - **Closed**: 2026-06-11. Segunda fase del plan de refactor. La página pasó de 2.872 a 820 líneas (−71%); ahora es estados + SWR hooks + logging + derivaciones + 3 hooks de dominio + ~600 líneas de JSX estructural + 8 componentes. Smoke completo verificado en dispositivo real (matriz BL.27/BL.28, modal de detalle con preselección BL.17, calificar anidado, WhatsApp end-to-end, vistas_platos 1 por apertura).
@@ -1767,7 +1780,8 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
   invalidateAll, not just the toggle handlers — any prior latent
   flicker in those flows is also eliminated.
 
-### BL.13 🟡 Extract /menu form sections to separate memoized components — DEFERRED
+### BL.13 ✅ Extract /menu form sections to separate memoized components — RESUELTO
+- **Resuelto**: 2026-06-12 por REFACTOR-F3 (ver entrada arriba; commits 18a909d → 09e53ca). Los 7 forms son componentes memoizados con estado local (más de lo propuesto acá: también VarianteEditor/CropModal compartidos, filas memoizadas y callbacks estables vía ref-delegation). Criterio de aceptación cumplido y verificado en dispositivo: una tecla en cualquier form re-renderiza SOLO ese form (el borrador ya no vive en la página), y los renders de página que quedan (búsqueda, punteros, aviso) saltan filas/secciones intactas por memo. Las regresiones temidas abajo (validaciones BL.3/BL.4/BL.8, reorder BL.9, persistencia BL.10) se cubrieron con smoke por commit.
 - **Found**: 2026-05-13 during BL.12 fix (input lag remediation).
 - **Symptom**: Even after BL.12's memoization fix (Level 1+2), some
   residual input lag may remain in form inputs because /menu is a
@@ -1788,9 +1802,10 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
 - **Priority**: 🟡 medium — depends on whether residual lag is
   user-visible. Consider bundling with F2 (refactor [slug]/page.tsx)
   since both pages share similar monolithic patterns.
-- **Status**: DEFERRED. Awaiting decision in a future session.
+- **Status**: RESUELTO (REFACTOR-F3; antes DEFERRED desde 2026-05-13).
 - **Where**: src/app/menu/page.tsx — form sections under tabActiva ===
-  'combos' subtabs.
+  'combos' subtabs. (Referencia histórica: post-F3 los forms viven en
+  src/components/menu-admin/.)
 
 ### BL.12 ✅ Input lag in /menu form inputs — CLOSED
 - **Closed**: 2026-05-13.
@@ -1816,6 +1831,11 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
   todosPlatos. Did NOT extract forms to separate components (left
   as deferred deuda técnica, would be ~2h refactor for marginal
   additional gain).
+- **Nota post-F3 (2026-06-12)**: la anatomía descrita acá (monolito de 2500
+  líneas / 67 useState, getHorarioPlato en la página, precioIndividualCombo)
+  ya no existe — REFACTOR-F3 movió forms y lookups a components/menu-admin/;
+  los useMemo de este fix (horariosPorPlato, todosPlatos, options) siguen en
+  la página y bajan como props.
 - **Where**: src/app/menu/page.tsx.
 
 ### BL.11 ✅ Plato ganador modal incorrectly applies plato del día discount — CLOSED
