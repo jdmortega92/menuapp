@@ -19,6 +19,7 @@ import CategoriaForm, { validarCategoria } from '@/components/menu-admin/Categor
 import PlatoForm, { MAX_DESC, MAX_PRECIO } from '@/components/menu-admin/PlatoForm'
 import PlatoEditPanel from '@/components/menu-admin/PlatoEditPanel'
 import PlatoDelDiaForm from '@/components/menu-admin/PlatoDelDiaForm'
+import PlatoGanadorForm from '@/components/menu-admin/PlatoGanadorForm'
 import { invalidateAll } from '@/lib/swr'
 import TimeRangeHelper from '@/components/ui/TimeRangeHelper'
 import Select from '@/components/ui/Select'
@@ -149,7 +150,8 @@ export default function MiMenuPage() {
   // El form del plato del día (borrador + cuarteto) vive en PlatoDelDiaForm,
   // montado con key={platoDiaSwr?.id ?? 'new'} — sin estado puntero.
   const [sorprendemeCatsMenu, setSorprendemeCatsMenu] = useState<string[]>([])
-  const [platoGanadorConfig, setPlatoGanadorConfig] = useState({ platoId: '', varianteId: '', titulo: 'Recomendado del chef', descripcion: '' })
+  // El form del ganador (borrador + cuarteto) vive en PlatoGanadorForm, montado
+  // con key={platoGanadorSwr?.id ?? 'new'} — sin estado puntero.
   // "Hay plato del día/ganador ACTIVO" se deriva de SWR (Fase 3) — antes eran
   // espejos locales seteados por efectos y por los handlers. Cambio semántico
   // aceptado: los consumidores a nivel de página (borrados, avisos, cross-check
@@ -157,10 +159,6 @@ export default function MiMenuPage() {
   // otro form ya no cuenta como "activo".
   const platoDiaActivo = !!platoDiaSwr?.activo
   const platoGanadorActivo = !!platoGanadorSwr?.activo
-  const [guardandoGanador, setGuardandoGanador] = useState(false)
-  const [guardadoGanador, setGuardadoGanador] = useState(false)
-  const [intentoGanador, setIntentoGanador] = useState(false)
-  const [touchedGanador, setTouchedGanador] = useState<Record<string, boolean>>({})
   const [horarioCategoria, setHorarioCategoria] = useState<string | null>(null)
   const [guardandoHorarioCat, setGuardandoHorarioCat] = useState(false)
   const [guardadoHorarioCat, setGuardadoHorarioCat] = useState(false)
@@ -233,56 +231,7 @@ export default function MiMenuPage() {
   
   // validarPlatoDia, guardar y desactivar viven en components/menu-admin/PlatoDelDiaForm.
 
-  function validarPlatoGanador(
-    state: { platoId: string },
-    otherActive?: { activo: boolean; platoId: string }
-  ): Record<string, string> {
-    const e: Record<string, string> = {}
-    if (!state.platoId) e.platoId = 'Selecciona un plato'
-
-    if (state.platoId && otherActive?.activo && otherActive.platoId === state.platoId) {
-      e.platoId = 'Este plato ya está configurado como plato del día. Selecciona otro o desactiva el plato del día primero.'
-    }
-
-    return e
-  }
-  async function guardarPlatoGanador() {
-    setIntentoGanador(true)
-    setTouchedGanador({ platoId: true, titulo: true })
-    const errores = validarPlatoGanador(platoGanadorConfig, {
-      activo: platoDiaActivo,
-      platoId: platoDiaSwr?.plato_id || '',
-    })
-    if (Object.keys(errores).length > 0 || !rest?.id) return
-    setGuardandoGanador(true)
-    const supabase = createClient()
-
-    // Borrar cualquier plato ganador anterior para garantizar exactamente
-    // 0 o 1 fila por restaurante (ver nota en guardarPlatoDia).
-    await supabase.from('plato_ganador').delete().eq('restaurante_id', rest.id)
-
-    await supabase.from('plato_ganador').insert({
-      restaurante_id: rest.id,
-      plato_id: platoGanadorConfig.platoId,
-      variante_id: platoGanadorConfig.varianteId || null,
-      titulo: platoGanadorConfig.titulo,
-      descripcion: platoGanadorConfig.descripcion || null,
-      activo: true,
-    })
-
-    await invalidateAll('plato-ganador')
-    setGuardandoGanador(false)
-    setGuardadoGanador(true)
-    setTimeout(() => setGuardadoGanador(false), 1200)
-  }
-
-  async function desactivarPlatoGanador() {
-    if (!rest?.id) return
-    const supabase = createClient()
-    await supabase.from('plato_ganador').delete().eq('restaurante_id', rest.id)
-    setPlatoGanadorConfig({ platoId: '', varianteId: '', titulo: 'Recomendado del chef', descripcion: '' })
-    await invalidateAll('plato-ganador')
-  }
+  // validarPlatoGanador, guardar y desactivar viven en components/menu-admin/PlatoGanadorForm.
 
   // Dos promos entran en conflicto si comparten ≥1 plato Y ≥1 día Y ≥1 variante de ese plato.
   // variante_id null (todas las variantes) cruza CUALQUIER variante específica y cruza otro null;
@@ -773,20 +722,6 @@ export default function MiMenuPage() {
     }))
   }, [todosPlatos])
 
-  // ── Seed form config from SWR ──
-  // Solo siembra el BORRADOR del form ganador (se va con su form en Fase 3);
-  // el día ya siembra por initializer en PlatoDelDiaForm (montado keyed).
-  useEffect(() => {
-    if (platoGanadorSwr?.activo) {
-      setPlatoGanadorConfig({
-        platoId: platoGanadorSwr.plato_id || '',
-        varianteId: platoGanadorSwr.variante_id ?? '',
-        titulo: platoGanadorSwr.titulo || 'Recomendado del chef',
-        descripcion: platoGanadorSwr.descripcion || '',
-      })
-    }
-  }, [platoGanadorSwr])
-
   useEffect(() => {
     if (configSwr?.sorprendeme_categorias) {
       setSorprendemeCatsMenu(configSwr.sorprendeme_categorias)
@@ -1009,7 +944,6 @@ export default function MiMenuPage() {
     }
     // Refrescar estado local de los destacados si la categoría borrada los ocupaba.
     if (eraGanador) {
-      setPlatoGanadorConfig({ platoId: '', varianteId: '', titulo: 'Recomendado del chef', descripcion: '' })
       await invalidateAll('plato-ganador')
     }
     if (eraDia) {
@@ -1126,7 +1060,6 @@ export default function MiMenuPage() {
     }
     // Refrescar estado local de los destacados si el plato borrado los ocupaba.
     if (eraGanador) {
-      setPlatoGanadorConfig({ platoId: '', varianteId: '', titulo: 'Recomendado del chef', descripcion: '' })
       await invalidateAll('plato-ganador')
     }
     if (eraDia) {
@@ -2198,169 +2131,19 @@ export default function MiMenuPage() {
             )}
 
             {/* === PLATO GANADOR === */}
-            {subTab === 'plato-ganador' && (() => {
-              const errores = validarPlatoGanador(platoGanadorConfig, {
-                activo: platoDiaActivo,
-                platoId: platoDiaSwr?.plato_id || '',
-              })
-              const valido = Object.keys(errores).length === 0
-              const tituloOptions = [
-                { value: 'Recomendado del chef', label: 'Recomendado del chef' },
-                { value: 'Favorito de los clientes', label: 'Favorito de los clientes' },
-                { value: 'Plato estrella', label: 'Plato estrella' },
-                { value: 'Especialidad de la casa', label: 'Especialidad de la casa' },
-                { value: 'El más pedido', label: 'El más pedido' },
-              ]
-              const platoGanadorErrorVisible = !!(
-                (intentoGanador && touchedGanador.platoId && errores.platoId) ||
-                (platoGanadorConfig.platoId && platoDiaActivo && platoDiaSwr?.plato_id === platoGanadorConfig.platoId)
-              )
-              return (
-              <div style={{ padding: '14px 20px' }}>
-                <div className="card" style={{ padding: '14px', marginBottom: '14px' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '4px' }}>Plato ganador</div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '14px' }}>
-                    Destaca un plato especial de tu restaurante. Aparecerá con un badge dorado en el menú.
-                  </div>
-
-                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Título del reconocimiento:</div>
-                  <div style={{ marginBottom: '10px' }}>
-                    <Select
-                      className="input"
-                      value={platoGanadorConfig.titulo}
-                      onChange={(v) => {
-                        setPlatoGanadorConfig({ ...platoGanadorConfig, titulo: v })
-                        setTouchedGanador(prev => ({ ...prev, titulo: true }))
-                      }}
-                      options={tituloOptions}
-                      placeholder="Recomendado del chef"
-                    />
-                  </div>
-
-                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Selecciona el plato:</div>
-                  <div style={{ marginBottom: platoGanadorErrorVisible ? '4px' : '10px' }}>
-                    <Select
-                      className="input"
-                      value={platoGanadorConfig.platoId}
-                      onChange={(v) => {
-                        const platoNuevo = todosPlatos.find(p => p.id === v)
-                        const nuevaVariante = (platoNuevo?.variantes && platoNuevo.variantes.length > 0)
-                          ? platoNuevo.variantes[0].id
-                          : ''
-                        setPlatoGanadorConfig({ ...platoGanadorConfig, platoId: v, varianteId: nuevaVariante })
-                        setTouchedGanador(prev => ({ ...prev, platoId: true }))
-                      }}
-                      options={platoGanadorOptions}
-                      placeholder="Seleccionar plato"
-                      required
-                      error={platoGanadorErrorVisible}
-                      ariaDescribedBy={platoGanadorErrorVisible ? 'plato-ganador-error' : undefined}
-                    />
-                  </div>
-                  {platoGanadorErrorVisible && (
-                    <div id="plato-ganador-error" style={{ fontSize: '11px', color: 'var(--color-danger)', marginBottom: '10px' }}>
-                      {errores.platoId}
-                    </div>
-                  )}
-                  {platoGanadorConfig.platoId && (() => {
-                    const h = getHorarioPlato(platoGanadorConfig.platoId)
-                    if (!h) return null
-                    return (
-                      <div style={{ fontSize: '11px', color: 'var(--color-warning)', background: 'var(--color-warning-light)', padding: '8px 10px', borderRadius: '6px', marginBottom: '10px' }}>
-                        ⚠ Este plato pertenece a una categoría visible solo de {formato12h(h.hora_inicio)} a {formato12h(h.hora_fin)}. El plato ganador solo se mostrará en ese horario.
-                      </div>
-                    )
-                  })()}
-                  {(() => {
-                    const platoSel = todosPlatos.find(p => p.id === platoGanadorConfig.platoId)
-                    const variantes = platoSel?.variantes ?? []
-                    if (variantes.length === 0) return null
-                    const opciones = [
-                      { value: '', label: <span style={{ color: 'var(--text-tertiary)' }}>Sin variante específica</span> },
-                      ...variantes.map(v => ({
-                        value: v.id,
-                        label: <span>{v.nombre} <span style={{ color: 'var(--text-tertiary)' }}>— ${formatoPrecio(v.precio)}</span></span>,
-                        searchText: `${v.nombre} ${v.precio}`.toLowerCase(),
-                      })),
-                    ]
-                    return (
-                      <>
-                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Variante:</div>
-                        <div style={{ marginBottom: '10px' }}>
-                          <Select
-                            className="input"
-                            value={platoGanadorConfig.varianteId}
-                            onChange={(v) => setPlatoGanadorConfig({ ...platoGanadorConfig, varianteId: v })}
-                            options={opciones}
-                            placeholder="Sin variante específica"
-                          />
-                        </div>
-                      </>
-                    )
-                  })()}
-
-                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Descripción especial (opcional):</div>
-                  <div style={{ position: 'relative', marginBottom: '10px' }}>
-                    <input className="input" placeholder="Ej: Nuestro plato insignia desde 2020"
-                      value={platoGanadorConfig.descripcion}
-                      onChange={(e) => { if (e.target.value.length <= 100) setPlatoGanadorConfig({ ...platoGanadorConfig, descripcion: e.target.value }) }}
-                      style={{ paddingRight: '50px' }} />
-                    <span style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', fontSize: '10px', color: platoGanadorConfig.descripcion.length > 80 ? 'var(--color-warning)' : 'var(--text-tertiary)' }}>
-                      {platoGanadorConfig.descripcion.length}/100
-                    </span>
-                  </div>
-
-                  {platoGanadorConfig.platoId && (() => {
-                    const platoPreview = todosPlatos.find(p => p.id === platoGanadorConfig.platoId)
-                    if (!platoPreview) return null
-                    const varianteLockedPreview = platoGanadorConfig.varianteId
-                      ? platoPreview.variantes?.find(v => v.id === platoGanadorConfig.varianteId)
-                      : null
-                    const tieneVariantesPreview = !!(platoPreview.variantes && platoPreview.variantes.length > 0)
-                    return (
-                      <div style={{ background: 'var(--color-warning-light)', borderRadius: '8px', padding: '12px', marginBottom: '12px' }}>
-                        <div style={{ fontSize: '11px', fontWeight: 500, color: 'var(--color-warning)', marginBottom: '6px' }}>Vista previa</div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-                          <span style={{ fontSize: '14px' }}>⭐</span>
-                          <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--color-warning)' }}>{platoGanadorConfig.titulo.toUpperCase()}</span>
-                        </div>
-                        <div style={{ fontSize: '14px', fontWeight: 500 }}>
-                          {platoPreview.nombre}{varianteLockedPreview ? ` · ${varianteLockedPreview.nombre}` : ''}
-                        </div>
-                        {platoGanadorConfig.descripcion && (
-                          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px', fontStyle: 'italic' }}>
-                            "{platoGanadorConfig.descripcion}"
-                          </div>
-                        )}
-                        <div style={{ fontSize: '13px', fontWeight: 500, marginTop: '4px' }}>
-                          {varianteLockedPreview
-                            ? `$${formatoPrecio(varianteLockedPreview.precio)}`
-                            : tieneVariantesPreview
-                              ? `desde $${formatoPrecio(platoPreview.precio)}`
-                              : `$${formatoPrecio(platoPreview.precio)}`}
-                        </div>
-                      </div>
-                    )
-                  })()}
-
-                  <button onClick={guardarPlatoGanador} disabled={guardandoGanador || guardadoGanador} className="btn-primary"
-                    style={{
-                      width: '100%', padding: '12px', fontSize: '13px',
-                      opacity: valido ? 1 : 0.5,
-                      cursor: valido ? 'pointer' : 'default',
-                      ...(valido ? {} : { transform: 'none', boxShadow: 'none' }),
-                    }}>
-                    {guardandoGanador ? 'Guardando...' : guardadoGanador ? '✓ Guardado' : platoGanadorActivo ? 'Actualizar plato ganador' : 'Guardar plato ganador'}
-                  </button>
-                  {platoGanadorActivo && (
-                    <button onClick={desactivarPlatoGanador} className="btn-outline" style={{ width: '100%', padding: '12px', fontSize: '13px', marginTop: '8px', color: 'var(--color-danger)' }}>
-                      Desactivar plato ganador
-                    </button>
-                  )}
-                </div>
-              </div>
-              )
-            })()}
+            {/* Keyed fresh-mount, espejo del plato del día. */}
+            {subTab === 'plato-ganador' && platoGanadorSwr !== undefined && (
+              <PlatoGanadorForm
+                key={platoGanadorSwr?.id ?? 'new'}
+                restId={rest?.id}
+                todosPlatos={todosPlatos}
+                horariosPorPlato={horariosPorPlato}
+                platoGanadorOptions={platoGanadorOptions}
+                initial={platoGanadorSwr}
+                diaActivo={platoDiaActivo}
+                diaPlatoId={platoDiaSwr?.plato_id || ''}
+              />
+            )}
 
             </>
             )}
