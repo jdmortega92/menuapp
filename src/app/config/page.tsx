@@ -7,8 +7,8 @@ import { useConfigRestaurante } from '@/hooks/data/useConfigRestaurante'
 import { useHorarios } from '@/hooks/data/useHorarios'
 import { useCategoriasYPlatos } from '@/hooks/data/useCategoriasYPlatos'
 import { createClient } from '@/lib/supabase-browser'
-import Cropper from 'react-easy-crop'
 import TimePicker from '@/components/ui/TimePicker'
+import CropModal from '@/components/ui/CropModal'
 import TimeRangeHelper from '@/components/ui/TimeRangeHelper'
 import PasswordInput from '@/components/ui/PasswordInput'
 import { isPasswordValid, getPasswordError } from '@/lib/passwordValidation'
@@ -74,14 +74,9 @@ export default function ConfigPage() {
   const [logoUrl, setLogoUrl] = useState<string | null>(null)
   const [bannerUrl, setBannerUrl] = useState<string | null>(null)
   const [subiendoImagen, setSubiendoImagen] = useState(false)
+  // Puntero del modal de recorte — crop/zoom/croppedAreaPixels viven en
+  // components/ui/CropModal (compartido con /menu desde Fase 3).
   const [cropModal, setCropModal] = useState<{ imagen: string; tipo: 'logo' | 'banner' } | null>(null)
-  const [crop, setCrop] = useState({ x: 0, y: 0 })
-  const [zoom, setZoom] = useState(1)
-  const [croppedAreaPixels, setCroppedAreaPixels] = useState<any>(null)
-
-  const onCropComplete = useCallback((croppedArea: any, croppedAreaPixels: any) => {
-    setCroppedAreaPixels(croppedAreaPixels)
-  }, [])
 
   // Seed form state from restaurante row + email from usuario
   useEffect(() => {
@@ -181,20 +176,7 @@ export default function ConfigPage() {
     { valor: 'food_truck', label: 'Food truck' },
     { valor: 'otro', label: 'Otro' },
   ]
-  function recortarImagen(imageSrc: string, pixelCrop: any, ancho: number, alto: number): Promise<Blob> {
-    return new Promise((resolve) => {
-      const img = new Image()
-      img.onload = () => {
-        const canvas = document.createElement('canvas')
-        const ctx = canvas.getContext('2d')!
-        canvas.width = ancho
-        canvas.height = alto
-        ctx.drawImage(img, pixelCrop.x, pixelCrop.y, pixelCrop.width, pixelCrop.height, 0, 0, ancho, alto)
-        canvas.toBlob((blob) => resolve(blob!), 'image/jpeg', 0.82)
-      }
-      img.src = imageSrc
-    })
-  }
+  // recortarImagen vive en lib/imagen; la UI de recorte en components/ui/CropModal.
 
   function seleccionarImagen(tipo: 'logo' | 'banner', file: File) {
     if (file.size > 10 * 1024 * 1024) {
@@ -203,18 +185,14 @@ export default function ConfigPage() {
     }
     const url = URL.createObjectURL(file)
     setCropModal({ imagen: url, tipo })
-    setCrop({ x: 0, y: 0 })
-    setZoom(1)
   }
 
-  async function confirmarRecorte() {
-    if (!cropModal || !croppedAreaPixels || !rest?.id) return
+  // Mitad de SUBIDA del pipeline: el blob ya viene recortado por CropModal
+  // (logo 400×400, banner 1200×400 — dims en las props del mount).
+  async function confirmarRecorte(blob: Blob) {
+    if (!cropModal || !rest?.id) return
     setSubiendoImagen(true)
     const tipo = cropModal.tipo
-
-    const ancho = tipo === 'logo' ? 400 : 1200
-    const alto = tipo === 'logo' ? 400 : 400
-    const blob = await recortarImagen(cropModal.imagen, croppedAreaPixels, ancho, alto)
 
     setCropModal(null)
 
@@ -1071,38 +1049,16 @@ export default function ConfigPage() {
         </div>
         {/* Modal recorte de imagen */}
         {cropModal && (
-          <>
-            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 80 }} />
-            <div style={{ position: 'fixed', inset: 0, zIndex: 90, display: 'flex', flexDirection: 'column', maxWidth: '500px', minWidth: '320px', margin: '0 auto' }}>
-              <div style={{ padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span onClick={() => setCropModal(null)} style={{ fontSize: '14px', color: 'white', cursor: 'pointer' }}>Cancelar</span>
-                <span style={{ fontSize: '15px', fontWeight: 500, color: 'white' }}>Ajustar {cropModal.tipo === 'logo' ? 'logo' : 'banner'}</span>
-                <span onClick={confirmarRecorte} style={{ fontSize: '14px', color: '#4CAF50', fontWeight: 500, cursor: 'pointer' }}>Listo</span>
-              </div>
-              <div style={{ position: 'relative', flex: 1 }}>
-                <Cropper
-                  image={cropModal.imagen}
-                  crop={crop}
-                  zoom={zoom}
-                  aspect={cropModal.tipo === 'logo' ? 1 : 3}
-                  onCropChange={setCrop}
-                  onZoomChange={setZoom}
-                  onCropComplete={onCropComplete}
-                  cropShape={cropModal.tipo === 'logo' ? 'round' : 'rect'}
-                />
-              </div>
-              <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', width: '100%', maxWidth: '300px' }}>
-                  <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)' }}>-</span>
-                  <input type="range" min={1} max={3} step={0.1} value={zoom}
-                    onChange={(e) => setZoom(Number(e.target.value))}
-                    style={{ flex: 1, accentColor: '#4CAF50' }} />
-                  <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)' }}>+</span>
-                </div>
-                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)' }}>Arrastra para ajustar · Zoom para acercar</div>
-              </div>
-            </div>
-          </>
+          <CropModal
+            imagen={cropModal.imagen}
+            aspect={cropModal.tipo === 'logo' ? 1 : 3}
+            cropShape={cropModal.tipo === 'logo' ? 'round' : 'rect'}
+            titulo={`Ajustar ${cropModal.tipo === 'logo' ? 'logo' : 'banner'}`}
+            anchoSalida={cropModal.tipo === 'logo' ? 400 : 1200}
+            altoSalida={400}
+            onConfirm={confirmarRecorte}
+            onCancel={() => setCropModal(null)}
+          />
         )}
         <BottomNav />
 
