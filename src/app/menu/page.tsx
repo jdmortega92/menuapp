@@ -20,14 +20,14 @@ import PlatoForm, { MAX_DESC, MAX_PRECIO } from '@/components/menu-admin/PlatoFo
 import PlatoEditPanel from '@/components/menu-admin/PlatoEditPanel'
 import PlatoDelDiaForm from '@/components/menu-admin/PlatoDelDiaForm'
 import PlatoGanadorForm from '@/components/menu-admin/PlatoGanadorForm'
+import ComboForm from '@/components/menu-admin/ComboForm'
 import { invalidateAll } from '@/lib/swr'
 import TimeRangeHelper from '@/components/ui/TimeRangeHelper'
 import Select from '@/components/ui/Select'
-import DiasSelector from '@/components/ui/DiasSelector'
 import { formato12h } from '@/lib/time'
 import { formatoPrecio } from '@/lib/precio'
 import { formatDias } from '@/lib/dias'
-import type { DiaSemana, Variante } from '@/types'
+import type { Variante } from '@/types'
 
 // construirTextoVinculaciones se movió a components/menu-admin/VarianteEditor
 // (lo comparten los modales de borrado de aquí y las notas de fila marcada del editor).
@@ -40,11 +40,7 @@ interface Categoria {
   id: string; nombre: string; orden: number; platos: Plato[]; hora_inicio?: string | null; hora_fin?: string | null
 }
 
-// F8.5b — Combo item shape for admin form state
-type ComboItem = {
-  plato_id: string
-  variante_id: string | null
-}
+// El shape ComboItem vive en components/menu-admin/ComboForm (F8.5b).
 
 // Promo item shape for admin form state. Unlike ComboItem, the variante lock is
 // OPTIONAL: variante_id === null means "todas las variantes" (no force-variante).
@@ -122,18 +118,15 @@ export default function MiMenuPage() {
     setCroppedAreaPixels(croppedAreaPixels)
   }, [])
   const [subTab, setSubTab] = useState<'combos' | 'promos' | 'plato-dia' | 'plato-ganador'>('combos')
+  // Punteros del form de combo (crear/editar) — el borrador, su cuarteto y la
+  // búsqueda de platos viven en ComboForm (fresh-mount keyed en editandoComboId).
   const [mostrarFormCombo, setMostrarFormCombo] = useState(false)
-  const [mostrarFormPromo, setMostrarFormPromo] = useState(false)
-  const [nuevoCombo, setNuevoCombo] = useState({
-    nombre: '', descripcion: '', platoIds: [] as ComboItem[], precio: '',
-    dias: [] as DiaSemana[], horaInicio: '', horaFin: '',
-  })
-  const [intentoCombo, setIntentoCombo] = useState(false)
-  const [touchedCombo, setTouchedCombo] = useState<Record<string, boolean>>({})
   const [editandoComboId, setEditandoComboId] = useState<string | null>(null)
-  const [busquedaPlatosCombo, setBusquedaPlatosCombo] = useState('')
-  const [guardandoCombo, setGuardandoCombo] = useState(false)
-  const [guardadoCombo, setGuardadoCombo] = useState(false)
+  const cerrarFormCombo = useCallback(() => {
+    setMostrarFormCombo(false)
+    setEditandoComboId(null)
+  }, [])
+  const [mostrarFormPromo, setMostrarFormPromo] = useState(false)
   const [nuevaPromo, setNuevaPromo] = useState({ nombre: '', descripcion: '', tipo: '', valor: '', dias: [] as string[], platoIds: [] as PromoItem[] })
   const [intentoPromo, setIntentoPromo] = useState(false)
   const [touchedPromo, setTouchedPromo] = useState<Record<string, boolean>>({})
@@ -734,166 +727,8 @@ export default function MiMenuPage() {
       router.push('/login')
     }
   }, [cargandoAuth, usuario, router])
-  const precioIndividualCombo = useMemo(() => {
-    return nuevoCombo.platoIds.reduce((sum: number, item: ComboItem) => {
-      const plato = todosPlatos.find(p => p.id === item.plato_id)
-      if (!plato) return sum
-      if (item.variante_id) {
-        const v = plato.variantes?.find(x => x.id === item.variante_id)
-        if (v) return sum + v.precio
-      }
-      return sum + (plato.precio || 0)
-    }, 0)
-  }, [nuevoCombo.platoIds, todosPlatos])
-  function validarCombo(state: { nombre: string; precio: string; platoIds: ComboItem[] }): Record<string, string> {
-    const e: Record<string, string> = {}
-    if (!state.nombre.trim()) e.nombre = 'El nombre es obligatorio'
-    const precioNum = parseInt(state.precio)
-    if (!state.precio || isNaN(precioNum) || precioNum <= 0) e.precio = 'El precio debe ser mayor a 0'
-    else if (precioNum > MAX_PRECIO) e.precio = 'El precio no puede superar $10.000.000'
-    if (state.platoIds.length < 2) {
-      e.platos = 'Selecciona al menos 2 platos'
-    } else {
-      // F8.5b — force-variante: every plato with variantes must have one picked
-      const faltan = state.platoIds.some(item => {
-        const plato = todosPlatos.find(p => p.id === item.plato_id)
-        return plato?.variantes?.length && !item.variante_id
-      })
-      if (faltan) e.platos = 'Selecciona una variante para cada plato con opciones'
-    }
-    return e
-  }
-  async function agregarCombo() {
-    setIntentoCombo(true)
-    setTouchedCombo({ nombre: true, precio: true, platos: true })
-    const errores = validarCombo(nuevoCombo)
-    if (Object.keys(errores).length > 0 || !rest?.id) return
-    setGuardandoCombo(true)
-    const supabase = createClient()
-
-    // Step 1: insert with activo: false so public menu can't see it yet
-    const { data: comboData, error } = await supabase.from('combos').insert({
-      restaurante_id: rest.id,
-      nombre: nuevoCombo.nombre,
-      descripcion: nuevoCombo.descripcion || null,
-      precio: parseInt(nuevoCombo.precio),
-      precio_individual: precioIndividualCombo,
-      activo: false,
-      dias: nuevoCombo.dias.length > 0 ? nuevoCombo.dias : null,
-      horario_inicio: nuevoCombo.horaInicio || null,
-      horario_fin: nuevoCombo.horaFin || null,
-    }).select().single()
-
-    if (error || !comboData) { setGuardandoCombo(false); alert('Error al crear combo'); return }
-
-    // Step 2: insert junction rows
-    if (nuevoCombo.platoIds.length > 0) {
-      const { error: cpError } = await supabase.from('combo_platos').insert(
-        nuevoCombo.platoIds.map((item: ComboItem) => ({
-          combo_id: comboData.id,
-          plato_id: item.plato_id,
-          variante_id: item.variante_id,
-        }))
-      )
-      if (cpError) {
-        await supabase.from('combos').delete().eq('id', comboData.id)
-        setGuardandoCombo(false)
-        alert('Error al asociar platos al combo')
-        return
-      }
-    }
-
-    // Step 3: activate the combo so the public menu picks it up complete
-    const { error: actError } = await supabase.from('combos')
-      .update({ activo: true })
-      .eq('id', comboData.id)
-
-    if (actError) {
-      setGuardandoCombo(false)
-      alert('Error al activar el combo')
-      return
-    }
-
-    await invalidateAll('combos')
-    setGuardandoCombo(false)
-    setGuardadoCombo(true)
-    setTimeout(() => {
-      setGuardadoCombo(false)
-      setNuevoCombo({ nombre: '', descripcion: '', platoIds: [] as ComboItem[], precio: '', dias: [], horaInicio: '', horaFin: '' })
-      setIntentoCombo(false)
-      setTouchedCombo({})
-      setMostrarFormCombo(false)
-      setBusquedaPlatosCombo('')
-    }, 1200)
-  }
-  async function actualizarCombo() {
-    if (!editandoComboId) return
-    setIntentoCombo(true)
-    setTouchedCombo({ nombre: true, precio: true, platos: true })
-    const errores = validarCombo(nuevoCombo)
-    if (Object.keys(errores).length > 0) return
-    setGuardandoCombo(true)
-    const supabase = createClient()
-
-    const wasActive = combos.find(c => c.id === editandoComboId)?.activo ?? true
-
-    // Step 1: update fields and deactivate so public menu can't see partial state
-    const { error } = await supabase.from('combos').update({
-      nombre: nuevoCombo.nombre,
-      descripcion: nuevoCombo.descripcion || null,
-      precio: parseInt(nuevoCombo.precio),
-      precio_individual: precioIndividualCombo,
-      dias: nuevoCombo.dias.length > 0 ? nuevoCombo.dias : null,
-      horario_inicio: nuevoCombo.horaInicio || null,
-      horario_fin: nuevoCombo.horaFin || null,
-      activo: false,
-    }).eq('id', editandoComboId)
-
-    if (error) { setGuardandoCombo(false); alert('Error al actualizar combo'); return }
-
-    // Step 2: delete old junction rows
-    await supabase.from('combo_platos').delete().eq('combo_id', editandoComboId)
-
-    // Step 3: insert new junction rows
-    if (nuevoCombo.platoIds.length > 0) {
-      const { error: cpError } = await supabase.from('combo_platos').insert(
-        nuevoCombo.platoIds.map((item: ComboItem) => ({
-          combo_id: editandoComboId,
-          plato_id: item.plato_id,
-          variante_id: item.variante_id,
-        }))
-      )
-      if (cpError) {
-        setGuardandoCombo(false)
-        alert('Error al asociar platos al combo. El combo quedó desactivado.')
-        return
-      }
-    }
-
-    // Step 4: restore original active state
-    const { error: actError } = await supabase.from('combos')
-      .update({ activo: wasActive })
-      .eq('id', editandoComboId)
-
-    if (actError) {
-      setGuardandoCombo(false)
-      alert('Error al reactivar el combo. Puedes activarlo manualmente desde la lista.')
-      return
-    }
-
-    await invalidateAll('combos')
-    setGuardandoCombo(false)
-    setGuardadoCombo(true)
-    setTimeout(() => {
-      setGuardadoCombo(false)
-      setNuevoCombo({ nombre: '', descripcion: '', platoIds: [] as ComboItem[], precio: '', dias: [], horaInicio: '', horaFin: '' })
-      setIntentoCombo(false)
-      setTouchedCombo({})
-      setMostrarFormCombo(false)
-      setEditandoComboId(null)
-      setBusquedaPlatosCombo('')
-    }, 1200)
-  }
+  // validarCombo, precioIndividual y los guardados de combo viven en
+  // components/menu-admin/ComboForm.
   async function toggleCombo(id: string) {
     const combo = combos.find(c => c.id === id)
     if (!combo) return
@@ -1467,212 +1302,26 @@ export default function MiMenuPage() {
                     <div style={{ fontSize: '32px', marginBottom: '8px' }}>🍱</div>
                     <div style={{ fontSize: '14px', fontWeight: 500, marginBottom: '4px' }}>Sin combos</div>
                     <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '16px' }}>Crea paquetes de platos con descuento</div>
-                    <button onClick={() => { setEditandoComboId(null); setNuevoCombo({ nombre: '', descripcion: '', platoIds: [] as ComboItem[], precio: '', dias: [], horaInicio: '', horaFin: '' }); setBusquedaPlatosCombo(''); setMostrarFormCombo(true); setIntentoCombo(false); setTouchedCombo({}) }} className="btn-primary" style={{ padding: '10px 20px', fontSize: '13px' }}>+ Crear combo</button>
+                    <button onClick={() => { setEditandoComboId(null); setMostrarFormCombo(true) }} className="btn-primary" style={{ padding: '10px 20px', fontSize: '13px' }}>+ Crear combo</button>
                   </div>
                 ) : (
                   <>
                     {!mostrarFormCombo && (
-                      <button onClick={() => { setEditandoComboId(null); setNuevoCombo({ nombre: '', descripcion: '', platoIds: [] as ComboItem[], precio: '', dias: [], horaInicio: '', horaFin: '' }); setBusquedaPlatosCombo(''); setMostrarFormCombo(true); setIntentoCombo(false); setTouchedCombo({}) }} className="btn-primary" style={{ padding: '8px 14px', fontSize: '13px', marginBottom: '14px' }}>+ Crear combo</button>
+                      <button onClick={() => { setEditandoComboId(null); setMostrarFormCombo(true) }} className="btn-primary" style={{ padding: '8px 14px', fontSize: '13px', marginBottom: '14px' }}>+ Crear combo</button>
                     )}
                   </>
                 )}
 
-                {mostrarFormCombo && (() => {
-                  const errores = validarCombo(nuevoCombo)
-                  const valido = Object.keys(errores).length === 0
-                  const totalPlatosCombo = todosPlatos.length
-                  const platosFiltradosCombo = busquedaPlatosCombo.trim()
-                    ? todosPlatos.filter(p => p.nombre.toLowerCase().includes(busquedaPlatosCombo.toLowerCase()))
-                    : todosPlatos
-                  return (
-                  <div className="card" style={{ padding: '14px', marginBottom: '14px' }}>
-                    <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '10px' }}>{editandoComboId ? 'Editar combo' : 'Nuevo combo'}</div>
-                    <input className="input" placeholder="Nombre del combo (ej: Combo paisa)" value={nuevoCombo.nombre} maxLength={50}
-                      onChange={(e) => setNuevoCombo({ ...nuevoCombo, nombre: e.target.value })}
-                      onBlur={() => setTouchedCombo(prev => ({ ...prev, nombre: true }))}
-                      style={{
-                        marginBottom: intentoCombo && touchedCombo.nombre && errores.nombre ? '4px' : '8px',
-                        borderColor: intentoCombo && touchedCombo.nombre && errores.nombre ? 'var(--color-danger)' : undefined,
-                      }} />
-                    {intentoCombo && touchedCombo.nombre && errores.nombre && (
-                      <div style={{ fontSize: '11px', color: 'var(--color-danger)', marginBottom: '8px' }}>
-                        {errores.nombre}
-                      </div>
-                    )}
-                    <input className="input" placeholder="Descripción (opcional)" value={nuevoCombo.descripcion || ''}
-                      onChange={(e) => {
-                        if (e.target.value.length <= MAX_DESC) setNuevoCombo({ ...nuevoCombo, descripcion: e.target.value })
-                      }}
-                      style={{ marginBottom: '2px' }} />
-                    <div style={{
-                      textAlign: 'right',
-                      fontSize: '10px',
-                      color: (nuevoCombo.descripcion || '').length > MAX_DESC - 20
-                        ? 'var(--color-warning)'
-                        : 'var(--text-tertiary)',
-                      marginBottom: '8px',
-                    }}>
-                      {(nuevoCombo.descripcion || '').length}/{MAX_DESC}
-                    </div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Selecciona los platos:</div>
-                    {totalPlatosCombo >= 10 && (
-                      <input
-                        className="input"
-                        type="text"
-                        placeholder="Buscar plato..."
-                        value={busquedaPlatosCombo}
-                        onChange={(e) => setBusquedaPlatosCombo(e.target.value)}
-                        style={{ marginBottom: '6px', fontSize: '12px' }}
-                      />
-                    )}
-                    <div style={{ maxHeight: '160px', overflowY: 'auto', marginBottom: '8px' }}>
-                      {platosFiltradosCombo.map(p => {
-                        const currentItem = nuevoCombo.platoIds.find((i: ComboItem) => i.plato_id === p.id)
-                        const isSelected = !!currentItem
-                        const tieneVariantes = !!p.variantes && p.variantes.length > 0
-                        const precioMostrar = (() => {
-                          if (currentItem?.variante_id) {
-                            const v = p.variantes?.find(x => x.id === currentItem.variante_id)
-                            if (v) return v.precio
-                          }
-                          return p.precio
-                        })()
-                        return (
-                          <div key={p.id} onClick={() => {
-                            const yaSeleccionado = nuevoCombo.platoIds.some((i: ComboItem) => i.plato_id === p.id)
-                            const sel: ComboItem[] = yaSeleccionado
-                              ? nuevoCombo.platoIds.filter((i: ComboItem) => i.plato_id !== p.id)
-                              : [...nuevoCombo.platoIds, {
-                                  plato_id: p.id,
-                                  variante_id: p.variantes?.[0]?.id ?? null,
-                                }]
-                            setNuevoCombo({ ...nuevoCombo, platoIds: sel })
-                            setTouchedCombo(prev => ({ ...prev, platos: true }))
-                          }} style={{
-                            padding: '8px 10px',
-                            borderBottom: '1px solid var(--border-light)', cursor: 'pointer',
-                            background: isSelected ? 'var(--color-info-light)' : 'transparent',
-                          }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <div>
-                                <span style={{ fontSize: '12px' }}>{p.nombre}</span>
-                                {(() => { const h = getHorarioPlato(p.id); return h ? <span style={{ fontSize: '9px', color: 'var(--color-warning)', marginLeft: '4px' }}>⏰ {formato12h(h.hora_inicio)}–{formato12h(h.hora_fin)}</span> : null })()}
-                              </div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>${formatoPrecio(precioMostrar)}</span>
-                                {isSelected && <span style={{ color: 'var(--color-info)', fontSize: '12px' }}>✓</span>}
-                              </div>
-                            </div>
-                            {isSelected && tieneVariantes && (
-                              <div onClick={(e) => e.stopPropagation()} style={{ marginTop: '6px' }}>
-                                <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginBottom: '4px' }}>
-                                  Variante:
-                                </div>
-                                <Select
-                                  value={currentItem?.variante_id ?? ''}
-                                  onChange={(v) => {
-                                    const sel = nuevoCombo.platoIds.map((item: ComboItem) =>
-                                      item.plato_id === p.id ? { ...item, variante_id: v as string } : item
-                                    )
-                                    setNuevoCombo({ ...nuevoCombo, platoIds: sel })
-                                  }}
-                                  options={(p.variantes ?? []).map((v: any) => ({
-                                    value: v.id,
-                                    label: (
-                                      <span>
-                                        {v.nombre}
-                                        <span style={{ color: 'var(--text-tertiary)' }}>
-                                          {' '}— ${formatoPrecio(v.precio)}
-                                        </span>
-                                      </span>
-                                    ),
-                                    searchText: v.nombre,
-                                  }))}
-                                  placeholder="Selecciona variante"
-                                  error={intentoCombo && !!errores.platos && !currentItem?.variante_id}
-                                />
-                              </div>
-                            )}
-                          </div>
-                        )
-                      })}
-                    </div>
-                    {intentoCombo && touchedCombo.platos && errores.platos && (
-                      <div style={{ fontSize: '11px', color: 'var(--color-danger)', marginBottom: '8px' }}>
-                        {errores.platos}
-                      </div>
-                    )}
-                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px', marginTop: '4px' }}>
-                      Días activos (opcional):
-                    </div>
-                    <DiasSelector
-                      value={nuevoCombo.dias}
-                      onChange={(dias) => setNuevoCombo({ ...nuevoCombo, dias })}
-                    />
-                    <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '4px', marginBottom: '10px' }}>
-                      Sin selección = visible todos los días
-                    </div>
-
-                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>
-                      Horario (opcional):
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                      <TimePicker
-                        value={nuevoCombo.horaInicio}
-                        onChange={(v) => setNuevoCombo({ ...nuevoCombo, horaInicio: v })}
-                      />
-                      <span style={{ color: 'var(--text-tertiary)', fontSize: '13px' }}>—</span>
-                      <TimePicker
-                        value={nuevoCombo.horaFin}
-                        onChange={(v) => setNuevoCombo({ ...nuevoCombo, horaFin: v })}
-                      />
-                    </div>
-                    <TimeRangeHelper
-                      start={nuevoCombo.horaInicio || null}
-                      end={nuevoCombo.horaFin || null}
-                      verb="Combo disponible"
-                    />
-                    <div style={{ marginBottom: '10px' }} />
-                    <input className="input" type="number" placeholder="Precio del combo" value={nuevoCombo.precio}
-                      onChange={(e) => setNuevoCombo({ ...nuevoCombo, precio: e.target.value })}
-                      onBlur={() => setTouchedCombo(prev => ({ ...prev, precio: true }))}
-                      style={{
-                        marginBottom: intentoCombo && touchedCombo.precio && errores.precio ? '4px' : '8px',
-                        borderColor: intentoCombo && touchedCombo.precio && errores.precio ? 'var(--color-danger)' : undefined,
-                      }} />
-                    {intentoCombo && touchedCombo.precio && errores.precio && (
-                      <div style={{ fontSize: '11px', color: 'var(--color-danger)', marginBottom: '8px' }}>
-                        {errores.precio}
-                      </div>
-                    )}
-                    {nuevoCombo.platoIds.length > 0 && nuevoCombo.precio && (
-                      <div style={{ fontSize: '12px', color: 'var(--color-green)', marginBottom: '8px' }}>
-                        Ahorro: ${formatoPrecio(precioIndividualCombo - parseInt(nuevoCombo.precio || '0'))} ({Math.round(((precioIndividualCombo - parseInt(nuevoCombo.precio || '0')) / precioIndividualCombo) * 100)}% descuento)
-                      </div>
-                    )}
-                    {nuevoCombo.platoIds.length > 0 && (() => {
-                      const platosConHorario = nuevoCombo.platoIds.map((item: ComboItem) => ({ id: item.plato_id, horario: getHorarioPlato(item.plato_id) })).filter(p => p.horario)
-                      if (platosConHorario.length === 0) return null
-                      const horarios = platosConHorario.map(p => `${p.horario!.hora_inicio}–${p.horario!.hora_fin}`)
-                      return (
-                        <div style={{ fontSize: '11px', color: 'var(--color-warning)', background: 'var(--color-warning-light)', padding: '8px 10px', borderRadius: '6px', marginBottom: '8px' }}>
-                          ⚠ Este combo incluye platos con horario restringido ({horarios.join(', ')}). El combo solo será visible cuando todos los platos estén activos.
-                        </div>
-                      )
-                    })()}
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <button onClick={editandoComboId ? actualizarCombo : agregarCombo} disabled={guardandoCombo || guardadoCombo} className="btn-primary"
-                        style={{
-                          flex: 1, padding: '10px', fontSize: '13px',
-                          opacity: valido ? 1 : 0.5,
-                          cursor: valido ? 'pointer' : 'default',
-                          ...(valido ? {} : { transform: 'none', boxShadow: 'none' }),
-                        }}>{guardandoCombo ? 'Guardando...' : guardadoCombo ? '✓ Guardado' : editandoComboId ? 'Guardar cambios' : 'Crear'}</button>
-                      <button onClick={() => { setMostrarFormCombo(false); setIntentoCombo(false); setTouchedCombo({}); setNuevoCombo({ nombre: '', descripcion: '', platoIds: [] as ComboItem[], precio: '', dias: [], horaInicio: '', horaFin: '' }); setBusquedaPlatosCombo(''); setEditandoComboId(null) }} className="btn-outline" style={{ flex: 1, padding: '10px', fontSize: '13px' }}>Cancelar</button>
-                    </div>
-                  </div>
-                  )
-                })()}
+                {mostrarFormCombo && (
+                  <ComboForm
+                    key={editandoComboId ?? 'new'}
+                    restId={rest?.id}
+                    todosPlatos={todosPlatos}
+                    horariosPorPlato={horariosPorPlato}
+                    comboInicial={editandoComboId ? combos.find(c => c.id === editandoComboId) ?? null : null}
+                    onClose={cerrarFormCombo}
+                  />
+                )}
 
                 {combos.map((combo) => (
                   <div key={combo.id} className="card" style={{ padding: '14px', marginBottom: '8px' }}>
@@ -1706,23 +1355,10 @@ export default function MiMenuPage() {
                           <div style={{ width: '16px', height: '16px', borderRadius: '50%', background: 'white', position: 'absolute', top: '2px', left: combo.activo ? '18px' : '2px', transition: 'left 0.2s' }} />
                         </div>
                         <span onClick={() => {
-                          setNuevoCombo({
-                            nombre: combo.nombre,
-                            descripcion: combo.descripcion || '',
-                            platoIds: (combo.combo_platos ?? []).map((cp: any) => ({
-                              plato_id: cp.plato_id,
-                              variante_id: cp.variante_id ?? null,
-                            })) as ComboItem[],
-                            precio: combo.precio.toString(),
-                            dias: combo.dias || [],
-                            horaInicio: combo.horario_inicio || '',
-                            horaFin: combo.horario_fin || '',
-                          })
+                          // El seeding del borrador lo hace ComboForm al montar
+                          // (keyed en editandoComboId, lee comboInicial).
                           setEditandoComboId(combo.id)
                           setMostrarFormCombo(true)
-                          setIntentoCombo(false)
-                          setTouchedCombo({})
-                          setBusquedaPlatosCombo('')
                           window.scrollTo({ top: 0, behavior: 'smooth' })
                         }} style={{ display: 'inline-flex', alignItems: 'center', cursor: 'pointer', color: 'var(--color-info)' }}>
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
