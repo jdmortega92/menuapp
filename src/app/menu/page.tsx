@@ -151,10 +151,15 @@ export default function MiMenuPage() {
   const [guardadoPlatoDia, setGuardadoPlatoDia] = useState(false)
   const [intentoPlatoDia, setIntentoPlatoDia] = useState(false)
   const [touchedPlatoDia, setTouchedPlatoDia] = useState<Record<string, boolean>>({})
-  const [platoDiaActivo, setPlatoDiaActivo] = useState(false)
   const [sorprendemeCatsMenu, setSorprendemeCatsMenu] = useState<string[]>([])
   const [platoGanadorConfig, setPlatoGanadorConfig] = useState({ platoId: '', varianteId: '', titulo: 'Recomendado del chef', descripcion: '' })
-  const [platoGanadorActivo, setPlatoGanadorActivo] = useState(false)
+  // "Hay plato del día/ganador ACTIVO" se deriva de SWR (Fase 3) — antes eran
+  // espejos locales seteados por efectos y por los handlers. Cambio semántico
+  // aceptado: los consumidores a nivel de página (borrados, avisos, cross-check
+  // día↔ganador) leen ahora el registro GUARDADO; un borrador sin guardar en el
+  // otro form ya no cuenta como "activo".
+  const platoDiaActivo = !!platoDiaSwr?.activo
+  const platoGanadorActivo = !!platoGanadorSwr?.activo
   const [guardandoGanador, setGuardandoGanador] = useState(false)
   const [guardadoGanador, setGuardadoGanador] = useState(false)
   const [intentoGanador, setIntentoGanador] = useState(false)
@@ -189,9 +194,9 @@ export default function MiMenuPage() {
       }
     })
 
-    // Plato del día
-    if (platoDiaActivo && platosIds.includes(platoDiaConfig.platoId)) {
-      const platoNombre = cat.platos.find(p => p.id === platoDiaConfig.platoId)?.nombre || 'Plato'
+    // Plato del día (registro guardado en SWR, no el borrador del form)
+    if (platoDiaActivo && platosIds.includes(platoDiaSwr?.plato_id)) {
+      const platoNombre = cat.platos.find(p => p.id === platoDiaSwr?.plato_id)?.nombre || 'Plato'
       afectados.push(`Plato del día "${platoNombre}" — solo visible en este horario`)
     }
 
@@ -279,7 +284,6 @@ export default function MiMenuPage() {
       fecha: fechaColombia(),
     })
 
-    setPlatoDiaActivo(true)
     await invalidateAll('plato-del-dia')
     setGuardandoPlatoDia(false)
     setGuardadoPlatoDia(true)
@@ -323,7 +327,6 @@ export default function MiMenuPage() {
       activo: true,
     })
 
-    setPlatoGanadorActivo(true)
     await invalidateAll('plato-ganador')
     setGuardandoGanador(false)
     setGuardadoGanador(true)
@@ -334,7 +337,6 @@ export default function MiMenuPage() {
     if (!rest?.id) return
     const supabase = createClient()
     await supabase.from('plato_ganador').delete().eq('restaurante_id', rest.id)
-    setPlatoGanadorActivo(false)
     setPlatoGanadorConfig({ platoId: '', varianteId: '', titulo: 'Recomendado del chef', descripcion: '' })
     await invalidateAll('plato-ganador')
   }
@@ -343,7 +345,6 @@ export default function MiMenuPage() {
     if (!rest?.id) return
     const supabase = createClient()
     await supabase.from('plato_del_dia').delete().eq('restaurante_id', rest.id)
-    setPlatoDiaActivo(false)
     setPlatoDiaConfig({ platoId: '', varianteId: '', precioEspecial: '', horaInicio: '11:00', horaFin: '15:00' })
     await invalidateAll('plato-del-dia')
   }
@@ -837,37 +838,29 @@ export default function MiMenuPage() {
     }))
   }, [todosPlatos])
 
-  // ── Seed MIXED states from SWR ──
+  // ── Seed form configs from SWR ──
+  // Solo siembran los BORRADORES de los forms día/ganador (se van con sus forms
+  // en Fase 3); el "activo" ya se deriva de SWR directamente.
   useEffect(() => {
-    if (platoDiaSwr !== undefined) {
-      if (platoDiaSwr && platoDiaSwr.activo) {
-        setPlatoDiaConfig({
-          platoId: platoDiaSwr.plato_id || '',
-          varianteId: platoDiaSwr.variante_id ?? '',
-          precioEspecial: platoDiaSwr.precio_especial?.toString() || '',
-          horaInicio: platoDiaSwr.horario_inicio || '11:00',
-          horaFin: platoDiaSwr.horario_fin || '15:00',
-        })
-        setPlatoDiaActivo(true)
-      } else {
-        setPlatoDiaActivo(false)
-      }
+    if (platoDiaSwr?.activo) {
+      setPlatoDiaConfig({
+        platoId: platoDiaSwr.plato_id || '',
+        varianteId: platoDiaSwr.variante_id ?? '',
+        precioEspecial: platoDiaSwr.precio_especial?.toString() || '',
+        horaInicio: platoDiaSwr.horario_inicio || '11:00',
+        horaFin: platoDiaSwr.horario_fin || '15:00',
+      })
     }
   }, [platoDiaSwr])
 
   useEffect(() => {
-    if (platoGanadorSwr !== undefined) {
-      if (platoGanadorSwr && platoGanadorSwr.activo) {
-        setPlatoGanadorConfig({
-          platoId: platoGanadorSwr.plato_id || '',
-          varianteId: platoGanadorSwr.variante_id ?? '',
-          titulo: platoGanadorSwr.titulo || 'Recomendado del chef',
-          descripcion: platoGanadorSwr.descripcion || '',
-        })
-        setPlatoGanadorActivo(true)
-      } else {
-        setPlatoGanadorActivo(false)
-      }
+    if (platoGanadorSwr?.activo) {
+      setPlatoGanadorConfig({
+        platoId: platoGanadorSwr.plato_id || '',
+        varianteId: platoGanadorSwr.variante_id ?? '',
+        titulo: platoGanadorSwr.titulo || 'Recomendado del chef',
+        descripcion: platoGanadorSwr.descripcion || '',
+      })
     }
   }, [platoGanadorSwr])
 
@@ -1080,12 +1073,12 @@ export default function MiMenuPage() {
     const supabase = createClient()
     const cat = categorias.find(c => c.id === id)
     const platosIds = cat ? cat.platos.map(p => p.id) : []
-    const eraGanador = platoGanadorActivo && platosIds.includes(platoGanadorConfig.platoId)
-    const eraDia = platoDiaActivo && platosIds.includes(platoDiaConfig.platoId)
+    const eraGanador = platoGanadorActivo && platosIds.includes(platoGanadorSwr?.plato_id)
+    const eraDia = platoDiaActivo && platosIds.includes(platoDiaSwr?.plato_id)
     // plato_ganador.plato_id es NO ACTION (no cascada): si alguno de los platos de la
     // categoría es el ganador actual, hay que borrar su fila ANTES, o el DELETE de platos
     // fallaría por violación de FK. combo_platos / promo_platos / plato_del_dia SÍ son CASCADE.
-    if (eraGanador) await supabase.from('plato_ganador').delete().eq('plato_id', platoGanadorConfig.platoId)
+    if (eraGanador) await supabase.from('plato_ganador').delete().eq('plato_id', platoGanadorSwr.plato_id)
     const { error } = await supabase.from('platos').delete().eq('categoria_id', id)
     if (error) {
       alert('No se pudo eliminar la categoría. Intentá de nuevo.')
@@ -1093,12 +1086,10 @@ export default function MiMenuPage() {
     }
     // Refrescar estado local de los destacados si la categoría borrada los ocupaba.
     if (eraGanador) {
-      setPlatoGanadorActivo(false)
       setPlatoGanadorConfig({ platoId: '', varianteId: '', titulo: 'Recomendado del chef', descripcion: '' })
       await invalidateAll('plato-ganador')
     }
     if (eraDia) {
-      setPlatoDiaActivo(false)
       setPlatoDiaConfig({ platoId: '', varianteId: '', precioEspecial: '', horaInicio: '11:00', horaFin: '15:00' })
       await invalidateAll('plato-del-dia')
     }
@@ -1199,8 +1190,8 @@ export default function MiMenuPage() {
   }
   async function eliminarPlato(categoriaId: string, platoId: string) {
     const supabase = createClient()
-    const eraGanador = platoGanadorActivo && platoGanadorConfig.platoId === platoId
-    const eraDia = platoDiaActivo && platoDiaConfig.platoId === platoId
+    const eraGanador = platoGanadorActivo && platoGanadorSwr?.plato_id === platoId
+    const eraDia = platoDiaActivo && platoDiaSwr?.plato_id === platoId
     // plato_ganador.plato_id es NO ACTION (no cascada): si el plato es el ganador actual,
     // hay que borrar su fila ANTES del DELETE de platos o fallaría por violación de FK.
     // Gateado en eraGanador (evita un round-trip cuando no es el ganador).
@@ -1213,12 +1204,10 @@ export default function MiMenuPage() {
     }
     // Refrescar estado local de los destacados si el plato borrado los ocupaba.
     if (eraGanador) {
-      setPlatoGanadorActivo(false)
       setPlatoGanadorConfig({ platoId: '', varianteId: '', titulo: 'Recomendado del chef', descripcion: '' })
       await invalidateAll('plato-ganador')
     }
     if (eraDia) {
-      setPlatoDiaActivo(false)
       setPlatoDiaConfig({ platoId: '', varianteId: '', precioEspecial: '', horaInicio: '11:00', horaFin: '15:00' })
       await invalidateAll('plato-del-dia')
     }
@@ -1463,8 +1452,8 @@ export default function MiMenuPage() {
                         const categoryPlatoIds = cat.platos.map(p => p.id)
                         const combosCount = combos.filter(c => c.platosIds.some((id: string) => categoryPlatoIds.includes(id))).length
                         const promosCount = promos.filter(p => p.activo && p.platosIds.some((id: string) => categoryPlatoIds.includes(id))).length
-                        const esDiaActual = platoDiaActivo && categoryPlatoIds.includes(platoDiaConfig.platoId)
-                        const esGanadorActual = platoGanadorActivo && categoryPlatoIds.includes(platoGanadorConfig.platoId)
+                        const esDiaActual = platoDiaActivo && categoryPlatoIds.includes(platoDiaSwr?.plato_id)
+                        const esGanadorActual = platoGanadorActivo && categoryPlatoIds.includes(platoGanadorSwr?.plato_id)
                         setMenuCategoria(null)
                         setCategoriaDeleteWarning({
                           categoriaId: cat.id,
@@ -1529,8 +1518,8 @@ export default function MiMenuPage() {
                               // día/ganador por la config local. Promos: solo ACTIVAS.
                               const combosCount = combos.filter(c => c.platosIds.includes(plato.id)).length
                               const promosCount = promos.filter(p => p.activo && p.platosIds.includes(plato.id)).length
-                              const esDiaActual = platoDiaActivo && platoDiaConfig.platoId === plato.id
-                              const esGanadorActual = platoGanadorActivo && platoGanadorConfig.platoId === plato.id
+                              const esDiaActual = platoDiaActivo && platoDiaSwr?.plato_id === plato.id
+                              const esGanadorActual = platoGanadorActivo && platoGanadorSwr?.plato_id === plato.id
                               setPlatoDeleteWarning({
                                 categoriaId: cat.id,
                                 platoId: plato.id,
@@ -1565,8 +1554,8 @@ export default function MiMenuPage() {
                         categoriaId={cat.id}
                         combos={combos}
                         promos={promos}
-                        diaVarianteId={platoDiaActivo ? platoDiaConfig.varianteId || null : null}
-                        ganadorVarianteId={platoGanadorActivo ? platoGanadorConfig.varianteId || null : null}
+                        diaVarianteId={platoDiaActivo ? platoDiaSwr?.variante_id ?? null : null}
+                        ganadorVarianteId={platoGanadorActivo ? platoGanadorSwr?.variante_id ?? null : null}
                         esBasico={esBasico}
                         subiendoFoto={subiendoFoto}
                         onSelectFoto={seleccionarFoto}
