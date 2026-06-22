@@ -389,7 +389,7 @@ export default function MenuPublicoPage() {
                 <>
                   <span>·</span>
                   <span style={{
-                    color: abiertoAhora ? '#2E7D32' : 'var(--text-tertiary)',
+                    color: abiertoAhora ? 'var(--color-green)' : 'var(--theme-text-subtle)',
                     fontWeight: 500,
                   }}>
                     ● {abiertoAhora ? 'Abierto ahora' : `Cierra a las ${formato12h(horarioHoy.hora_cierre)}`}

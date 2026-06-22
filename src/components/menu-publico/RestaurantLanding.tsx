@@ -97,7 +97,7 @@ export default function RestaurantLanding({
             return (
               <div style={{
                 fontSize: '12px',
-                color: 'var(--text-secondary)',
+                color: 'var(--theme-text-muted)',
                 display: 'flex',
                 gap: '6px',
                 alignItems: 'center',
@@ -148,13 +148,13 @@ export default function RestaurantLanding({
                   gap: '5px',
                   fontSize: '12px',
                   fontWeight: 500,
-                  color: '#2E7D32',
+                  color: 'var(--color-green)',
                 }}>
                   <span style={{
                     width: '7px',
                     height: '7px',
                     borderRadius: '50%',
-                    background: '#2E7D32',
+                    background: 'var(--color-green)',
                   }} />
                   Abierto
                 </span>
@@ -168,13 +168,13 @@ export default function RestaurantLanding({
                   gap: '5px',
                   fontSize: '12px',
                   fontWeight: 500,
-                  color: 'var(--text-tertiary)',
+                  color: 'var(--theme-text-subtle)',
                 }}>
                   <span style={{
                     width: '7px',
                     height: '7px',
                     borderRadius: '50%',
-                    background: 'var(--text-tertiary)',
+                    background: 'var(--theme-text-subtle)',
                   }} />
                   Cerrado
                 </span>
@@ -188,13 +188,13 @@ export default function RestaurantLanding({
                   gap: '5px',
                   fontSize: '12px',
                   fontWeight: 500,
-                  color: 'var(--text-tertiary)',
+                  color: 'var(--theme-text-subtle)',
                 }}>
                   <span style={{
                     width: '7px',
                     height: '7px',
                     borderRadius: '50%',
-                    background: 'var(--text-tertiary)',
+                    background: 'var(--theme-text-subtle)',
                   }} />
                   Cerrado
                 </span>
@@ -211,7 +211,7 @@ export default function RestaurantLanding({
                 gap: '8px',
                 flexWrap: 'wrap',
                 fontSize: '12px',
-                color: 'var(--text-secondary)',
+                color: 'var(--theme-text-muted)',
                 marginBottom: estadoTexto ? '4px' : '0',
               }}>
                 {estadoBadge}
@@ -223,7 +223,7 @@ export default function RestaurantLanding({
               {estadoTexto && (
                 <div style={{
                   fontSize: '11px',
-                  color: 'var(--text-tertiary)',
+                  color: 'var(--theme-text-subtle)',
                 }}>
                   {estadoTexto}
                 </div>
