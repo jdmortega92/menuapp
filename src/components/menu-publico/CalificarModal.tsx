@@ -117,7 +117,7 @@ export default function CalificarModal({
       stackLevel={1}
     >
       {/* Plato que va a calificar */}
-      <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-light)', borderRadius: '10px', padding: '12px', display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+      <div style={{ background: 'var(--theme-surface-muted)', border: '1px solid var(--theme-border)', borderRadius: 'var(--theme-radius-card)', padding: '12px', display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
         <div style={{ width: '48px', height: '48px', borderRadius: '8px', background: `${color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', fontWeight: 500, color: color, flexShrink: 0, overflow: 'hidden' }}>
           {plato.foto_url ? (
             <img src={plato.foto_url} alt={plato.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -125,7 +125,7 @@ export default function CalificarModal({
         </div>
         <div>
           <div style={{ fontSize: '14px', fontWeight: 500 }}>{plato.nombre}</div>
-          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>{restauranteNombre}</div>
+          <div style={{ fontSize: '12px', color: 'var(--theme-text-muted)', marginTop: '2px' }}>{restauranteNombre}</div>
         </div>
       </div>
 
@@ -142,7 +142,7 @@ export default function CalificarModal({
             }}>★</span>
           ))}
         </div>
-        {calEstrellas > 0 && <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{textoEstrellas[calEstrellas]}</div>}
+        {calEstrellas > 0 && <div style={{ fontSize: '13px', color: 'var(--theme-text-muted)' }}>{textoEstrellas[calEstrellas]}</div>}
       </div>
 
       {/* Tags rápidos */}
@@ -152,9 +152,9 @@ export default function CalificarModal({
           {tagsDisponibles.map(tag => (
             <div key={tag.id} onClick={() => toggleTag(tag.id)} style={{
               padding: '8px 14px', borderRadius: '20px', fontSize: '12px', cursor: 'pointer',
-              background: calTags.includes(tag.id) ? 'var(--text-primary)' : 'var(--bg-secondary)',
-              color: calTags.includes(tag.id) ? 'white' : 'var(--text-secondary)',
-              border: calTags.includes(tag.id) ? '1px solid var(--text-primary)' : '1px solid var(--border-light)',
+              background: calTags.includes(tag.id) ? 'var(--theme-text)' : 'var(--theme-surface)',
+              color: calTags.includes(tag.id) ? 'var(--theme-surface)' : 'var(--theme-text-muted)',
+              border: calTags.includes(tag.id) ? '1px solid var(--theme-text)' : '1px solid var(--theme-border)',
               transition: 'all 0.15s',
             }}>{tag.label}</div>
           ))}
@@ -168,10 +168,11 @@ export default function CalificarModal({
           <textarea value={calComentario} onChange={(e) => { if (e.target.value.length <= 200) setCalComentario(e.target.value) }}
             placeholder="Cuéntanos más sobre tu experiencia..."
             style={{
-              width: '100%', padding: '12px', border: '1px solid var(--border-light)', borderRadius: '10px',
-              fontSize: '13px', fontFamily: 'var(--font-body)', outline: 'none', resize: 'none', minHeight: '80px',
+              width: '100%', padding: '12px', border: '1px solid var(--theme-border)', borderRadius: 'var(--theme-radius-image)',
+              fontSize: '13px', fontFamily: 'var(--theme-font-body)', outline: 'none', resize: 'none', minHeight: '80px',
+              background: 'var(--theme-surface)', color: 'var(--theme-text)',
             }} />
-          <span style={{ position: 'absolute', right: '12px', bottom: '8px', fontSize: '10px', color: calComentario.length > 180 ? 'var(--color-warning)' : 'var(--text-tertiary)' }}>
+          <span style={{ position: 'absolute', right: '12px', bottom: '8px', fontSize: '10px', color: calComentario.length > 180 ? 'var(--color-warning)' : 'var(--theme-text-subtle)' }}>
             {calComentario.length}/200
           </span>
         </div>
@@ -179,16 +180,16 @@ export default function CalificarModal({
 
       {/* Enviar */}
       <div onClick={enviarCalificacion} style={{
-        background: calEstrellas > 0 ? 'var(--text-primary)' : 'var(--border-light)',
-        color: calEstrellas > 0 ? 'white' : 'var(--text-tertiary)',
-        borderRadius: '12px', padding: '16px', textAlign: 'center',
+        background: calEstrellas > 0 ? 'var(--theme-text)' : 'var(--theme-border)',
+        color: calEstrellas > 0 ? 'var(--theme-surface)' : 'var(--theme-text-subtle)',
+        borderRadius: 'var(--theme-radius-button)', padding: '16px', textAlign: 'center',
         fontSize: '15px', fontWeight: 500, cursor: calEstrellas > 0 ? 'pointer' : 'default',
         marginBottom: '12px',
       }}>
         Enviar calificación
       </div>
 
-      <div style={{ textAlign: 'center', fontSize: '11px', color: 'var(--text-tertiary)' }}>
+      <div style={{ textAlign: 'center', fontSize: '11px', color: 'var(--theme-text-subtle)' }}>
         Tu reseña es anónima y ayuda a otros comensales
       </div>
     </Modal>
