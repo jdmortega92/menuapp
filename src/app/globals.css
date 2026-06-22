@@ -17,6 +17,13 @@
   --color-danger-light: #FCEBEB;
   --color-info: #378ADD;
   --color-info-light: #E6F1FB;
+  --color-rating: #F2A623;
+  /* Placa fija "ganador": paleta dorada independiente del tema (por diseño) */
+  --gold-bg-start: #FFF8E1;
+  --gold-bg-end: #FFF3CD;
+  --gold-tint: #F2A62315;
+  --gold-border: #F2A62330;
+  --gold-ink: #B8860B;
   --bg-primary: #FDFBF7;
   --bg-secondary: #FFFFFF;
   --bg-tertiary: #F5F4F0;
@@ -75,6 +82,7 @@
   --theme-radius-modal: 14px;
   --theme-radius-image: 8px;
   --theme-radius-button: 12px;
+  --theme-radius-chip: 8px;
 
   /* Sombras */
   --theme-shadow-card: 0 1px 3px rgba(0,0,0,0.04);
@@ -108,6 +116,7 @@
   --theme-radius-modal: 14px;
   --theme-radius-image: 8px;
   --theme-radius-button: 12px;
+  --theme-radius-chip: 8px;
 
   /* Sombras adaptadas a oscuro */
   --theme-shadow-card: 0 1px 3px rgba(0,0,0,0.2);
@@ -141,6 +150,7 @@
   --theme-radius-modal: 18px;
   --theme-radius-image: 12px;
   --theme-radius-button: 14px;
+  --theme-radius-chip: 10px;
 
   /* Sombras más marcadas con tinte cálido */
   --theme-shadow-card: 0 2px 6px rgba(62,47,26,0.08);
@@ -174,6 +184,7 @@
   --theme-radius-modal: 6px;
   --theme-radius-image: 2px;
   --theme-radius-button: 4px;
+  --theme-radius-chip: 2px;
 
   /* Sombras más refinadas y elegantes */
   --theme-shadow-card: 0 2px 8px rgba(0,0,0,0.06);
