@@ -2,6 +2,7 @@
 
 import Modal from '@/components/ui/Modal'
 import { formatoPrecio } from '@/lib/precio'
+import { tintPlaceholder } from '@/lib/brandTints'
 
 // Modal de detalle de combo del menú público. Recibe el combo YA enriquecido
 // (comboPlatosEnriquecidos vía enriquecerComboPlatos). `categorias` solo
@@ -135,7 +136,7 @@ export default function ComboDetalleModal({
               width: '52px',
               height: '52px',
               borderRadius: 'var(--theme-radius-image)',
-              background: `${color}15`,
+              background: tintPlaceholder(color),
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',

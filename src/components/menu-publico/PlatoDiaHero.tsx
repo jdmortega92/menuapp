@@ -5,6 +5,7 @@ import QtyControl from '@/components/menu-publico/QtyControl'
 import { makeCartKey } from '@/lib/cart'
 import { formatoPrecio } from '@/lib/precio'
 import { formato12h } from '@/lib/time'
+import { washHero, borderFuerte } from '@/lib/brandTints'
 
 // Tarjeta destacada del Plato del Día. El gate de visibilidad (Pro + activo +
 // platoDiaVisible + sin búsqueda) vive en la página. Las cart keys llevan
@@ -32,8 +33,8 @@ export default function PlatoDiaHero({
   return (
     <div style={{ padding: '0 16px 10px' }}>
       <div onClick={onOpenDetalle} style={{
-        background: `${color}10`,
-        border: `1px solid ${color}30`,
+        background: washHero(color),
+        border: borderFuerte(color),
         borderRadius: 'var(--theme-radius-card)',
         boxShadow: 'var(--theme-shadow-card)',
         padding: '12px',

@@ -14,6 +14,7 @@ import PlatoDetalleModal from '@/components/menu-publico/PlatoDetalleModal'
 import BandejaFlotante from '@/components/menu-publico/BandejaFlotante'
 import RestaurantLanding from '@/components/menu-publico/RestaurantLanding'
 import { formato12h } from '@/lib/time'
+import { tintPlaceholder, washSutil, borderFuerte, borderSutil, gradientHeader } from '@/lib/brandTints'
 import { useMenuVisibility } from '@/hooks/useMenuVisibility'
 import { usePromoIndices } from '@/hooks/usePromoIndices'
 import { fechaColombia } from '@/lib/fechas'
@@ -299,7 +300,7 @@ export default function MenuPublicoPage() {
             height: '140px',
             background: (esBasicoPublico && restaurante.banner_url)
               ? `url(${restaurante.banner_url}) center/cover`
-              : `linear-gradient(135deg, ${color} 0%, ${color}CC 50%, ${color}99 100%)`,
+              : gradientHeader(color),
             position: 'relative',
           }}>
             {/* Overlay sutil para legibilidad si hay banner */}
@@ -487,7 +488,7 @@ export default function MenuPublicoPage() {
               padding: '12px',
               textAlign: 'center',
               cursor: 'pointer',
-              background: mostrarSorpresa ? `${color}08` : 'transparent',
+              background: mostrarSorpresa ? washSutil(color) : 'transparent',
             }}>
               <span style={{ fontSize: '13px', color: mostrarSorpresa ? color : 'var(--theme-text-muted)' }}>
                 🎲 {mostrarSorpresa ? 'Generar otra combinación' : 'Sorpréndeme — ¿No sabes qué pedir?'}
@@ -500,8 +501,8 @@ export default function MenuPublicoPage() {
         {esBasicoPublico && sorprendemeVisible && mostrarSorpresa && (
           <div style={{ padding: '0 16px 14px' }}>
             <div style={{
-              background: `${color}08`,
-              border: `1px solid ${color}20`,
+              background: washSutil(color),
+              border: borderSutil(color),
               borderRadius: 'var(--theme-radius-card)',
               padding: '12px',
             }}>
@@ -529,7 +530,7 @@ export default function MenuPublicoPage() {
                     height: '48px',
                     borderRadius: 'var(--theme-radius-image)',
                     flexShrink: 0,
-                    background: `${color}15`,
+                    background: tintPlaceholder(color),
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -622,7 +623,7 @@ export default function MenuPublicoPage() {
             {combosVisibles.map((combo: any) => (
               <div key={combo.id} onClick={() => setComboDetalle(combo)} style={{
                 background: 'var(--theme-surface)',
-                border: `1px solid ${color}30`,
+                border: borderFuerte(color),
                 borderRadius: 'var(--theme-radius-card)',
                 boxShadow: 'var(--theme-shadow-card)',
                 padding: '12px',

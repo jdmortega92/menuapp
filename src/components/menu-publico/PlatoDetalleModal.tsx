@@ -8,6 +8,7 @@ import { makeCartKey } from '@/lib/cart'
 import { fechaColombia } from '@/lib/fechas'
 import { formatoPrecio } from '@/lib/precio'
 import { getSessionId } from '@/lib/analytics'
+import { tintPlaceholder } from '@/lib/brandTints'
 
 // Modal de detalle de plato del menú público. La página resuelve el plato y
 // pasa modo (normal/ganador/platoDia); aquí vive la derivación
@@ -146,7 +147,7 @@ export default function PlatoDetalleModal({
       {/* Foto grande */}
       <div style={{
         height: '200px',
-        background: `${color}15`,
+        background: tintPlaceholder(color),
         borderRadius: 'var(--theme-radius-modal) var(--theme-radius-modal) 0 0',
         display: 'flex',
         alignItems: 'center',

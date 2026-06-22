@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { mutate } from 'swr'
 import Modal from '@/components/ui/Modal'
 import { createClient } from '@/lib/supabase-browser'
+import { tintPlaceholder } from '@/lib/brandTints'
 
 // Modal de calificación (se apila SOBRE el detalle de plato: stackLevel={1}).
 // Estado del formulario (estrellas/tags/comentario/enviada) vive AQUÍ: el
@@ -118,7 +119,7 @@ export default function CalificarModal({
     >
       {/* Plato que va a calificar */}
       <div style={{ background: 'var(--theme-surface-muted)', border: '1px solid var(--theme-border)', borderRadius: 'var(--theme-radius-card)', padding: '12px', display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
-        <div style={{ width: '48px', height: '48px', borderRadius: '8px', background: `${color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', fontWeight: 500, color: color, flexShrink: 0, overflow: 'hidden' }}>
+        <div style={{ width: '48px', height: '48px', borderRadius: '8px', background: tintPlaceholder(color), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', fontWeight: 500, color: color, flexShrink: 0, overflow: 'hidden' }}>
           {plato.foto_url ? (
             <img src={plato.foto_url} alt={plato.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           ) : plato.nombre.charAt(0)}

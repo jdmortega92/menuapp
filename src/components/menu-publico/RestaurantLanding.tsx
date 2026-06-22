@@ -1,6 +1,7 @@
 'use client'
 
 import { formato12h } from '@/lib/time'
+import { glowBoton, gradientHeader } from '@/lib/brandTints'
 
 // Presentación/landing del restaurante (solo origen enlace web; en QR se entra
 // directo al menú). El gate (!mostrarMenu) vive en la página. `ahora`/`horaActual`
@@ -31,7 +32,7 @@ export default function RestaurantLanding({
         height: '200px',
         background: (esBasicoPublico && restaurante.banner_url)
           ? `url(${restaurante.banner_url}) center/cover`
-          : `linear-gradient(135deg, ${color} 0%, ${color}CC 50%, ${color}99 100%)`,
+          : gradientHeader(color),
         position: 'relative',
       }}>
         {esBasicoPublico && restaurante.banner_url && (
@@ -351,7 +352,7 @@ export default function RestaurantLanding({
           fontSize: '16px',
           fontWeight: 500,
           cursor: 'pointer',
-          boxShadow: `0 4px 20px ${color}40`,
+          boxShadow: glowBoton(color),
         }}>
           Ver menú
         </div>

@@ -4,6 +4,7 @@ import type { ComponentProps } from 'react'
 import QtyControl from '@/components/menu-publico/QtyControl'
 import { makeCartKey } from '@/lib/cart'
 import { formatoPrecio } from '@/lib/precio'
+import { tintPlaceholder } from '@/lib/brandTints'
 
 // Tarjeta de plato del LISTADO regular (categorías). La tarjeta del resultado
 // de Sorpréndeme es deliberadamente más simple (sin pills de promo, sin
@@ -56,7 +57,7 @@ export default function PlatoCard({
         borderRadius: 'var(--theme-radius-image)',
         flexShrink: 0,
         cursor: plato.disponible ? 'pointer' : 'default',
-        background: `${color}15`,
+        background: tintPlaceholder(color),
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
