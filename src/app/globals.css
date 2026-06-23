@@ -292,6 +292,21 @@ p { font-size: 0.9375rem; line-height: 1.6; color: var(--text-secondary); }
   filter: brightness(0.96);
 }
 
+/* Feedback de presión para filas anchas (menús/listas): cambio de fondo, no scale */
+.tap-row {
+  transition: background var(--transition-fast);
+}
+.tap-row:active {
+  background: var(--bg-tertiary);
+}
+
+.tap-row-danger {
+  transition: background var(--transition-fast);
+}
+.tap-row-danger:active {
+  background: var(--color-danger-light);
+}
+
 .btn-primary {
   background: var(--text-primary); color: var(--bg-secondary);
   padding: 14px 28px; border-radius: var(--radius-md);

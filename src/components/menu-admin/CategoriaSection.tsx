@@ -216,11 +216,11 @@ function CategoriaSection({
             borderRadius: 'var(--radius-sm)', overflow: 'hidden', width: '180px',
             boxShadow: 'var(--shadow-lg)', animation: 'scaleIn 0.15s ease',
           }}>
-            <div onClick={() => onAbrirRename(cat.id)}
+            <div onClick={() => onAbrirRename(cat.id)} className="tap-row"
               style={{ padding: '10px 14px', fontSize: '13px', cursor: 'pointer', borderBottom: '1px solid var(--border-light)' }}>Renombrar</div>
-            <div onClick={() => onAbrirHorario(cat.id)}
+            <div onClick={() => onAbrirHorario(cat.id)} className="tap-row"
               style={{ padding: '10px 14px', fontSize: '13px', cursor: 'pointer', borderBottom: '1px solid var(--border-light)' }}>Horario de visibilidad</div>
-            <div onClick={() => onRequestDeleteCategoria(cat.id)}
+            <div onClick={() => onRequestDeleteCategoria(cat.id)} className="tap-row-danger"
               style={{ padding: '10px 14px', fontSize: '13px', color: 'var(--color-danger)', cursor: 'pointer' }}>Eliminar categoría</div>
           </div>
         </>
