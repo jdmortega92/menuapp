@@ -317,8 +317,8 @@ function PromoForm({
           <div key={t.id} onClick={() => {
             setPromo({ ...promo, tipo: t.id, valor: '' })
             setTouched(prev => ({ ...prev, tipo: true, valor: false, platos: false }))
-          }} style={{
-            padding: '7px 12px', borderRadius: '8px', fontSize: '12px', cursor: 'pointer',
+          }} className="tap-control" style={{
+            padding: '7px 12px', borderRadius: 'var(--radius-sm)', fontSize: '12px', cursor: 'pointer',
             background: promo.tipo === t.id ? 'var(--text-primary)' : 'var(--bg-secondary)',
             color: promo.tipo === t.id ? 'white' : 'var(--text-secondary)',
             border: promo.tipo === t.id ? 'none' : '1px solid var(--border-light)',
@@ -356,7 +356,7 @@ function PromoForm({
           style={{ marginBottom: '6px', fontSize: '12px' }}
         />
       )}
-      <div style={{ maxHeight: '160px', overflowY: 'auto', marginBottom: '10px', border: '1px solid var(--border-light)', borderRadius: '8px' }}>
+      <div style={{ maxHeight: '160px', overflowY: 'auto', marginBottom: '10px', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)' }}>
         {platosFiltradosPromo.map(p => {
           const currentItem = promo.platoIds.find((i: PromoItem) => i.plato_id === p.id)
           const isSelected = !!currentItem
@@ -446,7 +446,7 @@ function PromoForm({
             <div key={d} onClick={() => {
               setPromo({ ...promo, dias: sel ? promo.dias.filter(x => x !== dias[i]) : [...promo.dias, dias[i]] })
               setTouched(prev => ({ ...prev, dias: true }))
-            }} style={{
+            }} className="tap-control" style={{
               width: '32px', height: '32px', borderRadius: '50%', display: 'flex',
               alignItems: 'center', justifyContent: 'center', fontSize: '11px', cursor: 'pointer',
               background: sel ? 'var(--text-primary)' : 'var(--bg-secondary)',
@@ -487,7 +487,7 @@ function PromoForm({
           <div style={{
             background: 'var(--color-green-light)',
             padding: '12px',
-            borderRadius: '8px',
+            borderRadius: 'var(--radius-sm)',
             marginBottom: '12px',
           }}>
             <div style={{ fontSize: '11px', fontWeight: 500, color: 'var(--color-green)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>

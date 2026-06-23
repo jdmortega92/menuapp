@@ -399,13 +399,13 @@ function PlatoEditPanel({
       {esBasico && <div style={{ marginBottom: '10px' }}>
         <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Foto del plato</div>
         {plato.foto_url && (
-          <div style={{ width: '100%', aspectRatio: '16/9', borderRadius: '8px', overflow: 'hidden', marginBottom: '8px' }}>
+          <div style={{ width: '100%', aspectRatio: '16/9', borderRadius: 'var(--radius-sm)', overflow: 'hidden', marginBottom: '8px' }}>
             <img src={plato.foto_url} alt={plato.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           </div>
         )}
-        <label style={{
+        <label className="tap-cta" style={{
           display: 'inline-flex', alignItems: 'center', gap: '6px',
-          padding: '8px 14px', borderRadius: '8px', fontSize: '12px',
+          padding: '8px 14px', borderRadius: 'var(--radius-sm)', fontSize: '12px',
           border: '1px solid var(--border-light)', cursor: subiendoFoto ? 'not-allowed' : 'pointer',
           color: subiendoFoto ? 'var(--text-tertiary)' : 'var(--color-info)',
           opacity: subiendoFoto ? 0.6 : 1,

@@ -82,7 +82,7 @@ function HorarioCategoriaModal({
       </div>
 
       {avisoHorario.length > 0 && (
-        <div style={{ marginBottom: '14px', background: 'var(--color-warning-light)', border: '1px solid var(--color-warning)', borderRadius: '8px', padding: '12px' }}>
+        <div style={{ marginBottom: '14px', background: 'var(--color-warning-light)', border: '1px solid var(--color-warning)', borderRadius: 'var(--radius-sm)', padding: '12px' }}>
           <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--color-warning)', marginBottom: '8px' }}>
             Esto afectará otras funciones
           </div>

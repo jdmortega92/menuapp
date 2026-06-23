@@ -34,6 +34,7 @@ export default function DiasSelector({ value, onChange, onBlur, disabled = false
           <div
             key={dia}
             onClick={() => handleClick(dia)}
+            className="tap-control"
             style={{
               width: '32px',
               height: '32px',

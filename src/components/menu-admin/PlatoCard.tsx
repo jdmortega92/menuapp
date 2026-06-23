@@ -47,7 +47,7 @@ function PlatoCard({
       style={{ padding: '12px', display: 'flex', gap: '12px', cursor: 'pointer' }}
     >
       <div style={{
-        width: '52px', height: '52px', borderRadius: '8px', background: 'var(--bg-tertiary)',
+        width: '52px', height: '52px', borderRadius: 'var(--radius-sm)', background: 'var(--bg-tertiary)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontSize: '18px', fontWeight: 500, color: 'var(--text-tertiary)', flexShrink: 0,
         overflow: 'hidden',
@@ -65,14 +65,14 @@ function PlatoCard({
               style={{ fontSize: '9px', cursor: pIdx > 0 ? 'pointer' : 'default', color: pIdx > 0 ? 'var(--text-secondary)' : 'var(--border-light)', padding: '2px' }}>▲</span>
             <span onClick={(e) => { e.stopPropagation(); onMoverPlato(categoriaId, plato.id, 'abajo') }}
               style={{ fontSize: '9px', cursor: pIdx < totalPlatos - 1 ? 'pointer' : 'default', color: pIdx < totalPlatos - 1 ? 'var(--text-secondary)' : 'var(--border-light)', padding: '2px' }}>▼</span>
-            <span onClick={(e) => { e.stopPropagation(); onToggleDisponible(categoriaId, plato.id) }}
+            <span onClick={(e) => { e.stopPropagation(); onToggleDisponible(categoriaId, plato.id) }} className="tap-control"
               style={{ fontSize: '11px', color: 'var(--color-info)', cursor: 'pointer', marginLeft: '4px' }}>
               {plato.disponible ? 'Agotar' : 'Activar'}
             </span>
             <span onClick={(e) => {
               e.stopPropagation()
               onRequestDeletePlato(categoriaId, plato.id)
-            }}
+            }} className="tap-control"
               style={{ fontSize: '11px', color: 'var(--color-danger)', cursor: 'pointer' }}>✕</span>
           </div>
         </div>

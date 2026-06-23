@@ -198,9 +198,9 @@ function CategoriaSection({
             )}
           </div>
           <div style={{ display: 'flex', gap: '12px' }}>
-            <span onClick={() => onToggleFormPlato(cat.id)}
+            <span onClick={() => onToggleFormPlato(cat.id)} className="tap-cta"
               style={{ fontSize: '12px', color: 'var(--color-info)', cursor: 'pointer' }}>+ Plato</span>
-            <span onClick={() => onToggleMenuCategoria(cat.id)}
+            <span onClick={() => onToggleMenuCategoria(cat.id)} className="tap-control"
               style={{ fontSize: '12px', color: 'var(--text-tertiary)', cursor: 'pointer' }}>⋯</span>
           </div>
         </div>

@@ -236,7 +236,7 @@ function PlatoGanadorForm({
             : null
           const tieneVariantesPreview = !!(platoPreview.variantes && platoPreview.variantes.length > 0)
           return (
-            <div style={{ background: 'linear-gradient(135deg, var(--gold-bg-start) 0%, var(--gold-bg-end) 100%)', borderRadius: '8px', padding: '12px', marginBottom: '12px' }}>
+            <div style={{ background: 'linear-gradient(135deg, var(--gold-bg-start) 0%, var(--gold-bg-end) 100%)', borderRadius: 'var(--radius-sm)', padding: '12px', marginBottom: '12px' }}>
               <div style={{ fontSize: '11px', fontWeight: 500, color: 'var(--gold-ink)', marginBottom: '6px' }}>Vista previa</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
                 <span style={{ fontSize: '14px' }}>⭐</span>

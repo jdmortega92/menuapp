@@ -164,6 +164,7 @@ export default function VarianteEditor({
               if (pending || i === 0) return
               moverFila(i, -1)
             }}
+            className="tap-control"
             style={{
               padding: '6px 14px',
               background: 'transparent',
@@ -186,6 +187,7 @@ export default function VarianteEditor({
               if (pending || esUltima) return
               moverFila(i, 1)
             }}
+            className="tap-control"
             style={{
               padding: '6px 14px',
               background: 'transparent',
@@ -205,6 +207,7 @@ export default function VarianteEditor({
             <button
               type="button"
               onClick={() => quitarFila(i)}
+              className="tap-control"
               style={{
                 padding: '6px 14px',
                 background: 'transparent',
@@ -244,6 +247,7 @@ export default function VarianteEditor({
                   onClick={() => {
                     onRowsChange(variantes.map((x, idx) => idx === i ? { ...x, _pendingDelete: false } : x))
                   }}
+                  className="tap-control"
                   style={{
                     padding: '4px 8px',
                     background: 'transparent',
@@ -274,6 +278,7 @@ export default function VarianteEditor({
         onClick={() => {
           onRowsChange([...variantes, { nombre: '', precio: '' }])
         }}
+        className="tap-cta"
         style={{
           marginTop: '4px',
           padding: '6px 12px',

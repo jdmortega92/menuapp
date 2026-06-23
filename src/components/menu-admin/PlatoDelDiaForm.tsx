@@ -308,7 +308,7 @@ function PlatoDelDiaForm({
           const tieneVariantesPreview = !!(platoPreview.variantes && platoPreview.variantes.length > 0)
           return (
             <div style={{
-              background: 'var(--color-accent-light)', borderRadius: '8px', padding: '12px', marginBottom: '10px',
+              background: 'var(--color-accent-light)', borderRadius: 'var(--radius-sm)', padding: '12px', marginBottom: '10px',
             }}>
               <div style={{ fontSize: '11px', fontWeight: 500, color: 'var(--color-accent)', marginBottom: '4px' }}>Vista previa</div>
               <div style={{ fontSize: '14px', fontWeight: 500 }}>
