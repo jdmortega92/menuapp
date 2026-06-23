@@ -160,7 +160,7 @@ export default function PlatoDetalleModal({
         ) : (
           <span style={{ fontSize: '60px', fontWeight: 500, color: color, opacity: 0.3 }}>{plato.nombre.charAt(0)}</span>
         )}
-        <div onClick={onClose} style={{
+        <div onClick={onClose} className="tap-control" style={{
           position: 'absolute',
           top: '12px',
           right: '12px',
@@ -508,7 +508,7 @@ export default function PlatoDetalleModal({
                 <div style={{ fontSize: '12px', color: 'var(--theme-text-subtle)' }}>Aún no hay reseñas. ¡Sé el primero!</div>
               </div>
             )}
-            <div onClick={() => setPlatoCalificar(plato.id)} style={{
+            <div onClick={() => setPlatoCalificar(plato.id)} className="tap-cta" style={{
               border: '1px dashed var(--theme-border-strong)',
               borderRadius: 'var(--theme-radius-card)',
               padding: '14px',
@@ -533,7 +533,7 @@ export default function PlatoDetalleModal({
             borderRadius: 'var(--theme-radius-card)',
             padding: '10px 14px',
           }}>
-            <div onClick={() => { if (cantidadActual > 0) quitarDelPedido(cartKey) }} style={{
+            <div onClick={() => { if (cantidadActual > 0) quitarDelPedido(cartKey) }} className="tap-control" style={{
               width: '28px',
               height: '28px',
               borderRadius: '50%',
@@ -554,7 +554,7 @@ export default function PlatoDetalleModal({
             }}>
               {cantidadMostrar}
             </span>
-            <div onClick={() => agregarAlPedido(cartKey)} style={{
+            <div onClick={() => agregarAlPedido(cartKey)} className="tap-control" style={{
               width: '28px',
               height: '28px',
               borderRadius: '50%',
@@ -594,7 +594,7 @@ export default function PlatoDetalleModal({
                   agregarAlPedido(cartKey)
                 }
                 onClose()
-              }} style={{
+              }} className="tap-cta" style={{
                 flex: 1,
                 background: color,
                 color: 'white',

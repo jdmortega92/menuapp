@@ -13,7 +13,7 @@ export default function BandejaFlotante({ totalProductos, itemsPedido, totalPedi
   onOpen: () => void
 }) {
   return (
-    <div onClick={onOpen} style={{
+    <div onClick={onOpen} className="tap-bar" style={{
       position: 'fixed',
       bottom: '16px',
       left: '16px',

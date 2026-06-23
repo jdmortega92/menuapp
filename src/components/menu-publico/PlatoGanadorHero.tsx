@@ -24,7 +24,7 @@ export default function PlatoGanadorHero({
 }) {
   return (
     <div style={{ padding: '0 16px 10px' }}>
-      <div onClick={onOpenDetalle} style={{
+      <div onClick={onOpenDetalle} className="tap-card" style={{
         background: `linear-gradient(135deg, #FFF8E1 0%, #FFF3CD 100%)`,
         border: '1px solid #F2A62330',
         borderRadius: 'var(--theme-radius-card)',

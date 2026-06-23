@@ -32,7 +32,7 @@ export default function PlatoDiaHero({
   const cartKeyDia = makeCartKey(platoDia.id, varianteLocked?.id, 'dia')
   return (
     <div style={{ padding: '0 16px 10px' }}>
-      <div onClick={onOpenDetalle} style={{
+      <div onClick={onOpenDetalle} className="tap-card" style={{
         background: washHero(color),
         border: borderFuerte(color),
         borderRadius: 'var(--theme-radius-card)',

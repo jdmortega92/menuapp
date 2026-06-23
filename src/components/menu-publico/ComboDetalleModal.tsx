@@ -83,7 +83,7 @@ export default function ComboDetalleModal({
             -{porcentajeAhorro}%
           </span>
         </div>
-        <span onClick={onClose} style={{
+        <span onClick={onClose} className="tap-control" style={{
           fontSize: '18px',
           color: 'var(--theme-text-subtle)',
           cursor: 'pointer',
@@ -235,7 +235,7 @@ export default function ComboDetalleModal({
         <div onClick={() => {
           onAgregar(combo.id)
           onClose()
-        }} style={{
+        }} className="tap-cta" style={{
           background: color,
           color: 'white',
           borderRadius: 'var(--theme-radius-button)',

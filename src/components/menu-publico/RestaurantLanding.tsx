@@ -300,6 +300,7 @@ export default function RestaurantLanding({
           </div>
           {restaurante.direccion && (
             <div onClick={() => window.open(`https://maps.google.com/?q=${encodeURIComponent(restaurante.direccion + ', ' + restaurante.ciudad)}`, '_blank')}
+              className="tap-cta"
               style={{
                 background: 'var(--theme-surface)',
                 border: '1px solid var(--theme-border)',
@@ -343,7 +344,7 @@ export default function RestaurantLanding({
         )}
 
         {/* Botón ver menú */}
-        <div onClick={onVerMenu} style={{
+        <div onClick={onVerMenu} className="tap-cta" style={{
           background: color,
           color: 'white',
           borderRadius: 'var(--theme-radius-button)',

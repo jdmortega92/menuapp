@@ -249,6 +249,37 @@ p { font-size: 0.9375rem; line-height: 1.6; color: var(--text-secondary); }
 }
 .card:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
 
+/* Tap-feedback del menú público (estados :active; los estilos inline no pueden expresar :active) */
+.tap-card {
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+.tap-card:active {
+  transform: scale(0.985);
+  box-shadow: var(--shadow-md);
+}
+
+.tap-cta {
+  transition: transform var(--transition-fast), filter var(--transition-fast);
+}
+.tap-cta:active {
+  transform: scale(0.97);
+  filter: brightness(0.96);
+}
+
+.tap-control {
+  transition: transform var(--transition-fast);
+}
+.tap-control:active {
+  transform: scale(0.90);
+}
+
+.tap-bar {
+  transition: filter var(--transition-fast);
+}
+.tap-bar:active {
+  filter: brightness(0.96);
+}
+
 .btn-primary {
   background: var(--text-primary); color: var(--bg-secondary);
   padding: 14px 28px; border-radius: var(--radius-md);

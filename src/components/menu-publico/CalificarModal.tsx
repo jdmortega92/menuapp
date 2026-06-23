@@ -180,7 +180,7 @@ export default function CalificarModal({
       </div>
 
       {/* Enviar */}
-      <div onClick={enviarCalificacion} style={{
+      <div onClick={enviarCalificacion} className="tap-cta" style={{
         background: calEstrellas > 0 ? 'var(--theme-text)' : 'var(--theme-border)',
         color: calEstrellas > 0 ? 'var(--theme-surface)' : 'var(--theme-text-subtle)',
         borderRadius: 'var(--theme-radius-button)', padding: '16px', textAlign: 'center',

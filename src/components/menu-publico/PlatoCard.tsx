@@ -40,7 +40,7 @@ export default function PlatoCard({
   const varianteLockedDelDia = esEstePlatoElDia && platoDia.varianteId && platoDia.variante ? platoDia.variante : null
   const platoTieneVariantes = plato.variantes && plato.variantes.length > 0
   return (
-    <div style={{
+    <div className="tap-card" style={{
       background: 'var(--theme-surface)',
       border: '1px solid var(--theme-border)',
       borderRadius: 'var(--theme-radius-card)',

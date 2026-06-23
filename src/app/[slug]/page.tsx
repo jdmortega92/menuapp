@@ -515,7 +515,7 @@ export default function MenuPublicoPage() {
                 const varianteLockedDelDia = esEstePlatoElDia && platoDia.varianteId && platoDia.variante ? platoDia.variante : null
                 const platoTieneVariantes = plato.variantes && plato.variantes.length > 0
                 return (
-                <div key={plato.id} onClick={() => setPlatoDetalle({ id: plato.id, modo: 'normal' })} style={{
+                <div key={plato.id} onClick={() => setPlatoDetalle({ id: plato.id, modo: 'normal' })} className="tap-card" style={{
                   background: 'var(--theme-surface)',
                   borderRadius: 'var(--theme-radius-image)',
                   padding: '10px',
@@ -621,7 +621,7 @@ export default function MenuPublicoPage() {
               🍱 Combos
             </div>
             {combosVisibles.map((combo: any) => (
-              <div key={combo.id} onClick={() => setComboDetalle(combo)} style={{
+              <div key={combo.id} onClick={() => setComboDetalle(combo)} className="tap-card" style={{
                 background: 'var(--theme-surface)',
                 border: borderFuerte(color),
                 borderRadius: 'var(--theme-radius-card)',
