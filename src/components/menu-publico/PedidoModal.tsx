@@ -81,7 +81,7 @@ export default function PedidoModal({
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div onClick={() => onQuitar(item.cartKey)} className="tap-control" style={{
+              <div onClick={() => onQuitar(item.cartKey)} className="tap-control tap-target" style={{
                 width: '24px',
                 height: '24px',
                 borderRadius: '50%',
@@ -103,7 +103,7 @@ export default function PedidoModal({
               }}>
                 {item.cantidad}
               </span>
-              <div onClick={() => onAgregar(item.cartKey)} className="tap-control" style={{ width: '24px', height: '24px', borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '14px', cursor: 'pointer' }}>+</div>
+              <div onClick={() => onAgregar(item.cartKey)} className="tap-control tap-target" style={{ width: '24px', height: '24px', borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '14px', cursor: 'pointer' }}>+</div>
             </div>
             <div style={{
               fontSize: '13px',

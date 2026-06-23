@@ -273,6 +273,18 @@ p { font-size: 0.9375rem; line-height: 1.6; color: var(--text-secondary); }
   transform: scale(0.90);
 }
 
+/* Amplía el área táctil ~7px en todos los lados SIN cambiar el tamaño visible
+   (overlay transparente; los círculos están rellenos, así que padding crecería el
+   relleno — por eso ::before). Solo en los controles de cantidad +/−. */
+.tap-target {
+  position: relative;
+}
+.tap-target::before {
+  content: '';
+  position: absolute;
+  inset: -7px;
+}
+
 .tap-bar {
   transition: filter var(--transition-fast);
 }

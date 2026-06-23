@@ -533,7 +533,7 @@ export default function PlatoDetalleModal({
             borderRadius: 'var(--theme-radius-card)',
             padding: '10px 14px',
           }}>
-            <div onClick={() => { if (cantidadActual > 0) quitarDelPedido(cartKey) }} className="tap-control" style={{
+            <div onClick={() => { if (cantidadActual > 0) quitarDelPedido(cartKey) }} className="tap-control tap-target" style={{
               width: '28px',
               height: '28px',
               borderRadius: '50%',
@@ -554,7 +554,7 @@ export default function PlatoDetalleModal({
             }}>
               {cantidadMostrar}
             </span>
-            <div onClick={() => agregarAlPedido(cartKey)} className="tap-control" style={{
+            <div onClick={() => agregarAlPedido(cartKey)} className="tap-control tap-target" style={{
               width: '28px',
               height: '28px',
               borderRadius: '50%',
