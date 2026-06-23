@@ -236,11 +236,11 @@ function PlatoGanadorForm({
             : null
           const tieneVariantesPreview = !!(platoPreview.variantes && platoPreview.variantes.length > 0)
           return (
-            <div style={{ background: 'var(--color-warning-light)', borderRadius: '8px', padding: '12px', marginBottom: '12px' }}>
-              <div style={{ fontSize: '11px', fontWeight: 500, color: 'var(--color-warning)', marginBottom: '6px' }}>Vista previa</div>
+            <div style={{ background: 'linear-gradient(135deg, var(--gold-bg-start) 0%, var(--gold-bg-end) 100%)', borderRadius: '8px', padding: '12px', marginBottom: '12px' }}>
+              <div style={{ fontSize: '11px', fontWeight: 500, color: 'var(--gold-ink)', marginBottom: '6px' }}>Vista previa</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
                 <span style={{ fontSize: '14px' }}>⭐</span>
-                <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--color-warning)' }}>{config.titulo.toUpperCase()}</span>
+                <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--gold-ink)' }}>{config.titulo.toUpperCase()}</span>
               </div>
               <div style={{ fontSize: '14px', fontWeight: 500 }}>
                 {platoPreview.nombre}{varianteLockedPreview ? ` · ${varianteLockedPreview.nombre}` : ''}
