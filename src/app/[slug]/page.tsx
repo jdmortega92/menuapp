@@ -570,18 +570,18 @@ export default function MenuPublicoPage() {
                             <>
                               <span style={{ fontSize: '12px', color: 'var(--theme-text-subtle)', textDecoration: 'line-through' }}>${formatoPrecio(varianteLockedDelDia.precio)}</span>
                               <span style={{ fontSize: '13px', fontWeight: 500, color: color }}>${formatoPrecio(platoDia.precioEspecial)}</span>
-                              <span style={{ fontSize: '10px', color: 'white', background: color, padding: '2px 6px', borderRadius: '8px', fontWeight: 500 }}>Plato del día</span>
+                              <span style={{ fontSize: '10px', color: 'white', background: color, padding: '2px 6px', borderRadius: 'var(--theme-radius-chip)', fontWeight: 500 }}>Plato del día</span>
                             </>
                           ) : platoTieneVariantes ? (
                             <>
                               <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--theme-text)' }}>desde ${formatoPrecio(plato.precio)}</span>
-                              <span style={{ fontSize: '10px', color: 'white', background: color, padding: '2px 6px', borderRadius: '8px', fontWeight: 500 }}>Plato del día</span>
+                              <span style={{ fontSize: '10px', color: 'white', background: color, padding: '2px 6px', borderRadius: 'var(--theme-radius-chip)', fontWeight: 500 }}>Plato del día</span>
                             </>
                           ) : (
                             <>
                               <span style={{ fontSize: '12px', color: 'var(--theme-text-subtle)', textDecoration: 'line-through' }}>${formatoPrecio(plato.precio)}</span>
                               <span style={{ fontSize: '13px', fontWeight: 500, color: color }}>${formatoPrecio(platoDia.precioEspecial)}</span>
-                              <span style={{ fontSize: '10px', color: 'white', background: color, padding: '2px 6px', borderRadius: '8px', fontWeight: 500 }}>Plato del día</span>
+                              <span style={{ fontSize: '10px', color: 'white', background: color, padding: '2px 6px', borderRadius: 'var(--theme-radius-chip)', fontWeight: 500 }}>Plato del día</span>
                             </>
                           )}
                         </div>

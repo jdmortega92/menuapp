@@ -100,18 +100,18 @@ export default function PlatoCard({
                 <>
                   <span style={{ fontSize: '12px', color: 'var(--theme-text-subtle)', textDecoration: 'line-through' }}>${formatoPrecio(varianteLockedDelDia.precio)}</span>
                   <span style={{ fontSize: '13px', fontWeight: 500, color: color }}>${formatoPrecio(platoDia.precioEspecial)}</span>
-                  <span style={{ fontSize: '10px', color: 'white', background: color, padding: '2px 6px', borderRadius: '8px', fontWeight: 500 }}>Plato del día</span>
+                  <span style={{ fontSize: '10px', color: 'white', background: color, padding: '2px 6px', borderRadius: 'var(--theme-radius-chip)', fontWeight: 500 }}>Plato del día</span>
                 </>
               ) : platoTieneVariantes ? (
                 <>
                   <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--theme-text)' }}>desde ${formatoPrecio(plato.precio)}</span>
-                  <span style={{ fontSize: '10px', color: 'white', background: color, padding: '2px 6px', borderRadius: '8px', fontWeight: 500 }}>Plato del día</span>
+                  <span style={{ fontSize: '10px', color: 'white', background: color, padding: '2px 6px', borderRadius: 'var(--theme-radius-chip)', fontWeight: 500 }}>Plato del día</span>
                 </>
               ) : (
                 <>
                   <span style={{ fontSize: '12px', color: 'var(--theme-text-subtle)', textDecoration: 'line-through' }}>${formatoPrecio(plato.precio)}</span>
                   <span style={{ fontSize: '13px', fontWeight: 500, color: color }}>${formatoPrecio(platoDia.precioEspecial)}</span>
-                  <span style={{ fontSize: '10px', color: 'white', background: color, padding: '2px 6px', borderRadius: '8px', fontWeight: 500 }}>Plato del día</span>
+                  <span style={{ fontSize: '10px', color: 'white', background: color, padding: '2px 6px', borderRadius: 'var(--theme-radius-chip)', fontWeight: 500 }}>Plato del día</span>
                 </>
               )
             ) : (() => {
@@ -131,7 +131,7 @@ export default function PlatoCard({
                     <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--theme-text)' }}>
                       {platoTieneVariantes ? 'desde ' : ''}${formatoPrecio(plato.precio)}
                     </span>
-                    <span style={{ fontSize: '10px', color: 'white', background: color, padding: '2px 6px', borderRadius: '8px', fontWeight: 500 }}>Ofertas</span>
+                    <span style={{ fontSize: '10px', color: 'white', background: color, padding: '2px 6px', borderRadius: 'var(--theme-radius-chip)', fontWeight: 500 }}>Ofertas</span>
                   </>
                 )
               }
@@ -142,7 +142,7 @@ export default function PlatoCard({
                     <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--theme-text)' }}>
                       {platoTieneVariantes ? 'desde ' : ''}${formatoPrecio(plato.precio)}
                     </span>
-                    <span style={{ fontSize: '10px', color: 'white', background: color, padding: '2px 6px', borderRadius: '8px', fontWeight: 500 }}>2x1</span>
+                    <span style={{ fontSize: '10px', color: 'white', background: color, padding: '2px 6px', borderRadius: 'var(--theme-radius-chip)', fontWeight: 500 }}>2x1</span>
                     <span style={{ fontSize: '10px', color: color, fontWeight: 500 }}>Lleva 2, paga 1</span>
                   </>
                 )
@@ -162,7 +162,7 @@ export default function PlatoCard({
                 return (
                   <>
                     <span style={{ fontSize: '13px', fontWeight: 500, color: color }}>desde ${formatoPrecio(Math.round(minDesc))}</span>
-                    <span style={{ fontSize: '10px', color: 'white', background: color, padding: '2px 6px', borderRadius: '8px', fontWeight: 500 }}>{pillText}</span>
+                    <span style={{ fontSize: '10px', color: 'white', background: color, padding: '2px 6px', borderRadius: 'var(--theme-radius-chip)', fontWeight: 500 }}>{pillText}</span>
                   </>
                 )
               }
@@ -173,7 +173,7 @@ export default function PlatoCard({
                 <>
                   <span style={{ fontSize: '12px', color: 'var(--theme-text-subtle)', textDecoration: 'line-through' }}>${formatoPrecio(plato.precio)}</span>
                   <span style={{ fontSize: '13px', fontWeight: 500, color: color }}>${formatoPrecio(precioDesc)}</span>
-                  <span style={{ fontSize: '10px', color: 'white', background: color, padding: '2px 6px', borderRadius: '8px', fontWeight: 500 }}>{pillText}</span>
+                  <span style={{ fontSize: '10px', color: 'white', background: color, padding: '2px 6px', borderRadius: 'var(--theme-radius-chip)', fontWeight: 500 }}>{pillText}</span>
                 </>
               )
             })()}

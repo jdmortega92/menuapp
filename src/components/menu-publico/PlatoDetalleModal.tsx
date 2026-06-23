@@ -299,11 +299,11 @@ export default function PlatoDetalleModal({
                   ${formatoPrecio(platoDia.precioEspecial)}
                 </span>
                 <span style={{
-                  fontSize: '11px',
+                  fontSize: '10px',
                   color: 'white',
                   background: color,
                   padding: '3px 8px',
-                  borderRadius: '10px',
+                  borderRadius: 'var(--theme-radius-chip)',
                   fontWeight: 500,
                 }}>
                   Plato del día
@@ -323,7 +323,7 @@ export default function PlatoDetalleModal({
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
                   <span style={{ fontSize: '16px', color: 'var(--theme-text-subtle)', textDecoration: 'line-through' }}>${formatoPrecio(base)}</span>
                   <span style={{ fontSize: '22px', fontWeight: 500, color: color }}>${formatoPrecio(pd)}</span>
-                  <span style={{ fontSize: '11px', color: 'white', background: color, padding: '3px 8px', borderRadius: '10px', fontWeight: 500 }}>{dSel}% OFF</span>
+                  <span style={{ fontSize: '10px', color: 'white', background: color, padding: '3px 8px', borderRadius: 'var(--theme-radius-chip)', fontWeight: 500 }}>{dSel}% OFF</span>
                 </div>
               )
             }
@@ -333,7 +333,7 @@ export default function PlatoDetalleModal({
               return (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
                   <span style={{ fontSize: '22px', fontWeight: 500, color: 'var(--theme-text)' }}>${formatoPrecio(base)}</span>
-                  <span style={{ fontSize: '11px', color: 'white', background: color, padding: '3px 8px', borderRadius: '10px', fontWeight: 500 }}>2x1</span>
+                  <span style={{ fontSize: '10px', color: 'white', background: color, padding: '3px 8px', borderRadius: 'var(--theme-radius-chip)', fontWeight: 500 }}>2x1</span>
                   <span style={{ fontSize: '11px', color: color, fontWeight: 500 }}>Lleva 2, paga 1</span>
                 </div>
               )
@@ -367,11 +367,11 @@ export default function PlatoDetalleModal({
                   ${formatoPrecio(platoDia.precioEspecial)}
                 </span>
                 <span style={{
-                  fontSize: '11px',
+                  fontSize: '10px',
                   color: 'white',
                   background: color,
                   padding: '3px 8px',
-                  borderRadius: '10px',
+                  borderRadius: 'var(--theme-radius-chip)',
                   fontWeight: 500,
                 }}>
                   Plato del día
@@ -389,7 +389,7 @@ export default function PlatoDetalleModal({
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
                   <span style={{ fontSize: '16px', color: 'var(--theme-text-subtle)', textDecoration: 'line-through' }}>${formatoPrecio(plato.precio)}</span>
                   <span style={{ fontSize: '22px', fontWeight: 500, color: color }}>${formatoPrecio(pd)}</span>
-                  <span style={{ fontSize: '11px', color: 'white', background: color, padding: '3px 8px', borderRadius: '10px', fontWeight: 500 }}>{dNo}% OFF</span>
+                  <span style={{ fontSize: '10px', color: 'white', background: color, padding: '3px 8px', borderRadius: 'var(--theme-radius-chip)', fontWeight: 500 }}>{dNo}% OFF</span>
                 </div>
               )
             }
@@ -398,7 +398,7 @@ export default function PlatoDetalleModal({
               return (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
                   <span style={{ fontSize: '22px', fontWeight: 500, color: 'var(--theme-text)' }}>${formatoPrecio(plato.precio)}</span>
-                  <span style={{ fontSize: '11px', color: 'white', background: color, padding: '3px 8px', borderRadius: '10px', fontWeight: 500 }}>2x1</span>
+                  <span style={{ fontSize: '10px', color: 'white', background: color, padding: '3px 8px', borderRadius: 'var(--theme-radius-chip)', fontWeight: 500 }}>2x1</span>
                   <span style={{ fontSize: '11px', color: color, fontWeight: 500 }}>Lleva 2, paga 1</span>
                 </div>
               )
