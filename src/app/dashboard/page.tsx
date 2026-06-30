@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks'
-import { createClient } from '@/lib/supabase-browser'
 import { fechaColombia } from '@/lib/fechas'
 import { useDashboardStats } from '@/hooks/data/useDashboardStats'
 import { useDashboardLifetime } from '@/hooks/data/useDashboardLifetime'
