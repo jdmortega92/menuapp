@@ -5,6 +5,9 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks'
 import { createClient } from '@/lib/supabase-browser'
 import { fechaColombia } from '@/lib/fechas'
+import { useDashboardStats } from '@/hooks/data/useDashboardStats'
+import { useDashboardLifetime } from '@/hooks/data/useDashboardLifetime'
+import { useDashboardAlertas } from '@/hooks/data/useDashboardAlertas'
 import BottomNav from '@/components/BottomNav'
 
 
@@ -25,571 +28,371 @@ export default function DashboardPage() {
 
   
 
-  const [stats, setStats] = useState({
-    escaneos: 0,
-    visitas: 0,
-    pedidosWhatsapp: 0,
-    calificacion: 0,
-    totalResenas: 0,
-    // Embudo por sesión (Layer 3). Subconjuntos anidados sobre las sesiones que
-    // abrieron el menú → todas las tasas quedan 0-100% por construcción. Excluyen
-    // filas legacy con session_id NULL (anteriores al seguimiento por sesión).
-    sesionesMenu: 0,
-    sesionesPlato: 0,
-    sesionesPedido: 0,
-  })
+  // ── Lecturas vía SWR (Refactor Fase 4). `filtroTiempo` re-keya el bundle de stats;
+  //    lifetime (calificaciones) y alertas son independientes del periodo. ──
+  const { data: statsData, isLoading: statsCargando } = useDashboardStats(rest?.id, filtroTiempo)
+  const { data: lifetimeData, isLoading: lifetimeCargando } = useDashboardLifetime(rest?.id)
+  const { data: alertasData, isLoading: alertasCargando } = useDashboardAlertas(rest?.id, plan)
 
-  const [statsAnterior, setStatsAnterior] = useState({
-    escaneos: 0,
-    visitas: 0,
-    pedidosWhatsapp: 0,
-  })
-
-  const [platosMasVistos, setPlatosMasVistos] = useState<any[]>([])
-  const [platosInteresBajo, setPlatosInteresBajo] = useState<any[]>([])
-  const [platosSinVistas, setPlatosSinVistas] = useState<any[]>([])
-  const [horariosPico, setHorariosPico] = useState<any[]>([])
-  const [escaneosPorDia, setEscaneosPorDia] = useState<any[]>([])
-  const [resenas, setResenas] = useState<any[]>([])
-  const [mejorDia, setMejorDia] = useState<{ dia: string; cantidad: number } | null>(null)
-  const [peorDia, setPeorDia] = useState<{ dia: string; cantidad: number } | null>(null)
-  const [alertas, setAlertas] = useState<any[]>([])
-  const [heatmapData, setHeatmapData] = useState<any>(null)
-
-  useEffect(() => {
-    if (!rest?.id) return
-    async function cargarStats() {
-      const supabase = createClient()
-      const hoy = new Date()
-      // Fechas calendario COT vía lib/fechas (misma convención con la que el menú
-      // público escribe `fecha`), así que una fila escrita con fecha=X cae siempre
-      // dentro de la ventana del dashboard que incluye X.
-      const hoyStr = fechaColombia(hoy)
-      let desde = ''
-      let hasta = hoyStr
-      let desdeAnterior = ''
-      let hastaAnterior = ''
-
-      // Lunes de la semana actual (COT). Fuente única reusada por la ventana
-      // 'semana' y por el gráfico "Actividad por día" (no recalcular abajo).
-      const diaHoy = hoy.getDay()
-      const diasDesdeLunesSem = diaHoy === 0 ? 6 : diaHoy - 1
-      const lunesSemana = new Date(hoy)
-      lunesSemana.setDate(hoy.getDate() - diasDesdeLunesSem)
-      lunesSemana.setHours(0, 0, 0, 0)
-
-      if (filtroTiempo === 'hoy') {
-        desde = hoyStr
-        hasta = hoyStr
-        const ayer = fechaColombia(new Date(hoy.getTime() - 24 * 60 * 60 * 1000))
-        desdeAnterior = ayer
-        hastaAnterior = ayer
-      } else if (filtroTiempo === 'semana') {
-        // Semana calendario (Model B-fair): actual = lunes..hoy; anterior =
-        // lunes pasado..mismo día de la semana pasada (mismo nº de días transcurridos),
-        // para que la variación compare como-con-como. Todo vía fechaColombia (COT).
-        desde = fechaColombia(lunesSemana)
-        hasta = hoyStr
-        desdeAnterior = fechaColombia(new Date(lunesSemana.getTime() - 7 * 24 * 60 * 60 * 1000))
-        hastaAnterior = fechaColombia(new Date(hoy.getTime() - 7 * 24 * 60 * 60 * 1000))
-      } else {
-        // Año/mes derivados de la fecha COT corregida (hoyStr), no de los getters
-        // locales del navegador, para robustez total de huso horario.
-        const [cy, cm] = hoyStr.split('-') // 'YYYY-MM-DD' en COT
-        const cmNum = parseInt(cm, 10)
-        const cyNum = parseInt(cy, 10)
-        desde = `${cy}-${cm}-01`
-        hasta = hoyStr
-
-        const mesAnterior = cmNum === 1 ? 12 : cmNum - 1
-        const yearAnterior = cmNum === 1 ? cyNum - 1 : cyNum
-        const mmAnterior = String(mesAnterior).padStart(2, '0')
-        const ultimoDiaMesAnterior = new Date(yearAnterior, mesAnterior, 0).getDate()
-        desdeAnterior = `${yearAnterior}-${mmAnterior}-01`
-        hastaAnterior = `${yearAnterior}-${mmAnterior}-${String(ultimoDiaMesAnterior).padStart(2, '0')}`
+  // ── Derivaciones post-fetch. Código VERBATIM del antiguo cargarStats: lo único que
+  //    cambió es el ORIGEN de las filas (hooks SWR en vez de supabase.from() inline) y
+  //    que cada setX(...) ahora es un valor devuelto. Ninguna fórmula/guardia cambió.
+  const derivados = React.useMemo(() => {
+    if (!statsData) {
+      return {
+        stats: { escaneos: 0, visitas: 0, pedidosWhatsapp: 0, calificacion: 0, totalResenas: 0, sesionesMenu: 0, sesionesPlato: 0, sesionesPedido: 0 },
+        statsAnterior: { escaneos: 0, visitas: 0, pedidosWhatsapp: 0 },
+        platosMasVistos: [] as any[],
+        platosInteresBajo: [] as any[],
+        platosSinVistas: [] as any[],
+        horariosPico: [] as any[],
+        escaneosPorDia: [] as any[],
+        resenas: [] as any[],
+        alertas: [] as any[],
+        heatmapData: null as any,
       }
+    }
 
-      // Visitas al menú
-      const { count: visitas } = await supabase
-        .from('visitas_menu')
-        .select('*', { count: 'exact', head: true })
-        .eq('restaurante_id', rest!.id)
-        .gte('fecha', desde)
-        .lte('fecha', hasta)
+    const hoy = new Date()
+    const { desde, hasta, lunesSemana, hoyStr } = statsData.window
 
+    // Filas crudas (antes lecturas supabase inline en cargarStats)
+    const visitas = statsData.visitasCount
+    const pedidos = statsData.pedidosCount
+    const calData = lifetimeData?.calData ?? null
+    const vistasData = statsData.vistasData
+    const platosInfo = statsData.platosInfo
+    const visitasHora = statsData.visitasHora
+    const visitasDia = statsData.visitasDia
+    const resenasData = lifetimeData?.resenasData ?? null
+    const visitasAnt = statsData.visitasAntCount
+    const vistasPlatosAnt = statsData.vistasPlatosAntCount
+    const pedidosAnt = statsData.pedidosAntCount
 
-      // Pedidos WhatsApp
-      const { count: pedidos } = await supabase
-        .from('pedidos_whatsapp')
-        .select('*', { count: 'exact', head: true })
-        .eq('restaurante_id', rest!.id)
-        .gte('fecha', desde)
-        .lte('fecha', hasta)
+    // ===== Embudo por sesión ===== (verbatim)
+    const setMenu = new Set((statsData.sesMenuRows ?? []).map((r: any) => r.session_id))
+    const setPlato = new Set((statsData.sesPlatoRows ?? []).map((r: any) => r.session_id))
+    const setPedido = new Set((statsData.sesPedidoRows ?? []).map((r: any) => r.session_id))
+    const sesionesMenu = setMenu.size
+    const sesionesPlato = [...setPlato].filter((id: any) => setMenu.has(id)).length
+    const sesionesPedido = [...setPedido].filter((id: any) => setMenu.has(id)).length
 
-      // ===== Embudo por sesión (menú → pedido), con platos como engagement =====
-      // Traemos session_id (NOT NULL) de las tres tablas para el periodo y
-      // deduplicamos/intersectamos con Sets en cliente. Subconjuntos anidados:
-      // toda sesión de plato/pedido contada debe existir entre las que abrieron
-      // el menú → monotonía garantizada (menú ≥ platos, menú ≥ pedido) y tasas 0-100%.
-      const [{ data: sesMenuRows }, { data: sesPlatoRows }, { data: sesPedidoRows }] = await Promise.all([
-        supabase.from('visitas_menu').select('session_id')
-          .eq('restaurante_id', rest!.id).gte('fecha', desde).lte('fecha', hasta)
-          .not('session_id', 'is', null),
-        supabase.from('vistas_platos').select('session_id')
-          .eq('restaurante_id', rest!.id).gte('fecha', desde).lte('fecha', hasta)
-          .not('session_id', 'is', null),
-        supabase.from('pedidos_whatsapp').select('session_id')
-          .eq('restaurante_id', rest!.id).gte('fecha', desde).lte('fecha', hasta)
-          .not('session_id', 'is', null),
-      ])
-      const setMenu = new Set((sesMenuRows ?? []).map((r: any) => r.session_id))
-      const setPlato = new Set((sesPlatoRows ?? []).map((r: any) => r.session_id))
-      const setPedido = new Set((sesPedidoRows ?? []).map((r: any) => r.session_id))
-      const sesionesMenu = setMenu.size
-      // engagement: sesiones que exploraron ≥1 plato, entre las que abrieron el menú
-      const sesionesPlato = [...setPlato].filter((id: any) => setMenu.has(id)).length
-      // conversión: sesiones que pidieron, entre las que abrieron el menú
-      // (NO se exige haber visto un plato → los pedidos directos de combo/promo cuentan)
-      const sesionesPedido = [...setPedido].filter((id: any) => setMenu.has(id)).length
+    // Calificación promedio (verbatim)
+    let promedio = 0
+    if (calData && calData.length > 0) {
+      promedio = Math.round((calData.reduce((sum: number, c: any) => sum + c.estrellas, 0) / calData.length) * 10) / 10
+    }
 
-      // Calificación promedio
-      const { data: calData } = await supabase
-        .from('calificaciones')
-        .select('estrellas')
-        .eq('restaurante_id', rest!.id)
-
-      let promedio = 0
-      if (calData && calData.length > 0) {
-        promedio = Math.round((calData.reduce((sum: number, c: any) => sum + c.estrellas, 0) / calData.length) * 10) / 10
+    // Ids de platos actuales + titular reconciliado + rankings (verbatim)
+    const currentPlatoIds = (platosInfo ?? []).map((p: any) => p.id)
+    let vistasPlatosCurrent = 0
+    let platosMasVistos: any[] = []
+    let platosInteresBajo: any[] = []
+    let platosSinVistas: any[] = []
+    if (platosInfo && platosInfo.length > 0) {
+      const conteo: Record<string, number> = {}
+      if (vistasData) {
+        vistasData.forEach((v: any) => { conteo[v.plato_id] = (conteo[v.plato_id] || 0) + 1 })
       }
+      vistasPlatosCurrent = currentPlatoIds.reduce((s: number, id: any) => s + (conteo[id] || 0), 0)
 
-      // Platos más vistos (filas con plato_id del periodo)
-      const { data: vistasData } = await supabase
-        .from('vistas_platos')
-        .select('plato_id')
-        .eq('restaurante_id', rest!.id)
-        .gte('fecha', desde)
-        .lte('fecha', hasta)
+      const desdePeriodo = new Date(desde + 'T00:00:00')
 
-      // Siempre cargar todos los platos (con created_at) para análisis de antigüedad
-      const { data: platosInfo } = await supabase
-        .from('platos')
-        .select('id, nombre, created_at')
-        .eq('restaurante_id', rest!.id)
+      const platosConVistas = platosInfo
+        .filter((p: any) => conteo[p.id])
+        .map((p: any) => ({
+          id: p.id,
+          nombre: p.nombre,
+          vistas: conteo[p.id],
+          created_at: p.created_at,
+        }))
+        .sort((a: any, b: any) => b.vistas - a.vistas)
 
-      // Ids de platos ACTUALES. El titular "Platos vistos" se reconcilia con el
-      // desglose contando SOLO vistas de platos que aún existen (no de eliminados),
-      // así el titular = suma de todo el desglose por plato actual.
-      const currentPlatoIds = (platosInfo ?? []).map((p: any) => p.id)
-      let vistasPlatosCurrent = 0
+      platosMasVistos = platosConVistas.slice(0, 5)
 
-      if (platosInfo && platosInfo.length > 0) {
-        const conteo: Record<string, number> = {}
-        if (vistasData) {
-          vistasData.forEach((v: any) => { conteo[v.plato_id] = (conteo[v.plato_id] || 0) + 1 })
-        }
-        // Titular reconciliado: suma de vistas SOLO sobre platos actuales.
-        vistasPlatosCurrent = currentPlatoIds.reduce((s: number, id: any) => s + (conteo[id] || 0), 0)
+      let interesBajo: any[] = []
+      if (platosConVistas.length >= 6) {
+        const promedio = platosConVistas.reduce((sum: number, p: any) => sum + p.vistas, 0) / platosConVistas.length
+        const corteMinimo = Math.floor(platosConVistas.length * 0.7) // Último 30%
+        interesBajo = platosConVistas
+          .slice(corteMinimo)
+          .filter((p: any) => p.vistas < promedio)
+          .slice(0, 5)
+      }
+      platosInteresBajo = interesBajo
 
-        // Fecha de inicio del periodo para filtrar por antigüedad del plato
-        const desdePeriodo = new Date(desde + 'T00:00:00')
-
-        // Platos con vistas (ordenados de más a menos)
-        const platosConVistas = platosInfo
-          .filter((p: any) => conteo[p.id])
-          .map((p: any) => ({
+      const sinVistasPeriodo = platosInfo
+        .filter((p: any) => !conteo[p.id])
+        .filter((p: any) => {
+          const createdAt = new Date(p.created_at)
+          return createdAt < desdePeriodo
+        })
+        .map((p: any) => {
+          const createdAt = new Date(p.created_at)
+          const diasCreado = Math.floor((hoy.getTime() - createdAt.getTime()) / (24 * 60 * 60 * 1000))
+          return {
             id: p.id,
             nombre: p.nombre,
-            vistas: conteo[p.id],
             created_at: p.created_at,
-          }))
-          .sort((a: any, b: any) => b.vistas - a.vistas)
-
-        // ===== Platos más vistos (top 5) =====
-        setPlatosMasVistos(platosConVistas.slice(0, 5))
-
-        // ===== Interés bajo: platos con vistas pero en el 30% más bajo =====
-        // Solo aplica si hay al menos 6 platos con vistas (si no, ya los muestra el top)
-        let interesBajo: any[] = []
-        if (platosConVistas.length >= 6) {
-          const promedio = platosConVistas.reduce((sum: number, p: any) => sum + p.vistas, 0) / platosConVistas.length
-          const corteMinimo = Math.floor(platosConVistas.length * 0.7) // Último 30%
-          interesBajo = platosConVistas
-            .slice(corteMinimo)
-            .filter((p: any) => p.vistas < promedio)
-            .slice(0, 5)
-        }
-        setPlatosInteresBajo(interesBajo)
-
-        // ===== Sin vistas en el periodo (solo platos creados antes del periodo) =====
-        const sinVistasPeriodo = platosInfo
-          .filter((p: any) => !conteo[p.id])
-          .filter((p: any) => {
-            const createdAt = new Date(p.created_at)
-            return createdAt < desdePeriodo
-          })
-          .map((p: any) => {
-            const createdAt = new Date(p.created_at)
-            const diasCreado = Math.floor((hoy.getTime() - createdAt.getTime()) / (24 * 60 * 60 * 1000))
-            return {
-              id: p.id,
-              nombre: p.nombre,
-              created_at: p.created_at,
-              diasCreado,
-            }
-          })
-          .sort((a: any, b: any) => b.diasCreado - a.diasCreado) // Más viejos primero
-          .slice(0, 5)
-        setPlatosSinVistas(sinVistasPeriodo)
-      } else {
-        setPlatosMasVistos([])
-        setPlatosInteresBajo([])
-        setPlatosSinVistas([])
-      }
-
-      // Horarios pico + Heatmap día × hora
-      const { data: visitasHora } = await supabase
-        .from('visitas_menu')
-        .select('created_at, fecha')
-        .eq('restaurante_id', rest!.id)
-        .gte('fecha', desde)
-        .lte('fecha', hasta)
-
-      if (visitasHora && visitasHora.length > 0) {
-        // Ajuste a hora de Colombia (UTC-5)
-        function horaColombia(timestamp: string): number {
-          const fecha = new Date(timestamp)
-          const utcMs = fecha.getTime() + fecha.getTimezoneOffset() * 60 * 1000
-          const colMs = utcMs - 5 * 60 * 60 * 1000
-          return new Date(colMs).getHours()
-        }
-        function diaColombia(timestamp: string): number {
-          const fecha = new Date(timestamp)
-          const utcMs = fecha.getTime() + fecha.getTimezoneOffset() * 60 * 1000
-          const colMs = utcMs - 5 * 60 * 60 * 1000
-          return new Date(colMs).getDay()
-        }
-
-        // ===== Horarios pico (lista simple) =====
-        const porHora: Record<number, number> = {}
-        visitasHora.forEach((v: any) => {
-          const hora = horaColombia(v.created_at)
-          porHora[hora] = (porHora[hora] || 0) + 1
+            diasCreado,
+          }
         })
-        const listaHoras = Object.entries(porHora)
-          .map(([hora, cantidad]) => ({
-            rango: `${parseInt(hora)}:00 — ${parseInt(hora) + 1}:00`,
-            escaneos: cantidad,
-          }))
-          .sort((a: any, b: any) => b.escaneos - a.escaneos)
-          .slice(0, 3)
-        setHorariosPico(listaHoras)
+        .sort((a: any, b: any) => b.diasCreado - a.diasCreado) // Más viejos primero
+        .slice(0, 5)
+      platosSinVistas = sinVistasPeriodo
+    }
 
-        // ===== Matriz heatmap 8 bloques × 7 días =====
-        // Bloques de 3 horas cubriendo las 24h: 0-3, 3-6, 6-9, 9-12, 12-15, 15-18, 18-21, 21-24
-        // Días: lun(0), mar(1), mié(2), jue(3), vie(4), sáb(5), dom(6)
-        // JS usa domingo=0, lunes=1... así que mapeamos: lun=1→0, mar=2→1... dom=0→6
-        const matriz: number[][] = Array(8).fill(0).map(() => Array(7).fill(0))
-
-        visitasHora.forEach((v: any) => {
-          const hora = horaColombia(v.created_at)
-          const diaJS = diaColombia(v.created_at)
-          const diaMatriz = diaJS === 0 ? 6 : diaJS - 1 // lunes = 0, domingo = 6
-
-          // Calcular bloque dividiendo la hora entre 3 (0-2 → 0, 3-5 → 1, etc.)
-          const bloqueHora = Math.floor(hora / 3)
-
-          if (bloqueHora >= 0 && bloqueHora < 8) matriz[bloqueHora][diaMatriz]++
-        })
-
-        // Encontrar el máximo para escalar colores
-        let maxCelda = 0
-        matriz.forEach(fila => fila.forEach(v => { if (v > maxCelda) maxCelda = v }))
-
-        // Encontrar pico y valle
-        let pico = { dia: -1, bloque: -1, valor: 0 }
-        let totalVisitas = 0
-        matriz.forEach((fila, b) => {
-          fila.forEach((v, d) => {
-            totalVisitas += v
-            if (v > pico.valor) pico = { dia: d, bloque: b, valor: v }
-          })
-        })
-
-        // Detectar día completamente muerto (de los 7 días del periodo)
-        const visitasPorDia: number[] = Array(7).fill(0)
-        matriz.forEach(fila => fila.forEach((v, d) => { visitasPorDia[d] += v }))
-        const diasMuertos: number[] = []
-        visitasPorDia.forEach((v, d) => { if (v === 0) diasMuertos.push(d) })
-
-        // Solo mostrar el heatmap si hay suficientes datos (>= 20 visitas)
-        const hayDatosSuficientes = totalVisitas >= 20
-
-        setHeatmapData({
-          matriz,
-          maxCelda,
-          totalVisitas,
-          pico,
-          diasMuertos,
-          hayDatosSuficientes,
-        })
-      } else {
-        setHorariosPico([])
-        setHeatmapData(null)
+    // Horarios pico + Heatmap día × hora (verbatim)
+    let horariosPico: any[] = []
+    let heatmapData: any = null
+    if (visitasHora && visitasHora.length > 0) {
+      // Ajuste a hora de Colombia (UTC-5)
+      function horaColombia(timestamp: string): number {
+        const fecha = new Date(timestamp)
+        const utcMs = fecha.getTime() + fecha.getTimezoneOffset() * 60 * 1000
+        const colMs = utcMs - 5 * 60 * 60 * 1000
+        return new Date(colMs).getHours()
+      }
+      function diaColombia(timestamp: string): number {
+        const fecha = new Date(timestamp)
+        const utcMs = fecha.getTime() + fecha.getTimezoneOffset() * 60 * 1000
+        const colMs = utcMs - 5 * 60 * 60 * 1000
+        return new Date(colMs).getDay()
       }
 
-      // Visitas por día con fechas reales
-      const { data: visitasDia } = await supabase
-        .from('visitas_menu')
-        .select('fecha')
-        .eq('restaurante_id', rest!.id)
-        .gte('fecha', desde)
-        .lte('fecha', hasta)
+      // ===== Horarios pico (lista simple) =====
+      const porHora: Record<number, number> = {}
+      visitasHora.forEach((v: any) => {
+        const hora = horaColombia(v.created_at)
+        porHora[hora] = (porHora[hora] || 0) + 1
+      })
+      const listaHoras = Object.entries(porHora)
+        .map(([hora, cantidad]) => ({
+          rango: `${parseInt(hora)}:00 — ${parseInt(hora) + 1}:00`,
+          escaneos: cantidad,
+        }))
+        .sort((a: any, b: any) => b.escaneos - a.escaneos)
+        .slice(0, 3)
+      horariosPico = listaHoras
 
-      const diasCortos = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb']
-      const hoyComparar = fechaColombia(hoy)
+      // ===== Matriz heatmap 8 bloques × 7 días =====
+      const matriz: number[][] = Array(8).fill(0).map(() => Array(7).fill(0))
 
-      // Array de barras period-aware (fechas en COT vía fechaColombia):
-      // - 'semana': lunes..domingo (7 barras, días futuros en gris) — PRESERVA el
-      //   comportamiento que estableció el window fix.
-      // - 'mes' (y 'hoy', cuyo gráfico no se renderiza): una barra por día desde
-      //   `desde` hasta `hasta` (=hoy) inclusive → el mes descubre su nº de días del
-      //   rango y se detiene en hoy (sin días futuros). Mantiene la MISMA forma de
-      //   day-object, así el PDF y el resumen "mejor día" siguen funcionando igual.
-      const diasConFecha: any[] = []
-      if (filtroTiempo === 'semana') {
-        for (let i = 0; i < 7; i++) {
-          const fecha = new Date(lunesSemana)
-          fecha.setDate(lunesSemana.getDate() + i)
-          const fechaStr = fechaColombia(fecha)
-          diasConFecha.push({
-            dia: diasCortos[fecha.getDay()],
-            numero: fecha.getDate(),
-            fecha: fechaStr,
-            actual: 0,
-            esFuturo: fechaStr > hoyComparar,
-            esHoy: fechaStr === hoyComparar,
-          })
-        }
-      } else {
-        // Iterar desde..hasta inclusive. Ancla a mediodía local para que el ajuste
-        // COT (-5h) de fechaColombia no cruce el límite de día.
-        const start = new Date(desde + 'T12:00:00')
-        const end = new Date(hasta + 'T12:00:00')
-        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-          const fechaStr = fechaColombia(d)
-          diasConFecha.push({
-            dia: diasCortos[d.getDay()],
-            numero: d.getDate(),
-            fecha: fechaStr,
-            actual: 0,
-            esFuturo: fechaStr > hoyComparar,
-            esHoy: fechaStr === hoyComparar,
-          })
-        }
-      }
+      visitasHora.forEach((v: any) => {
+        const hora = horaColombia(v.created_at)
+        const diaJS = diaColombia(v.created_at)
+        const diaMatriz = diaJS === 0 ? 6 : diaJS - 1 // lunes = 0, domingo = 6
 
-      // Llenar con datos reales
-      if (visitasDia && visitasDia.length > 0) {
-        const porFechaConteo: Record<string, number> = {}
-        visitasDia.forEach((v: any) => {
-          porFechaConteo[v.fecha] = (porFechaConteo[v.fecha] || 0) + 1
-        })
-        diasConFecha.forEach((d: any) => {
-          d.actual = porFechaConteo[d.fecha] || 0
-        })
-      }
+        // Calcular bloque dividiendo la hora entre 3 (0-2 → 0, 3-5 → 1, etc.)
+        const bloqueHora = Math.floor(hora / 3)
 
-      setEscaneosPorDia(diasConFecha)
-
-      // Últimas reseñas
-      const { data: resenasData } = await supabase
-        .from('calificaciones')
-        .select('*, platos(nombre)')
-        .eq('restaurante_id', rest!.id)
-        .order('created_at', { ascending: false })
-        .limit(3)
-
-      if (resenasData && resenasData.length > 0) {
-        setResenas(resenasData.map((r: any) => ({
-          plato: r.platos?.nombre || 'Plato',
-          estrellas: r.estrellas,
-          comentario: r.comentario || '',
-          tiempo: new Date(r.created_at).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' }),
-        })))
-      } else {
-        setResenas([])
-      }
-
-      // Mejor y peor día
-      if (visitasDia && visitasDia.length > 0) {
-        const porFecha: Record<string, number> = {}
-        visitasDia.forEach((v: any) => { porFecha[v.fecha] = (porFecha[v.fecha] || 0) + 1 })
-        const fechas = Object.entries(porFecha).sort((a: any, b: any) => b[1] - a[1])
-        if (fechas.length > 0) {
-          setMejorDia({ dia: new Date(fechas[0][0] + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric' }), cantidad: fechas[0][1] })
-          setPeorDia({ dia: new Date(fechas[fechas.length - 1][0] + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric' }), cantidad: fechas[fechas.length - 1][1] })
-        }
-      } else {
-        setPlatosMasVistos([])
-        setPlatosInteresBajo([])
-        setPlatosSinVistas([])
-      }
-
-      // ===== Datos del periodo anterior =====
-      const { count: visitasAnt } = await supabase
-        .from('visitas_menu')
-        .select('*', { count: 'exact', head: true })
-        .eq('restaurante_id', rest!.id)
-        .gte('fecha', desdeAnterior)
-        .lte('fecha', hastaAnterior)
-
-      // Periodo anterior: contar SOLO vistas de platos actuales (simétrico al
-      // titular) para que la variación compare como-con-como. Guarda el .in() vacío
-      // (sin platos actuales → 0, no "todas las filas").
-      let vistasPlatosAnt = 0
-      if (currentPlatoIds.length > 0) {
-        const { count } = await supabase
-          .from('vistas_platos')
-          .select('*', { count: 'exact', head: true })
-          .eq('restaurante_id', rest!.id)
-          .gte('fecha', desdeAnterior)
-          .lte('fecha', hastaAnterior)
-          .in('plato_id', currentPlatoIds)
-        vistasPlatosAnt = count || 0
-      }
-
-      const { count: pedidosAnt } = await supabase
-        .from('pedidos_whatsapp')
-        .select('*', { count: 'exact', head: true })
-        .eq('restaurante_id', rest!.id)
-        .gte('fecha', desdeAnterior)
-        .lte('fecha', hastaAnterior)
-
-      setStatsAnterior({
-        escaneos: visitasAnt || 0,
-        visitas: vistasPlatosAnt || 0,
-        pedidosWhatsapp: pedidosAnt || 0,
+        if (bloqueHora >= 0 && bloqueHora < 8) matriz[bloqueHora][diaMatriz]++
       })
 
-      // ===== Detección de alertas =====
-      const nuevasAlertas: any[] = []
+      // Encontrar el máximo para escalar colores
+      let maxCelda = 0
+      matriz.forEach(fila => fila.forEach(v => { if (v > maxCelda) maxCelda = v }))
 
-      // Alerta 1: Sin visitas en últimos 3 días
-      const hace3Dias = fechaColombia(new Date(hoy.getTime() - 3 * 24 * 60 * 60 * 1000))
-      const { count: visitasUltimos3 } = await supabase
-        .from('visitas_menu')
-        .select('*', { count: 'exact', head: true })
-        .eq('restaurante_id', rest!.id)
-        .gte('fecha', hace3Dias)
-        .lte('fecha', hoyStr)
-
-      if ((visitasUltimos3 || 0) === 0) {
-        // Verificar si el restaurante tiene al menos 1 visita histórica
-        const { count: totalVisitasHist } = await supabase
-          .from('visitas_menu')
-          .select('*', { count: 'exact', head: true })
-          .eq('restaurante_id', rest!.id)
-
-        if ((totalVisitasHist || 0) > 0) {
-          nuevasAlertas.push({
-            id: 'sin-visitas',
-            tipo: 'advertencia',
-            titulo: 'Sin visitas recientes',
-            mensaje: 'No has recibido visitas en los últimos 3 días. Comparte tu QR o enlace en redes sociales.',
-            accion: { texto: 'Ver mi QR', href: '/qr' },
-          })
-        }
-      }
-
-      // Alerta 2: Menú sin actualizar hace más de 30 días
-      const { data: ultimoPlato } = await supabase
-        .from('platos')
-        .select('updated_at')
-        .eq('restaurante_id', rest!.id)
-        .order('updated_at', { ascending: false })
-        .limit(1)
-
-
-      if (ultimoPlato && ultimoPlato.length > 0) {
-        const ultimaActualizacion = new Date(ultimoPlato[0].updated_at)
-        const diasSinActualizar = Math.floor((hoy.getTime() - ultimaActualizacion.getTime()) / (24 * 60 * 60 * 1000))
-
-
-        if (diasSinActualizar > 30) {
-          nuevasAlertas.push({
-            id: 'menu-viejo',
-            tipo: 'info',
-            titulo: 'Menú sin actualizar',
-            mensaje: `No actualizas tu menú hace ${diasSinActualizar} días. Los comensales valoran la frescura del contenido.`,
-            accion: { texto: 'Actualizar menú', href: '/menu' },
-          })
-        }
-      }
-
-      // Alerta 3: Platos agotados sin desmarcar
-      const { data: platosAgotados } = await supabase
-        .from('platos')
-        .select('id, nombre, updated_at')
-        .eq('restaurante_id', rest!.id)
-        .eq('disponible', false)
-
-      if (platosAgotados && platosAgotados.length > 0) {
-        // Solo alertar si llevan más de 3 días agotados
-        const agotadosViejos = platosAgotados.filter((p: any) => {
-          const actualizado = new Date(p.updated_at)
-          const diasAgotado = Math.floor((hoy.getTime() - actualizado.getTime()) / (24 * 60 * 60 * 1000))
-          return diasAgotado >= 3
+      // Encontrar pico y valle
+      let pico = { dia: -1, bloque: -1, valor: 0 }
+      let totalVisitas = 0
+      matriz.forEach((fila, b) => {
+        fila.forEach((v, d) => {
+          totalVisitas += v
+          if (v > pico.valor) pico = { dia: d, bloque: b, valor: v }
         })
+      })
 
-        if (agotadosViejos.length > 0) {
-          nuevasAlertas.push({
-            id: 'platos-agotados',
-            tipo: 'advertencia',
-            titulo: `${agotadosViejos.length} plato${agotadosViejos.length > 1 ? 's' : ''} agotado${agotadosViejos.length > 1 ? 's' : ''}`,
-            mensaje: `Tienes platos marcados como agotados hace más de 3 días. Si ya los tienes disponibles, desmárcalos.`,
-            accion: { texto: 'Ver menú', href: '/menu' },
-          })
-        }
+      // Detectar día completamente muerto (de los 7 días del periodo)
+      const visitasPorDia: number[] = Array(7).fill(0)
+      matriz.forEach(fila => fila.forEach((v, d) => { visitasPorDia[d] += v }))
+      const diasMuertos: number[] = []
+      visitasPorDia.forEach((v, d) => { if (v === 0) diasMuertos.push(d) })
+
+      // Solo mostrar el heatmap si hay suficientes datos (>= 20 visitas)
+      const hayDatosSuficientes = totalVisitas >= 20
+
+      heatmapData = {
+        matriz,
+        maxCelda,
+        totalVisitas,
+        pico,
+        diasMuertos,
+        hayDatosSuficientes,
       }
+    } else {
+      horariosPico = []
+      heatmapData = null
+    }
 
-      // Alerta 4: Plan gratis con alta actividad
-      if (plan === 'gratis') {
-        // Primer día del mes en COT, derivado de hoyStr (no de getters locales).
-        const primerDiaMes = `${hoyStr.slice(0, 7)}-01`
-        const { count: visitasMes } = await supabase
-          .from('visitas_menu')
-          .select('*', { count: 'exact', head: true })
-          .eq('restaurante_id', rest!.id)
-          .gte('fecha', primerDiaMes)
-          .lte('fecha', hoyStr)
+    // Visitas por día con fechas reales (verbatim)
+    const diasCortos = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb']
+    const hoyComparar = fechaColombia(hoy)
 
-        if ((visitasMes || 0) >= 50) {
-          nuevasAlertas.push({
-            id: 'upgrade-sugerido',
-            tipo: 'oportunidad',
-            titulo: 'Tu menú está funcionando',
-            mensaje: `Llevas ${visitasMes} visitas este mes. Con Plan Básico ves platos más vistos, embudo de conversión y más.`,
-            accion: { texto: 'Ver planes', href: '/suscripcion' },
-          })
-        }
+    const diasConFecha: any[] = []
+    if (filtroTiempo === 'semana') {
+      for (let i = 0; i < 7; i++) {
+        const fecha = new Date(lunesSemana)
+        fecha.setDate(lunesSemana.getDate() + i)
+        const fechaStr = fechaColombia(fecha)
+        diasConFecha.push({
+          dia: diasCortos[fecha.getDay()],
+          numero: fecha.getDate(),
+          fecha: fechaStr,
+          actual: 0,
+          esFuturo: fechaStr > hoyComparar,
+          esHoy: fechaStr === hoyComparar,
+        })
       }
+    } else {
+      // Iterar desde..hasta inclusive. Ancla a mediodía local para que el ajuste
+      // COT (-5h) de fechaColombia no cruce el límite de día.
+      const start = new Date(desde + 'T12:00:00')
+      const end = new Date(hasta + 'T12:00:00')
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        const fechaStr = fechaColombia(d)
+        diasConFecha.push({
+          dia: diasCortos[d.getDay()],
+          numero: d.getDate(),
+          fecha: fechaStr,
+          actual: 0,
+          esFuturo: fechaStr > hoyComparar,
+          esHoy: fechaStr === hoyComparar,
+        })
+      }
+    }
 
-      setAlertas(nuevasAlertas)
-
-      setStats({
-        escaneos: visitas || 0,
-        visitas: vistasPlatosCurrent,
-        pedidosWhatsapp: pedidos || 0,
-        calificacion: promedio,
-        totalResenas: calData?.length || 0,
-        sesionesMenu,
-        sesionesPlato,
-        sesionesPedido,
+    // Llenar con datos reales
+    if (visitasDia && visitasDia.length > 0) {
+      const porFechaConteo: Record<string, number> = {}
+      visitasDia.forEach((v: any) => {
+        porFechaConteo[v.fecha] = (porFechaConteo[v.fecha] || 0) + 1
+      })
+      diasConFecha.forEach((d: any) => {
+        d.actual = porFechaConteo[d.fecha] || 0
       })
     }
-    cargarStats()
-  }, [rest?.id, filtroTiempo])
+
+    const escaneosPorDia = diasConFecha
+
+    // Últimas reseñas (verbatim)
+    let resenas: any[] = []
+    if (resenasData && resenasData.length > 0) {
+      resenas = resenasData.map((r: any) => ({
+        plato: r.platos?.nombre || 'Plato',
+        estrellas: r.estrellas,
+        comentario: r.comentario || '',
+        tiempo: new Date(r.created_at).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' }),
+      }))
+    } else {
+      resenas = []
+    }
+
+    // Mejor y peor día: mejorDia/peorDia eran ESTADO MUERTO (nunca se renderizaban —
+    // render y PDF recomputan mejorDiaSemana/mejorDiaResumen aparte). Se conserva SOLO
+    // el efecto observable del else (reset de platos) para no cambiar el output cuando
+    // no hay visitas-día.
+    if (!(visitasDia && visitasDia.length > 0)) {
+      platosMasVistos = []
+      platosInteresBajo = []
+      platosSinVistas = []
+    }
+
+    // Periodo anterior (verbatim)
+    const statsAnterior = {
+      escaneos: visitasAnt || 0,
+      visitas: vistasPlatosAnt || 0,
+      pedidosWhatsapp: pedidosAnt || 0,
+    }
+
+    // ===== Detección de alertas ===== (verbatim; conteos/filas vienen del hook)
+    const nuevasAlertas: any[] = []
+
+    // Alerta 1: Sin visitas en últimos 3 días
+    const visitasUltimos3 = alertasData?.visitasUltimos3 ?? 0
+    if ((visitasUltimos3 || 0) === 0) {
+      const totalVisitasHist = alertasData?.totalVisitasHist ?? 0
+      if ((totalVisitasHist || 0) > 0) {
+        nuevasAlertas.push({
+          id: 'sin-visitas',
+          tipo: 'advertencia',
+          titulo: 'Sin visitas recientes',
+          mensaje: 'No has recibido visitas en los últimos 3 días. Comparte tu QR o enlace en redes sociales.',
+          accion: { texto: 'Ver mi QR', href: '/qr' },
+        })
+      }
+    }
+
+    // Alerta 2: Menú sin actualizar hace más de 30 días
+    const ultimoPlato = alertasData?.ultimoPlato ?? null
+    if (ultimoPlato && ultimoPlato.length > 0) {
+      const ultimaActualizacion = new Date(ultimoPlato[0].updated_at)
+      const diasSinActualizar = Math.floor((hoy.getTime() - ultimaActualizacion.getTime()) / (24 * 60 * 60 * 1000))
+
+      if (diasSinActualizar > 30) {
+        nuevasAlertas.push({
+          id: 'menu-viejo',
+          tipo: 'info',
+          titulo: 'Menú sin actualizar',
+          mensaje: `No actualizas tu menú hace ${diasSinActualizar} días. Los comensales valoran la frescura del contenido.`,
+          accion: { texto: 'Actualizar menú', href: '/menu' },
+        })
+      }
+    }
+
+    // Alerta 3: Platos agotados sin desmarcar
+    const platosAgotados = alertasData?.platosAgotados ?? null
+    if (platosAgotados && platosAgotados.length > 0) {
+      // Solo alertar si llevan más de 3 días agotados
+      const agotadosViejos = platosAgotados.filter((p: any) => {
+        const actualizado = new Date(p.updated_at)
+        const diasAgotado = Math.floor((hoy.getTime() - actualizado.getTime()) / (24 * 60 * 60 * 1000))
+        return diasAgotado >= 3
+      })
+
+      if (agotadosViejos.length > 0) {
+        nuevasAlertas.push({
+          id: 'platos-agotados',
+          tipo: 'advertencia',
+          titulo: `${agotadosViejos.length} plato${agotadosViejos.length > 1 ? 's' : ''} agotado${agotadosViejos.length > 1 ? 's' : ''}`,
+          mensaje: `Tienes platos marcados como agotados hace más de 3 días. Si ya los tienes disponibles, desmárcalos.`,
+          accion: { texto: 'Ver menú', href: '/menu' },
+        })
+      }
+    }
+
+    // Alerta 4: Plan gratis con alta actividad
+    if (plan === 'gratis') {
+      const visitasMes = alertasData?.visitasMes ?? 0
+      if ((visitasMes || 0) >= 50) {
+        nuevasAlertas.push({
+          id: 'upgrade-sugerido',
+          tipo: 'oportunidad',
+          titulo: 'Tu menú está funcionando',
+          mensaje: `Llevas ${visitasMes} visitas este mes. Con Plan Básico ves platos más vistos, embudo de conversión y más.`,
+          accion: { texto: 'Ver planes', href: '/suscripcion' },
+        })
+      }
+    }
+
+    const alertas = nuevasAlertas
+
+    // ===== stats ===== (verbatim)
+    const stats = {
+      escaneos: visitas || 0,
+      visitas: vistasPlatosCurrent,
+      pedidosWhatsapp: pedidos || 0,
+      calificacion: promedio,
+      totalResenas: calData?.length || 0,
+      sesionesMenu,
+      sesionesPlato,
+      sesionesPedido,
+    }
+
+    return { stats, statsAnterior, platosMasVistos, platosInteresBajo, platosSinVistas, horariosPico, escaneosPorDia, resenas, alertas, heatmapData }
+  }, [statsData, lifetimeData, alertasData, filtroTiempo, plan])
+
+  const { stats, statsAnterior, platosMasVistos, platosInteresBajo, platosSinVistas, horariosPico, escaneosPorDia, resenas, alertas, heatmapData } = derivados
 
   const esBasico = plan === 'basico' || plan === 'pro'
   async function generarReportePDF() {
@@ -1359,7 +1162,10 @@ export default function DashboardPage() {
     }
   }, [cargando, usuario, router])
 
-  if (cargando) {
+  // Splash hasta que resuelvan auth + las 3 lecturas SWR (evita el parpadeo a cero
+  // inicial). En el toggle de periodo, keepPreviousData mantiene statsCargando=false,
+  // así que NO reaparece el splash al cambiar de periodo.
+  if (cargando || statsCargando || lifetimeCargando || alertasCargando) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-primary)' }}>
         <div style={{ textAlign: 'center' }}>

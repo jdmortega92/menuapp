@@ -133,6 +133,10 @@ export function useDashboardStats(restauranteId: string | null | undefined, peri
     {
       revalidateOnFocus: true,
       dedupingInterval: 5000,
+      // Al cambiar de periodo (nueva key) conserva los datos del periodo anterior
+      // mientras llega el nuevo → sin parpadeo a cero en el toggle (replica el UX
+      // pre-migración, donde el estado viejo seguía visible durante el refetch).
+      keepPreviousData: true,
     }
   )
 }
