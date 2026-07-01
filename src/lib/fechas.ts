@@ -10,6 +10,8 @@ export function fechaColombia(d: Date = new Date()): string {
 }
 
 // Código de día ('dom'…'sab') de "hoy" con el mismo offset Colombia.
-export function diaCodigoColombia(): string {
-  return ['dom', 'lun', 'mar', 'mie', 'jue', 'vie', 'sab'][new Date(Date.now() - 5 * 60 * 60 * 1000).getDay()]
+// `d` es inyectable (default new Date()) para tests deterministas; mismo patrón que
+// fechaColombia. La matemática -5h no cambia.
+export function diaCodigoColombia(d: Date = new Date()): string {
+  return ['dom', 'lun', 'mar', 'mie', 'jue', 'vie', 'sab'][new Date(d.getTime() - 5 * 60 * 60 * 1000).getDay()]
 }
