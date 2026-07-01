@@ -226,7 +226,10 @@ export default function DashboardPage() {
 
     // Visitas por día con fechas reales (verbatim)
     const diasCortos = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb']
-    const hoyComparar = fechaColombia(hoy)
+    // "Hoy" de la MISMA ventana del fetch: flags esHoy/esFuturo siempre consistentes
+    // con las filas (una Date fresca aqui divergiria si el memo re-corre sin refetch,
+    // p.ej. cruce de medianoche COT con keepPreviousData).
+    const hoyComparar = hoyStr
 
     const diasConFecha: any[] = []
     if (filtroTiempo === 'semana') {
@@ -1010,8 +1013,6 @@ export default function DashboardPage() {
     doc.save(nombreArchivo)
   }
   const esPro = plan === 'pro'
-  const maxEscaneo = escaneosPorDia.length > 0 ? Math.max(...escaneosPorDia.map((d: any) => d.actual), 1) : 1
-  const textoFiltro = filtroTiempo === 'hoy' ? 'hoy' : filtroTiempo === 'semana' ? 'esta semana' : 'este mes'
 
   // ===== Contexto temporal =====
   const hoyDate = new Date()
@@ -1112,7 +1113,6 @@ export default function DashboardPage() {
 
     const conversionFinal = visitasMenu > 0 ? Math.round((pidieron / visitasMenu) * 100) : 0
     const tasaExploracion = visitasMenu > 0 ? Math.round((exploraron / visitasMenu) * 100) : 0
-    const fuga = visitasMenu - pidieron        // abrieron pero no pidieron
 
     // Diagnóstico SOLO según conversión menú→pedido. Sin afirmar un "promedio del
     // sector" (era un benchmark hardcodeado sin fuente).
@@ -1149,7 +1149,6 @@ export default function DashboardPage() {
       conversionFinal,
       tasaExploracion,             // % de sesiones que exploraron platos (engagement, no fuga)
       tasaPedido: conversionFinal, // compat PDF: "tasa de paso" menú→pedido (≤100%)
-      fuga,
       diagnostico,
       recomendacion,
     }
