@@ -494,6 +494,13 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
 
 ## Items
 
+### AUDIT-DASH ✅ Auditoria post-F4 del sistema dashboard + cleanup quirurgico — CLOSED
+- **Closed**: 2026-07-01. Auditoria read-only de las 5 piezas (page 2.305 lineas + 3 hooks SWR + lib/dashboardWindow) tras cerrar F4/F5a, seguida de un chore de 1 commit.
+- **Fixes**: borrados maxEscaneo, textoFiltro y embudoData.fuga (cero lectores; fuga quedo huerfana cuando BL.31 movio el embudo a 2 etapas). Flags esHoy/esFuturo anclados a window.hoyStr (fetch-time COT) en vez de una Date del render del memo — siempre describen el mismo "hoy" que las filas (keepPreviousData podia desincronizarlos cruzando medianoche COT).
+- **Hallazgos documentados sin fix** (deuda dirigida): (a) inventario timezone completo alimenta BL.41, incl. comentario stale ~L250 que aun dice "-5h de fechaColombia"; (b) over-fetch en hooks alimenta BL.35 (ver nota alla); (c) duplicacion PDF-vs-render con potencial de divergencia: formula de mejor dia, copy del diagnostico (el PDF rearma el texto desde diagnostico.tipo en vez de usar .mensaje — wording YA difiere), umbrales de color del heatmap hardcodeados 2 veces, cadena ternaria de antiguedad duplicada; (d) sin UI de error SWR — fallos de fetch post-carga son silenciosos; (e) generarReportePDF referencia consts declaradas despues en el cuerpo — seguro SOLO porque el unico call site es el onClick (una llamada en render daria TDZ).
+- **Verificado**: tsc limpio, 267/267 tests sin tocar. 1 archivo, +4/-5.
+- **Where**: src/app/dashboard/page.tsx.
+
 ### REFACTOR-F5a ✅ Refactor Fase 5a: lib/fechas.ts a Intl America/Bogota — CLOSED
 - **Closed**: 2026-06-30. Quinta fase (parte a) del plan de refactor. Reemplaza el offset absoluto -5h de lib/fechas.ts por manejo real de zona horaria vía Intl America/Bogota. Es un fix de CORRECTITUD/claridad, NO de comportamiento: Colombia es UTC-5 permanente sin horario de verano (desde 1993), así que el string 'YYYY-MM-DD' y el código de día son byte-idénticos al -5h para toda hora/fecha que la app maneja.
 - **3 commits**: (1) test de caracterización (fechas.test.ts, 231 asserts: byte-parity de 24h x N fechas contra el oráculo -5h legacy inlineado, cruces de mes/año, prueba no-DST) + diaCodigoColombia hecho inyectable (param d = new Date()); (2) el swap: ambos cuerpos a Intl formatToParts con timeZone America/Bogota (formatToParts, NO toLocaleDateString, que varía separador entre versiones de ICU) + helper privado ymdColombia; (3) esta doc.
@@ -654,7 +661,7 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
 - **Priority**: 🟡 (inflaba un número visible, aunque el embudo no se veía afectado).
 
 ### BL.35 🟢 Dashboard: performance al cambiar de periodo — PENDIENTE
-- **[PENDIENTE]**: cambiar de periodo (Hoy/Semana/Mes) re-corre todas las queries en serie cada vez. Optimización futura: paralelizar con Promise.all, añadir caching SWR para cambio de periodo instantáneo, y crear el índice DB (restaurante_id, fecha) en las tablas de alto volumen (sobre todo vistas_platos) cuando el volumen crezca. Mejor hacerlo junto con el refactor planeado.
+- **[PENDIENTE]**: cambiar de periodo (Hoy/Semana/Mes) re-corre todas las queries en serie cada vez. Optimización futura: paralelizar con Promise.all, añadir caching SWR para cambio de periodo instantáneo, y crear el índice DB (restaurante_id, fecha) en las tablas de alto volumen (sobre todo vistas_platos) cuando el volumen crezca. Mejor hacerlo junto con el refactor planeado. Nota del audit post-F4 (2026-07-01): sobre-fetch detectado — query #7 trae una columna fecha sin uso; #8 es derivable de #7; #1/#3a comparten filtros con #7 (un solo select de visitas_menu podria reemplazar 4 queries); resenas lifetime usa select('*'); platosAgotados trae id/nombre que no lee. Atacar junto con los indices DB.
 - **Found**: 2026-06-06 (auditoría del dashboard).
 - **Where**: src/app/dashboard/page.tsx (cargarStats); índices en Supabase.
 - **Priority**: 🟢 (no urgente al volumen actual, pre-lanzamiento).
