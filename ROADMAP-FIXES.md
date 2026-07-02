@@ -496,6 +496,25 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
 
 ## Items
 
+### F3-MVP ✅ Emails transaccionales via Resend (bienvenida + cambio de plan) — CLOSED
+- **Closed**: 2026-07-02. MVP de F3 con sandbox de Resend (onboarding@resend.dev); el dominio menuapp.co queda como PREREQUISITO DURO de F7 (el sandbox solo entrega al email del dueno de la cuenta — verificado en smoke: cuentas de prueba con otros correos no reciben nada, comportamiento esperado).
+- **Arquitectura**: segundo route handler del repo (src/app/api/emails/route.ts, POST) adoptando lib/supabase-server.ts (antes codigo muerto). Identidad NUNCA del body: 401 sin sesion, destinatario del auth.getUser(), restaurante leido por usuario_id. Modulo src/lib/email/ con EMAIL_FROM como constante unica (flip de una linea a menuapp.co, espejo de PUBLIC_BASE_URL), cliente Resend lazy (no rompe builds sin key), templates HTML inline-CSS en paleta MenuApp con escaparHtml y fallback texto plano. RESEND_API_KEY = primera env var server-only del repo (sin NEXT_PUBLIC_).
+- **Emails**: bienvenida (al crear restaurante; idempotente via columna bienvenida_enviada, migracion manual Supabase, fail-closed si la lectura falla) y cambio_plan (upgrade/downgrade/periodo con copy propio por caso). Triggers fire-and-forget en registro (2 paths), completa-perfil y suscripcion — nunca bloquean la navegacion.
+- **Fix post-smoke (35c5caf)**: el email era ciego al periodo — cambio pro mensual->anual no disparaba nada. Encontrado por Julian en smoke. Ahora el guard dispara por plan O periodo, copy dedicado para cambio solo-facturacion, y el periodo se nombra en subject/heading de planes pagos. Side fix en cambiarPlan: el error del update de restaurantes (antes ignorado) ahora gatea el email.
+- **Diferidos explicitos**: F3.b (email de pedido al dueno) — requiere SUPABASE_SERVICE_ROLE_KEY (el comensal es anonimo; el server debe resolver dueno con privilegios), acoplar a F4 que probablemente trae el service role por webhooks. F3.c (signup confirmation + password reset con marca) — es SMTP custom de Supabase apuntando a Resend, config de dashboard no codigo, requiere dominio verificado: acoplado a la compra del dominio.
+- **Verificado**: tsc limpio, 275/275. Smoke completo: bienvenida, upgrade, downgrade, periodo-solo en ambas direcciones.
+- **Commits**: 8f60fdd, 24eefcf, 35ac3aa, 35c5caf.
+- **Where**: src/lib/email/** (+sender, base, bienvenida, cambioPlan), src/app/api/emails/route.ts, src/app/{registro,completa-perfil,suscripcion}/page.tsx.
+
+### F4-DECISIONES 📌 Modelo de suscripcion pre-decidido para F4 (Wompi) — NOTA
+- **Registrado**: 2026-07-02. Decisiones de producto tomadas ANTES de F4 para que su investigacion pregunte COMO, no QUE:
+- **Upgrade = ciclo nuevo**: paga el plan nuevo completo hoy, la fecha de renovacion se resetea. Sin prorrateo (evita cobros parciales en Wompi y montos raros; la complejidad DIAN real de F4 es la facturacion electronica en si, no los decimales).
+- **Downgrade = diferido al fin del ciclo pagado**: el cambio se agenda, el cliente conserva lo que pago. Requiere columnas plan_programado + fecha_cambio_programado en restaurantes y un ejecutor.
+- **Ejecutor hibrido**: webhook de Wompi como camino principal + Vercel Cron diario como red de seguridad. CONSTRAINT de huso (familia BL.29/BL.41): Vercel Cron corre en UTC — la logica temporal se ancla a COT (fechaColombia), nunca al reloj del servidor.
+- **Bonus de retencion**: banner en admin "Tu plan cambiara a X el [fecha] — [Cancelar cambio]" sale casi gratis de las columnas.
+- **Esquina a decidir en F4**: upgrade DURANTE un downgrade programado (casi seguro cancela el plan_programado, pero debe quedar escrito). Tambien: politica de pagos fallidos de renovacion (reintentos/gracia) sera manual en v1.
+- **Efecto en F3**: cuando exista el diferido, el copy de downgrade de cambioPlan.ts cambia de "ya esta aplicado" a "cambiara el [fecha]".
+
 ### BL.42 🟢 Gates de foto no migrados a mostrarFotos (consistencia) + leak en CalificarModal — PENDIENTE
 - **Found**: 2026-07-01 (implementacion de STRATEGIC.2).
 - **Symptom**: (a) ComboDetalleModal.tsx:146 y PlatoGanadorHero.tsx:51 siguen gateando fotos de platos con esBasicoPublico en vez de mostrarFotos — hoy inerte (ambas superficies son Pro-only) pero es deuda de consistencia de la regla; (b) CalificarModal.tsx:123 renderiza plato.foto_url SIN gate de plan — una cuenta fue_pago en gratis con calificaciones activas filtraria sus fotos "ocultas" ahi. Hoy inalcanzable (calificaciones es Pro) pero es un leak latente si el gating de features cambia.
