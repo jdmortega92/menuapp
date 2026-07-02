@@ -471,6 +471,8 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
 
 **Effort estimate**: 2-3 hours.
 
+**Implementado 2026-07-01** (ver STRATEGIC.2-IMPL en Items) con regla mas estricta que la propuesta de arriba: el "downgrade keeps 5 uploads" del default proposal NO aplica — fue_pago bloquea toda subida nueva tras un downgrade.
+
 ---
 
 # 📋 BACKLOG
@@ -493,6 +495,23 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
 ```
 
 ## Items
+
+### BL.42 🟢 Gates de foto no migrados a mostrarFotos (consistencia) + leak en CalificarModal — PENDIENTE
+- **Found**: 2026-07-01 (implementacion de STRATEGIC.2).
+- **Symptom**: (a) ComboDetalleModal.tsx:146 y PlatoGanadorHero.tsx:51 siguen gateando fotos de platos con esBasicoPublico en vez de mostrarFotos — hoy inerte (ambas superficies son Pro-only) pero es deuda de consistencia de la regla; (b) CalificarModal.tsx:123 renderiza plato.foto_url SIN gate de plan — una cuenta fue_pago en gratis con calificaciones activas filtraria sus fotos "ocultas" ahi. Hoy inalcanzable (calificaciones es Pro) pero es un leak latente si el gating de features cambia.
+- **Fix sugerido**: migrar los 3 sitios a la prop mostrarFotos (misma mecanica que PlatoCard/PlatoDetalleModal).
+- **Where**: src/components/menu-publico/ComboDetalleModal.tsx, PlatoGanadorHero.tsx, CalificarModal.tsx.
+- **Priority**: 🟢 (inerte al gating actual; atacar en el proximo barrido del publico).
+
+### STRATEGIC.2-IMPL ✅ Limite de 5 fotos en plan gratis (arquitectura fue_pago) — CLOSED
+- **Closed**: 2026-07-01. Implementa STRATEGIC.2 con la regla FINAL de Julian: las 5 fotos son de cuentas NUNCA-pagas, no un derecho del plan gratis.
+- **Arquitectura**: restaurantes.fue_pago boolean (latch one-way: cualquier upgrade lo deja true para siempre; el downgrade NO lo resetea). Migracion + backfill manuales en Supabase (cuentas pagas actuales -> true; gratis con fotos -> true por implicacion). Regla centralizada en lib/fotosGate.ts (puedeSubirFoto, mostrarFotosPublico, LIMITE_FOTOS_GRATIS=5) consumida por ambas superficies, con 8 tests (suite 267->275).
+- **Semantica**: cupo VIVO, no presupuesto de por vida — borrar libera cupo; REEMPLAZAR una foto existente no lo consume (upsert al mismo path, regla de call-site en fotoBloqueada). fue_pago en gratis: cero subidas (incluso reemplazo) y fotos existentes ocultas en el publico (comportamiento previo preservado). Nunca-pago en gratis: hasta 5 fotos vivas Y visibles en el publico (comportamiento NUEVO). logo/banner excluidos (siguen con esBasicoPublico).
+- **Superficies**: (1) /suscripcion setea fue_pago: true en el unico write de plan del repo (verificado por grep: registro/completa-perfil insertan gratis sin tocarlo); (2) admin: fotosUsadas + puedeSubirFoto computados en /menu y bajados via CategoriaSection a PlatoEditPanel con 3 estados (control + contador "X de 5" / limite con upsell card / fue_pago con aviso de fotos ocultas), guard fotoBloqueada en seleccionarFoto Y confirmarRecorte (re-chequeo al confirmar el crop), avisos via mostrarAviso; (3) publico: mostrarFotos computado UNA vez en [slug] y bajado como prop a PlatoCard, PlatoDetalleModal y el bloque sorprendeme.
+- **Nota BL.13**: el guard vivo obligo a mover seleccionarFoto al patron liveHandlers (delegado estable useCallback [] + cuerpo vivo seleccionarFotoLive) para no romper el contrato de identidades estables de las secciones memoizadas.
+- **Enforcement**: client-side (consistente con todo el gating de planes). Hardening RLS/storage policy queda como opcion post-lanzamiento.
+- **Verificado**: tsc limpio, 275/275. 10 archivos (+~155/-~40). Commits: [Julian: pega los 3 hashes].
+- **Where**: src/lib/fotosGate.ts (+test), src/types/index.ts, src/app/suscripcion/page.tsx, src/app/menu/page.tsx, src/components/menu-admin/{CategoriaSection,PlatoEditPanel}.tsx, src/app/[slug]/page.tsx, src/components/menu-publico/{PlatoCard,PlatoDetalleModal}.tsx.
 
 ### AUDIT-DASH ✅ Auditoria post-F4 del sistema dashboard + cleanup quirurgico — CLOSED
 - **Closed**: 2026-07-01. Auditoria read-only de las 5 piezas (page 2.305 lineas + 3 hooks SWR + lib/dashboardWindow) tras cerrar F4/F5a, seguida de un chore de 1 commit.
