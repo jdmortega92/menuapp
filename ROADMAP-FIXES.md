@@ -510,7 +510,7 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
 - **Superficies**: (1) /suscripcion setea fue_pago: true en el unico write de plan del repo (verificado por grep: registro/completa-perfil insertan gratis sin tocarlo); (2) admin: fotosUsadas + puedeSubirFoto computados en /menu y bajados via CategoriaSection a PlatoEditPanel con 3 estados (control + contador "X de 5" / limite con upsell card / fue_pago con aviso de fotos ocultas), guard fotoBloqueada en seleccionarFoto Y confirmarRecorte (re-chequeo al confirmar el crop), avisos via mostrarAviso; (3) publico: mostrarFotos computado UNA vez en [slug] y bajado como prop a PlatoCard, PlatoDetalleModal y el bloque sorprendeme.
 - **Nota BL.13**: el guard vivo obligo a mover seleccionarFoto al patron liveHandlers (delegado estable useCallback [] + cuerpo vivo seleccionarFotoLive) para no romper el contrato de identidades estables de las secciones memoizadas.
 - **Enforcement**: client-side (consistente con todo el gating de planes). Hardening RLS/storage policy queda como opcion post-lanzamiento.
-- **Verificado**: tsc limpio, 275/275. 10 archivos (+~155/-~40). Commits: [Julian: pega los 3 hashes].
+- **Verificado**: tsc limpio, 275/275. 10 archivos (+~155/-~40). Commits: fa3976a, d33dea6, 8fe2a2b.
 - **Where**: src/lib/fotosGate.ts (+test), src/types/index.ts, src/app/suscripcion/page.tsx, src/app/menu/page.tsx, src/components/menu-admin/{CategoriaSection,PlatoEditPanel}.tsx, src/app/[slug]/page.tsx, src/components/menu-publico/{PlatoCard,PlatoDetalleModal}.tsx.
 
 ### AUDIT-DASH ✅ Auditoria post-F4 del sistema dashboard + cleanup quirurgico — CLOSED
