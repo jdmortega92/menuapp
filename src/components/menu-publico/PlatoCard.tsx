@@ -8,8 +8,8 @@ import { tintPlaceholder } from '@/lib/brandTints'
 
 // Tarjeta de plato del LISTADO regular (categorías). La tarjeta del resultado
 // de Sorpréndeme es deliberadamente más simple (sin pills de promo, sin
-// estrellas, sin Agotado, foto 48px sin gate de plan) y queda inline en la
-// página — no se fuerza la unificación.
+// estrellas, sin Agotado, foto 48px con el mismo gate mostrarFotos) y queda
+// inline en la página — no se fuerza la unificación.
 // Día tiene precedencia sobre promos en la tarjeta; las keys de día llevan
 // source 'dia' (precio congelado — contrato en lib/cart).
 export default function PlatoCard({
@@ -17,7 +17,7 @@ export default function PlatoCard({
   esEstePlatoElDia,
   platoDia,
   color,
-  esBasicoPublico,
+  mostrarFotos,
   calificacionesActivo,
   discountInfoCard,
   has2x1Card,
@@ -29,7 +29,9 @@ export default function PlatoCard({
   esEstePlatoElDia: boolean
   platoDia: any
   color: string
-  esBasicoPublico: boolean
+  /** Fotos de platos visibles (STRATEGIC.2, lib/fotosGate): pagos siempre;
+   *  gratis solo cuentas nunca-pagas. Antes era esBasicoPublico. */
+  mostrarFotos: boolean
   calificacionesActivo: boolean | undefined
   discountInfoCard: (plato: any) => { min: number; max: number; applies: boolean }
   has2x1Card: (plato: any) => boolean
@@ -66,7 +68,7 @@ export default function PlatoCard({
         color: color,
         overflow: 'hidden',
       }}>
-        {esBasicoPublico && plato.foto_url ? (
+        {mostrarFotos && plato.foto_url ? (
           <img src={plato.foto_url} alt={plato.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         ) : plato.nombre.charAt(0)}
       </div>

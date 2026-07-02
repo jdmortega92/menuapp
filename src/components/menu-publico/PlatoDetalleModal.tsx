@@ -23,7 +23,7 @@ export default function PlatoDetalleModal({
   platoDia,
   platoGanador,
   esProPublico,
-  esBasicoPublico,
+  mostrarFotos,
   platoDiaActivo,
   calificacionesActivo,
   platoDiaVisible,
@@ -43,7 +43,9 @@ export default function PlatoDetalleModal({
   platoDia: any
   platoGanador: any
   esProPublico: boolean
-  esBasicoPublico: boolean
+  /** Fotos de platos visibles (STRATEGIC.2, lib/fotosGate): pagos siempre;
+   *  gratis solo cuentas nunca-pagas. Antes era esBasicoPublico. */
+  mostrarFotos: boolean
   platoDiaActivo: boolean | undefined
   calificacionesActivo: boolean | undefined
   platoDiaVisible: boolean
@@ -155,7 +157,7 @@ export default function PlatoDetalleModal({
         position: 'relative',
         overflow: 'hidden',
       }}>
-        {esBasicoPublico && plato.foto_url ? (
+        {mostrarFotos && plato.foto_url ? (
           <img src={plato.foto_url} alt={plato.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         ) : (
           <span style={{ fontSize: '60px', fontWeight: 500, color: color, opacity: 0.3 }}>{plato.nombre.charAt(0)}</span>

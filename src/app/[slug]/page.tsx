@@ -33,6 +33,8 @@ import { useTick } from '@/hooks/useTick'
 import { getSessionId, visitaYaLogueada, marcarVisitaLogueada } from '@/lib/analytics'
 import { makeCartKey, enriquecerComboPlatos } from '@/lib/cart'
 import { useCart } from '@/hooks/useCart'
+import { mostrarFotosPublico } from '@/lib/fotosGate'
+import type { Plan } from '@/types'
 
 export default function MenuPublicoPage() {
   const params = useParams()
@@ -131,6 +133,10 @@ export default function MenuPublicoPage() {
   const themeClass = `theme-${tema}`
   const esProPublico = planRest === 'pro'
   const esBasicoPublico = planRest === 'basico' || planRest === 'pro'
+  // Fotos de PLATOS en el público (STRATEGIC.2): pagos siempre; gratis solo si la
+  // cuenta NUNCA pagó (latch fue_pago). Se computa UNA vez y baja como prop.
+  // logo_url/banner_url NO pasan por aquí: siguen gateados por esBasicoPublico.
+  const mostrarFotos = mostrarFotosPublico(planRest as Plan, !!restaurante?.fue_pago)
   const todosLosPlatos = [
     ...categorias.flatMap((c: any) => c.platos),
     ...combosPublico.map((c: any) => ({ id: c.id, nombre: c.nombre, precio: c.precio, descripcion: c.descripcion || '', disponible: true, foto_url: null })),
@@ -539,7 +545,7 @@ export default function MenuPublicoPage() {
                     color: color,
                     overflow: 'hidden',
                   }}>
-                    {plato.foto_url ? (
+                    {mostrarFotos && plato.foto_url ? (
                       <img src={plato.foto_url} alt={plato.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     ) : plato.nombre.charAt(0)}
                   </div>
@@ -719,7 +725,7 @@ export default function MenuPublicoPage() {
                   esEstePlatoElDia={!!esEstePlatoElDia}
                   platoDia={platoDia}
                   color={color}
-                  esBasicoPublico={esBasicoPublico}
+                  mostrarFotos={mostrarFotos}
                   calificacionesActivo={config?.calificaciones_activo}
                   discountInfoCard={discountInfoCard}
                   has2x1Card={has2x1Card}
@@ -790,7 +796,7 @@ export default function MenuPublicoPage() {
               platoDia={platoDia}
               platoGanador={platoGanador}
               esProPublico={esProPublico}
-              esBasicoPublico={esBasicoPublico}
+              mostrarFotos={mostrarFotos}
               platoDiaActivo={config?.plato_dia_activo}
               calificacionesActivo={config?.calificaciones_activo}
               platoDiaVisible={!!platoDiaVisible}
