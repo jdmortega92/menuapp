@@ -24,7 +24,12 @@ export default function SuscripcionPage() {
     if (!rest?.id) return
     setCambiando(true)
     const supabase = createClient()
-    await supabase.from('restaurantes').update({ plan: nuevoPlan, periodo_plan: periodo }).eq('id', rest.id)
+    // fue_pago es un latch one-way (STRATEGIC.2): subir a un plan pago marca la
+    // cuenta para siempre; bajar a gratis NO lo toca. De él depende la regla de
+    // fotos del plan gratis (lib/fotosGate).
+    const cambios: { plan: string; periodo_plan: string; fue_pago?: boolean } = { plan: nuevoPlan, periodo_plan: periodo }
+    if (nuevoPlan !== 'gratis') cambios.fue_pago = true
+    await supabase.from('restaurantes').update(cambios).eq('id', rest.id)
     // Refresca la fila cacheada (useAuth/useRestauranteByUserId) para que el plan
     // nuevo se refleje en todo el admin sin reload (patrón mutate de H.1.c.2.b).
     await mutateRestaurante()

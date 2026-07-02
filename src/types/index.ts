@@ -25,6 +25,11 @@ export interface Restaurante {
   descripcion?: string
   slug: string
   plan: Plan
+  /** Latch one-way (STRATEGIC.2): true si la cuenta ALGUNA VEZ estuvo en un plan
+   *  pago. Gobierna la regla de fotos del plan gratis (lib/fotosGate). Opcional
+   *  porque los inserts de registro no lo escriben (default/backfill de la DB);
+   *  ausente == nunca-pago para todos los consumidores (chequeos falsy). */
+  fue_pago?: boolean
   plan_expira: string
   idioma: string
   color_principal: string
