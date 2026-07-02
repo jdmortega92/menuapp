@@ -1,7 +1,9 @@
 'use client'
 
 import { memo, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-browser'
+import { LIMITE_FOTOS_GRATIS } from '@/lib/fotosGate'
 import CampoTexto from '@/components/ui/CampoTexto'
 import Modal from '@/components/ui/Modal'
 import VarianteEditor, { construirTextoVinculaciones } from './VarianteEditor'
@@ -50,6 +52,9 @@ function PlatoEditPanel({
   diaVarianteId,
   ganadorVarianteId,
   esBasico,
+  fuePago,
+  fotosUsadas,
+  puedeSubirFoto,
   subiendoFoto,
   onSelectFoto,
   mutateCategoriasYPlatos,
@@ -63,12 +68,16 @@ function PlatoEditPanel({
   diaVarianteId: string | null
   ganadorVarianteId: string | null
   esBasico: boolean
+  fuePago: boolean
+  fotosUsadas: number
+  puedeSubirFoto: boolean
   subiendoFoto: boolean
   onSelectFoto: (platoId: string, categoriaId: string, file: File) => void
   mutateCategoriasYPlatos: () => Promise<unknown>
   onCascadeCleanup: () => Promise<void>
   onClose: () => void
 }) {
+  const router = useRouter()
   const [draft, setDraft] = useState<EditDraft>(() => {
     const variantesSorted = (plato.variantes || []).slice().sort((a, b) => a.orden - b.orden)
     return {
@@ -395,31 +404,69 @@ function PlatoEditPanel({
         />
       )}
 
-      {/* Foto */}
-      {esBasico && <div style={{ marginBottom: '10px' }}>
-        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Foto del plato</div>
-        {plato.foto_url && (
-          <div style={{ width: '100%', aspectRatio: '16/9', borderRadius: 'var(--radius-sm)', overflow: 'hidden', marginBottom: '8px' }}>
-            <img src={plato.foto_url} alt={plato.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+      {/* Foto (STRATEGIC.2): ya no es exclusiva de Básico. Tres estados en gratis:
+          (1) nunca-pago con cupo (o reemplazando la existente: upsert, no consume) →
+          control activo + contador; (2) nunca-pago en el límite y ESTE plato sin
+          foto → control deshabilitado + upsell; (3) fue_pago (downgrade) → sin
+          control; el preview sigue visible (la foto es data del dueño) con el aviso
+          de que en el público está oculta. En Básico/Pro: idéntico a antes. */}
+      {(() => {
+        const bloqueadoPorLimite = !esBasico && !fuePago && !puedeSubirFoto && plato.foto_url == null
+        const inhabilitado = subiendoFoto || bloqueadoPorLimite
+        const sinControl = !esBasico && fuePago
+        return (
+          <div style={{ marginBottom: '10px' }}>
+            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Foto del plato</div>
+            {plato.foto_url && (
+              <div style={{ width: '100%', aspectRatio: '16/9', borderRadius: 'var(--radius-sm)', overflow: 'hidden', marginBottom: '8px' }}>
+                <img src={plato.foto_url} alt={plato.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              </div>
+            )}
+            {sinControl ? (
+              <div onClick={() => router.push('/suscripcion')} className="tap-card" style={{
+                background: 'var(--color-warning-light)', borderRadius: 'var(--radius-sm)',
+                padding: '10px 12px', fontSize: '11px', color: 'var(--color-warning)',
+                lineHeight: 1.4, cursor: 'pointer',
+              }}>
+                Tus fotos están ocultas en el plan gratis. <span style={{ fontWeight: 500 }}>Vuelve a Básico para mostrarlas →</span>
+              </div>
+            ) : (
+              <>
+                <label className="tap-cta" style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '6px',
+                  padding: '8px 14px', borderRadius: 'var(--radius-sm)', fontSize: '12px',
+                  border: '1px solid var(--border-light)', cursor: inhabilitado ? 'not-allowed' : 'pointer',
+                  color: inhabilitado ? 'var(--text-tertiary)' : 'var(--color-info)',
+                  opacity: inhabilitado ? 0.6 : 1,
+                }}>
+                  {subiendoFoto ? 'Subiendo...' : plato.foto_url ? 'Cambiar foto' : '📷 Subir foto'}
+                  <input type="file" accept="image/*" style={{ display: 'none' }}
+                    disabled={inhabilitado}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) onSelectFoto(plato.id, categoriaId, file)
+                    }} />
+                </label>
+                <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '4px' }}>JPG o PNG · Máximo 10MB · Se redimensiona a 800px</div>
+                {!esBasico && (
+                  <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '2px' }}>
+                    Fotos: {fotosUsadas} de {LIMITE_FOTOS_GRATIS} (plan gratis)
+                  </div>
+                )}
+                {bloqueadoPorLimite && (
+                  <div onClick={() => router.push('/suscripcion')} className="tap-card" style={{
+                    background: 'var(--color-warning-light)', borderRadius: 'var(--radius-sm)',
+                    padding: '10px 12px', fontSize: '11px', color: 'var(--color-warning)',
+                    lineHeight: 1.4, cursor: 'pointer', marginTop: '6px',
+                  }}>
+                    Alcanzaste las {LIMITE_FOTOS_GRATIS} fotos del plan gratis. <span style={{ fontWeight: 500 }}>Actualiza a Básico para fotos ilimitadas →</span>
+                  </div>
+                )}
+              </>
+            )}
           </div>
-        )}
-        <label className="tap-cta" style={{
-          display: 'inline-flex', alignItems: 'center', gap: '6px',
-          padding: '8px 14px', borderRadius: 'var(--radius-sm)', fontSize: '12px',
-          border: '1px solid var(--border-light)', cursor: subiendoFoto ? 'not-allowed' : 'pointer',
-          color: subiendoFoto ? 'var(--text-tertiary)' : 'var(--color-info)',
-          opacity: subiendoFoto ? 0.6 : 1,
-        }}>
-          {subiendoFoto ? 'Subiendo...' : plato.foto_url ? 'Cambiar foto' : '📷 Subir foto'}
-          <input type="file" accept="image/*" style={{ display: 'none' }}
-            disabled={subiendoFoto}
-            onChange={(e) => {
-              const file = e.target.files?.[0]
-              if (file) onSelectFoto(plato.id, categoriaId, file)
-            }} />
-        </label>
-      <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '4px' }}>JPG o PNG · Máximo 10MB · Se redimensiona a 800px</div>
-      </div>}
+        )
+      })()}
       <div style={{ display: 'flex', gap: '8px' }}>
         <button onClick={guardar}
           disabled={guardando || guardado}

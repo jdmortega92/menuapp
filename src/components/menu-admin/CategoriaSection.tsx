@@ -116,6 +116,9 @@ function CategoriaSection({
   diaVarianteId,
   ganadorVarianteId,
   esBasico,
+  fuePago,
+  fotosUsadas,
+  puedeSubirFoto,
   subiendoFoto,
   mutateCategoriasYPlatos,
   onMoverCategoria,
@@ -149,6 +152,9 @@ function CategoriaSection({
   diaVarianteId: string | null
   ganadorVarianteId: string | null
   esBasico: boolean
+  fuePago: boolean
+  fotosUsadas: number
+  puedeSubirFoto: boolean
   subiendoFoto: boolean
   mutateCategoriasYPlatos: () => Promise<unknown>
   onMoverCategoria: (catId: string, direccion: 'arriba' | 'abajo') => void
@@ -262,6 +268,9 @@ function CategoriaSection({
               diaVarianteId={diaVarianteId}
               ganadorVarianteId={ganadorVarianteId}
               esBasico={esBasico}
+              fuePago={fuePago}
+              fotosUsadas={fotosUsadas}
+              puedeSubirFoto={puedeSubirFoto}
               subiendoFoto={subiendoFoto}
               onSelectFoto={onSelectFoto}
               mutateCategoriasYPlatos={mutateCategoriasYPlatos}

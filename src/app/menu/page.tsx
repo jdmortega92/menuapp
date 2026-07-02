@@ -25,7 +25,8 @@ import { invalidateAll } from '@/lib/swr'
 import { formato12h } from '@/lib/time'
 import { formatoPrecio } from '@/lib/precio'
 import { formatDias } from '@/lib/dias'
-import type { Variante } from '@/types'
+import { puedeSubirFoto as calcularPuedeSubirFoto, LIMITE_FOTOS_GRATIS } from '@/lib/fotosGate'
+import type { Plan, Variante } from '@/types'
 
 // construirTextoVinculaciones se movió a components/menu-admin/VarianteEditor
 // (lo comparten los modales de borrado de aquí y las notas de fila marcada del editor).
@@ -58,6 +59,16 @@ export default function MiMenuPage() {
   const { data: platoGanadorSwr } = usePlatoGanador(rest?.id, { includeInactive: true })
 
   const cargandoMenu = !catsAndPlatos || !configSwr
+
+  // ── Fotos por plan (STRATEGIC.2) ──
+  // Cupo VIVO en gratis nunca-pago: cuenta platos con foto en TODO el menú (borrar
+  // libera cupo; reemplazar no lo consume). fue_pago (downgrade) no sube nada.
+  const fuePago = !!rest?.fue_pago
+  const fotosUsadas = useMemo(
+    () => (catsAndPlatos?.platos ?? []).filter((p: any) => p.foto_url != null).length,
+    [catsAndPlatos]
+  )
+  const puedeSubirFoto = calcularPuedeSubirFoto(plan as Plan, fuePago, fotosUsadas)
   const [tabActiva, setTabActiva] = useState<'platos' | 'combos' | 'sorprendeme'>('platos')
   const [busqueda, setBusqueda] = useState('')
   // Puntero del form "Nueva categoría" — el borrador y su cuarteto viven en
@@ -154,6 +165,7 @@ export default function MiMenuPage() {
     toggleDisponible: (categoriaId: string, platoId: string) => void
     requestDeletePlato: (categoriaId: string, platoId: string) => void
     requestDeleteCategoria: (catId: string) => void
+    seleccionarFoto: (platoId: string, categoriaId: string, file: File) => void
   })
   liveHandlers.current = {
     moverCategoria,
@@ -161,12 +173,14 @@ export default function MiMenuPage() {
     toggleDisponible,
     requestDeletePlato,
     requestDeleteCategoria,
+    seleccionarFoto: seleccionarFotoLive,
   }
   const onMoverCategoria = useCallback((id: string, d: 'arriba' | 'abajo') => liveHandlers.current.moverCategoria(id, d), [])
   const onMoverPlato = useCallback((c: string, p: string, d: 'arriba' | 'abajo') => liveHandlers.current.moverPlato(c, p, d), [])
   const onToggleDisponible = useCallback((c: string, p: string) => liveHandlers.current.toggleDisponible(c, p), [])
   const onRequestDeletePlato = useCallback((c: string, p: string) => liveHandlers.current.requestDeletePlato(c, p), [])
   const onRequestDeleteCategoria = useCallback((c: string) => liveHandlers.current.requestDeleteCategoria(c), [])
+  const seleccionarFoto = useCallback((platoId: string, categoriaId: string, file: File) => liveHandlers.current.seleccionarFoto(platoId, categoriaId, file), [])
   const onToggleExpand = useCallback((platoId: string) => setPlatoExpandido(prev => prev === platoId ? null : platoId), [])
   const onToggleFormPlato = useCallback((catId: string) => setMostrarFormPlato(prev => prev === catId ? null : catId), [])
   const onToggleMenuCategoria = useCallback((catId: string) => setMenuCategoria(prev => prev === catId ? null : catId), [])
@@ -343,20 +357,42 @@ export default function MiMenuPage() {
   // MAX_DESC / MAX_PRECIO se importan de components/menu-admin/PlatoForm (Fase 3).
   // recortarImagen vive en lib/imagen; la UI de recorte en components/ui/CropModal.
 
-  // useCallback: baja estable a PlatoEditPanel (React.memo) como onSelectFoto.
-  const seleccionarFoto = useCallback((platoId: string, categoriaId: string, file: File) => {
+  // Guard de cupo de fotos (STRATEGIC.2). Bloquea una foto NUEVA sin elegibilidad;
+  // REEMPLAZAR una existente no cambia el conteo y sigue permitido en nunca-pago
+  // (el upload es upsert al mismo path). fue_pago en gratis: bloqueado siempre,
+  // incluso el reemplazo. Devuelve true si hay que cortar el pipeline.
+  function fotoBloqueada(platoId: string): boolean {
+    const tieneFoto = (catsAndPlatos?.platos ?? []).some((p: any) => p.id === platoId && p.foto_url != null)
+    if (puedeSubirFoto || (tieneFoto && !fuePago)) return false
+    mostrarAviso(fuePago
+      ? 'Tus fotos están ocultas en el plan gratis. Vuelve a Básico para mostrarlas.'
+      : `Alcanzaste las ${LIMITE_FOTOS_GRATIS} fotos del plan gratis. Actualiza a Básico para fotos ilimitadas.`)
+    return true
+  }
+
+  // Cuerpo VIVO de seleccionarFoto: lee el guard de cupo del último render. Baja a
+  // PlatoEditPanel (React.memo) vía el delegado estable `seleccionarFoto` del bloque
+  // liveHandlers (BL.13) — la identidad no cambia cuando cambian catsAndPlatos/cupo.
+  function seleccionarFotoLive(platoId: string, categoriaId: string, file: File) {
+    if (fotoBloqueada(platoId)) return
     if (file.size > 10 * 1024 * 1024) {
       alert('La imagen es muy grande. Máximo 10MB.')
       return
     }
     const url = URL.createObjectURL(file)
     setCropModal({ imagen: url, platoId, categoriaId })
-  }, [])
+  }
 
   // Mitad de SUBIDA del pipeline de foto: el blob ya viene recortado por
   // CropModal (Listo → onConfirm). Storage path + update + mutate son de /menu.
   async function confirmarRecorte(blob: Blob) {
     if (!cropModal || !rest?.id) return
+    // Re-chequeo del guard al confirmar: el conteo pudo cambiar entre seleccionar
+    // y recortar (p.ej. otra foto subida mientras el CropModal estaba abierto).
+    if (fotoBloqueada(cropModal.platoId)) {
+      setCropModal(null)
+      return
+    }
     setSubiendoFoto(true)
     setCropModal(null)
 
@@ -888,6 +924,9 @@ export default function MiMenuPage() {
                 diaVarianteId={platoDiaActivo ? platoDiaSwr?.variante_id ?? null : null}
                 ganadorVarianteId={platoGanadorActivo ? platoGanadorSwr?.variante_id ?? null : null}
                 esBasico={esBasico}
+                fuePago={fuePago}
+                fotosUsadas={fotosUsadas}
+                puedeSubirFoto={puedeSubirFoto}
                 subiendoFoto={subiendoFoto}
                 mutateCategoriasYPlatos={mutateCategoriasYPlatos}
                 onMoverCategoria={onMoverCategoria}
