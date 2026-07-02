@@ -29,10 +29,18 @@ export default function SuscripcionPage() {
     // fotos del plan gratis (lib/fotosGate).
     const cambios: { plan: string; periodo_plan: string; fue_pago?: boolean } = { plan: nuevoPlan, periodo_plan: periodo }
     if (nuevoPlan !== 'gratis') cambios.fue_pago = true
-    await supabase.from('restaurantes').update(cambios).eq('id', rest.id)
+    const { error } = await supabase.from('restaurantes').update(cambios).eq('id', rest.id)
     // Refresca la fila cacheada (useAuth/useRestauranteByUserId) para que el plan
     // nuevo se refleje en todo el admin sin reload (patrón mutate de H.1.c.2.b).
     await mutateRestaurante()
+    if (!error && nuevoPlan !== planActual) {
+      // Correo de cambio de plan (F3): fire-and-forget, nunca bloquea el flujo.
+      fetch('/api/emails', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tipo: 'cambio_plan', plan_nuevo: nuevoPlan, plan_anterior: planActual }),
+      }).catch(console.error)
+    }
     setCambiando(false)
     router.push('/dashboard')
   }

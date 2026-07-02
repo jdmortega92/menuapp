@@ -121,7 +121,15 @@ function RegistroContent() {
       }
 
       const ok = await crearRestaurante(user.id)
-      if (ok) router.push('/dashboard')
+      if (ok) {
+        // Correo de bienvenida (F3): fire-and-forget, nunca bloquea el flujo.
+        fetch('/api/emails', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tipo: 'bienvenida' }),
+        }).catch(console.error)
+        router.push('/dashboard')
+      }
       setCargando(false)
     } else {
       // Registro normal con email/password
@@ -152,7 +160,15 @@ function RegistroContent() {
       }
 
       const ok = await crearRestaurante(data.user.id)
-      if (ok) router.push('/dashboard')
+      if (ok) {
+        // Correo de bienvenida (F3): fire-and-forget, nunca bloquea el flujo.
+        fetch('/api/emails', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tipo: 'bienvenida' }),
+        }).catch(console.error)
+        router.push('/dashboard')
+      }
       setCargando(false)
     }
   }

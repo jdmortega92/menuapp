@@ -91,6 +91,13 @@ export default function CompletaPerfilPage() {
       return
     }
 
+    // Correo de bienvenida (F3): fire-and-forget, nunca bloquea el flujo.
+    fetch('/api/emails', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tipo: 'bienvenida' }),
+    }).catch(console.error)
+
     router.push('/dashboard')
   }
 
