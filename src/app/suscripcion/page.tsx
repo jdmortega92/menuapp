@@ -33,12 +33,19 @@ export default function SuscripcionPage() {
     // Refresca la fila cacheada (useAuth/useRestauranteByUserId) para que el plan
     // nuevo se refleje en todo el admin sin reload (patrón mutate de H.1.c.2.b).
     await mutateRestaurante()
-    if (!error && nuevoPlan !== planActual) {
+    if (!error && (nuevoPlan !== planActual || periodo !== periodoActual)) {
       // Correo de cambio de plan (F3): fire-and-forget, nunca bloquea el flujo.
+      // Dispara también cuando solo cambia el periodo (p. ej. pro mensual -> anual).
       fetch('/api/emails', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tipo: 'cambio_plan', plan_nuevo: nuevoPlan, plan_anterior: planActual }),
+        body: JSON.stringify({
+          tipo: 'cambio_plan',
+          plan_nuevo: nuevoPlan,
+          plan_anterior: planActual,
+          periodo_nuevo: periodo,
+          periodo_anterior: periodoActual,
+        }),
       }).catch(console.error)
     }
     setCambiando(false)

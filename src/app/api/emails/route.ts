@@ -11,6 +11,7 @@ import { cambioPlan } from '@/lib/email/templates/cambioPlan'
 // sesión. Sin sesión -> 401 y no se envía nada.
 
 const PLANES_VALIDOS = ['gratis', 'basico', 'pro']
+const PERIODOS_VALIDOS = ['mensual', 'anual']
 
 export async function POST(request: Request) {
   let body: unknown
@@ -21,7 +22,8 @@ export async function POST(request: Request) {
   }
 
   // Validación manual del body (sin zod, deps mínimas).
-  const { tipo, plan_nuevo, plan_anterior } = (body ?? {}) as Record<string, unknown>
+  const { tipo, plan_nuevo, plan_anterior, periodo_nuevo, periodo_anterior } =
+    (body ?? {}) as Record<string, unknown>
 
   if (tipo !== 'bienvenida' && tipo !== 'cambio_plan') {
     return NextResponse.json({ error: 'Tipo inválido' }, { status: 400 })
@@ -32,10 +34,23 @@ export async function POST(request: Request) {
       typeof plan_nuevo !== 'string' ||
       typeof plan_anterior !== 'string' ||
       !PLANES_VALIDOS.includes(plan_nuevo) ||
-      !PLANES_VALIDOS.includes(plan_anterior) ||
-      plan_nuevo === plan_anterior
+      !PLANES_VALIDOS.includes(plan_anterior)
     ) {
       return NextResponse.json({ error: 'Planes inválidos' }, { status: 400 })
+    }
+    // Periodos opcionales (compatibilidad hacia atrás): si vienen, deben ser válidos.
+    for (const periodo of [periodo_nuevo, periodo_anterior]) {
+      if (periodo !== undefined && (typeof periodo !== 'string' || !PERIODOS_VALIDOS.includes(periodo))) {
+        return NextResponse.json({ error: 'Periodos inválidos' }, { status: 400 })
+      }
+    }
+    // Sin cambio real (mismo plan y mismo periodo o sin periodos) no hay correo.
+    const cambioPeriodo =
+      typeof periodo_nuevo === 'string' &&
+      typeof periodo_anterior === 'string' &&
+      periodo_nuevo !== periodo_anterior
+    if (plan_nuevo === plan_anterior && !cambioPeriodo) {
+      return NextResponse.json({ error: 'Sin cambio de plan' }, { status: 400 })
     }
   }
 
@@ -83,10 +98,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ enviado: true })
   }
 
-  // cambio_plan (plan_nuevo/plan_anterior ya validados arriba)
+  // cambio_plan (planes y periodos ya validados arriba)
   const { error: sendError } = await enviarEmail({
     to: user.email,
-    ...cambioPlan({ plan_nuevo: plan_nuevo as string, plan_anterior: plan_anterior as string }),
+    ...cambioPlan({
+      plan_nuevo: plan_nuevo as string,
+      plan_anterior: plan_anterior as string,
+      periodo_nuevo: periodo_nuevo as string | undefined,
+      periodo_anterior: periodo_anterior as string | undefined,
+    }),
   })
   if (sendError) {
     console.error('[api/emails] envío de cambio_plan falló:', sendError.message)
