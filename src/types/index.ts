@@ -30,7 +30,9 @@ export interface Restaurante {
    *  porque los inserts de registro no lo escriben (default/backfill de la DB);
    *  ausente == nunca-pago para todos los consumidores (chequeos falsy). */
   fue_pago?: boolean
-  plan_expira: string
+  /** Fin del ciclo pagado. Hoy NADIE la escribe (null en toda fila existente);
+   *  el webhook de Wompi (F4.a-2) será su primer escritor. */
+  plan_expira: string | null
   idioma: string
   color_principal: string
   tema: 'claro' | 'oscuro' | 'natural' | 'premium'
@@ -259,17 +261,19 @@ export interface Referido {
   created_at: string
 }
 
+/** Fila de la tabla facturas (F4.a-1). La escribe SOLO el service role via
+ *  webhook de Wompi (F4.a-2); el dueño solo lee las suyas (RLS select). */
 export interface Factura {
   id: string
   restaurante_id: string
-  numero: string
-  monto: number
-  estado: 'pagada' | 'pendiente' | 'fallida'
-  metodo_pago: 'nequi' | 'pse' | 'tarjeta'
-  periodo_mes: number
-  periodo_ano: number
-  fecha_pago: string
-  created_at: string
+  wompi_transaction_id: string | null
+  referencia: string
+  plan: string
+  periodo: string
+  monto_centavos: number
+  estado: 'pendiente' | 'aprobada' | 'rechazada' | 'anulada'
+  creada_en: string
+  pagada_en: string | null
 }
 
 export interface DatosFacturacion {
