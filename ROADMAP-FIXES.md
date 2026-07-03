@@ -439,6 +439,8 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
 
 **Decision deadline**: Before starting marketing/landing page (F6 in roadmap).
 
+Decision 2026-07-03: Julian mantiene $15k/$29k mensual ($150k/$290k anual, ~2 meses gratis) por conocimiento del mercado Popayan — $19k/$39k se percibe alto para el segmento. Los pilotos validan ESTE precio; subir despues es mas facil que bajar. Fuente unica: lib/planes.ts.
+
 ---
 
 ### STRATEGIC.2 📸 Allow up to 5 photos on free plan (DECISION TAKEN)
@@ -495,6 +497,14 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
 ```
 
 ## Items
+
+### F4-DISENO 📌 Wompi: hallazgo clave + faseo de implementacion — NOTA
+- **Registrado**: 2026-07-02, tras investigacion doble (mapa del repo por CC + docs actuales de Wompi). Complementa F4-DECISIONES.
+- **HALLAZGO CLAVE**: Wompi Colombia NO tiene suscripciones gestionadas nativas. Ofrece tokenizacion + payment sources (el cliente ingresa tarjeta/Nequi UNA vez, con 3D Secure inicial y acceptance token obligatorio) y el comercio cobra via API cuando decide. La recurrencia (cuando cobrar, reintentos, dunning) la construye MenuApp — nuestro cron diario pasa de "red de seguridad" a MOTOR DE COBRO. Idempotencia por reference obligatoria para no cobrar doble.
+- **Faseo**: F4.a checkout de pago unico + webhook (firma verificada, service role, escribe plan + plan_expira + inserta factura; LANZABLE solo — renovacion manual al vencer). F4.b diferido + cron (plan_programado/fecha_cambio_programado, banner de retencion, ejecutor COT; incluye extraer el envio de email a funcion server sin cookies — bloqueador detectado: api/emails exige sesion y webhook/cron no tienen). F4.c recurrencia (payment source + cobro automatico por cron; DIFERIBLE post-lanzamiento si los pilotos toleran renovar manual). F4.d facturacion DIAN via Alegra (consume las facturas de F4.a; independiente, al final).
+- **Deudas pre-F4.a**: (1) unificar fuente de precios — payments.ts tiene $15k/$29k viejos vs planes hardcodeados en /suscripcion; decidir STRATEGIC.1 ($19k/$39k) al cablear la fuente unica; (2) sincerar plan_expira en types (declarada required, JAMAS escrita ni leida — el select('*') castea null); (3) payments.ts es codigo muerto total (crearPago sin call sites) pero su shape de 4 campos coincide con Checkout Web de Wompi — esqueleto reutilizable.
+- **Infra nueva que F4 introduce**: SUPABASE_SERVICE_ROLE_KEY + lib/supabase-admin.ts (sin precedente en el repo), WOMPI_EVENTS_SECRET / WOMPI_INTEGRITY_SECRET / NEXT_PUBLIC_WOMPI_PUBLIC_KEY, CRON_SECRET, vercel.json con cron "0 5 * * *" UTC (= medianoche COT; Hobby plan: crons diarios, hora imprecisa dentro de la ventana — valido para ejecutor, no para nada time-sensitive).
+- **Tramites paralelos (Julian, sin fecha)**: contador (persona natural vs SAS), dominio menuapp.co (ahora triple rol: email fiscal + Resend/F3.c + F6), cuenta bancaria, cuenta de comercio Wompi AL FINAL. Todo F4-codigo se construye contra sandbox de Wompi sin cuenta.
 
 ### F3-MVP ✅ Emails transaccionales via Resend (bienvenida + cambio de plan) — CLOSED
 - **Closed**: 2026-07-02. MVP de F3 con sandbox de Resend (onboarding@resend.dev); el dominio menuapp.co queda como PREREQUISITO DURO de F7 (el sandbox solo entrega al email del dueno de la cuenta — verificado en smoke: cuentas de prueba con otros correos no reciben nada, comportamiento esperado).
