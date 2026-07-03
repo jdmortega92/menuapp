@@ -26,6 +26,7 @@ import { formato12h } from '@/lib/time'
 import { formatoPrecio } from '@/lib/precio'
 import { formatDias } from '@/lib/dias'
 import { puedeSubirFoto as calcularPuedeSubirFoto, LIMITE_FOTOS_GRATIS } from '@/lib/fotosGate'
+import { PLANES } from '@/lib/planes'
 import type { Plan, Variante } from '@/types'
 
 // construirTextoVinculaciones se movió a components/menu-admin/VarianteEditor
@@ -964,7 +965,7 @@ export default function MiMenuPage() {
                   padding: '12px 24px', borderRadius: 'var(--radius-md)', fontSize: '13px',
                   fontWeight: 500, cursor: 'pointer',
                 }}>
-                  Ver Plan Pro — $29.000/mes
+                  Ver Plan Pro — ${formatoPrecio(PLANES.pro.precioMensual)}/mes
                 </div>
               </div>
             ) : (

@@ -4,6 +4,8 @@ import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks'
 import { fechaColombia } from '@/lib/fechas'
+import { formatoPrecio } from '@/lib/precio'
+import { PLANES } from '@/lib/planes'
 import { useDashboardStats } from '@/hooks/data/useDashboardStats'
 import { useDashboardLifetime } from '@/hooks/data/useDashboardLifetime'
 import { useDashboardAlertas } from '@/hooks/data/useDashboardAlertas'
@@ -2277,7 +2279,7 @@ export default function DashboardPage() {
                 padding: '16px', textAlign: 'center', cursor: 'pointer',
               }}>
                 <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--bg-secondary)' }}>Desbloquear estadísticas</div>
-                <div style={{ fontSize: '12px', color: 'var(--bg-secondary)', opacity: 0.7, marginTop: '4px' }}>Plan Básico desde $15.000/mes</div>
+                <div style={{ fontSize: '12px', color: 'var(--bg-secondary)', opacity: 0.7, marginTop: '4px' }}>Plan Básico desde ${formatoPrecio(PLANES.basico.precioMensual)}/mes</div>
               </div>
             ) : (
               <div onClick={() => router.push('/suscripcion')} style={{
