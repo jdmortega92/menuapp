@@ -1,16 +1,9 @@
 import { Plan } from '@/types'
+import { precioDe, centavosDe, type Periodo } from './planes'
 
-export const PRECIOS: Record<Plan, { mensual: number; anual: number }> = {
-  gratis: { mensual: 0, anual: 0 },
-  basico: { mensual: 15000, anual: 144000 },
-  pro: { mensual: 29000, anual: 278400 },
-}
-
-export const NOMBRE_PLAN: Record<Plan, string> = {
-  gratis: 'Gratis',
-  basico: 'Básico',
-  pro: 'Pro',
-}
+// Integración de pagos (Wompi). Precios: SIEMPRE desde lib/planes — este
+// módulo no define montos. crearPago es el esqueleto del checkout que
+// F4.a-2 cablea contra la API real (/api/pagos/wompi aún no existe).
 
 export async function crearPago({
   plan,
@@ -19,18 +12,17 @@ export async function crearPago({
   restauranteId,
 }: {
   plan: Plan
-  periodo: 'mensual' | 'anual'
+  periodo: Periodo
   email: string
   restauranteId: string
 }) {
-  const monto = PRECIOS[plan][periodo]
-  if (monto === 0) return { success: true, plan: 'gratis' }
+  if (precioDe(plan, periodo) === 0) return { success: true, plan: 'gratis' }
 
   const response = await fetch('/api/pagos/wompi', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      amount_in_cents: monto * 100,
+      amount_in_cents: centavosDe(plan, periodo),
       currency: 'COP',
       customer_email: email,
       reference: `sub_${restauranteId}_${plan}_${periodo}_${Date.now()}`,
@@ -38,14 +30,4 @@ export async function crearPago({
   })
 
   return response.json()
-}
-
-export function calcularAhorro(plan: Plan): number {
-  return PRECIOS[plan].mensual * 12 - PRECIOS[plan].anual
-}
-
-export function calcularPorcentajeAhorro(plan: Plan): number {
-  const mensualAnual = PRECIOS[plan].mensual * 12
-  if (mensualAnual === 0) return 0
-  return Math.round(((mensualAnual - PRECIOS[plan].anual) / mensualAnual) * 100)
 }

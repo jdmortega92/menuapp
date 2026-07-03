@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks'
 import { createClient } from '@/lib/supabase-browser'
 import { formatoPrecio } from '@/lib/precio'
+import { LISTA_PLANES, PLANES, ahorroAnual } from '@/lib/planes'
 
 export default function SuscripcionPage() {
   const router = useRouter()
@@ -65,23 +66,9 @@ export default function SuscripcionPage() {
 
   if (!usuario) return null
 
-  const planes = [
-    {
-      id: 'gratis', nombre: 'Gratis', precioMensual: 0, precioAnual: 0,
-      features: ['10 platos máximo', '1 categoría', 'QR básico', 'Escaneos y visitas'],
-      noFeatures: ['Sin fotos', 'Sin estadísticas detalladas'],
-    },
-    {
-      id: 'basico', nombre: 'Básico', precioMensual: 15000, precioAnual: 144000,
-      features: ['Platos ilimitados', 'Categorías ilimitadas', 'Fotos opcionales', 'QR personalizado', 'Gráfica + platos más vistos', 'Horarios pico', 'Agotado en tiempo real', 'Personalización del menú'],
-      noFeatures: ['Sin combos ni promos', 'Sin estadísticas avanzadas'],
-    },
-    {
-      id: 'pro', nombre: 'Pro', precioMensual: 29000, precioAnual: 278400,
-      features: ['Todo del Básico', 'Combos y promociones', 'Plato del día', 'Plato ganador', 'Calificaciones', 'Embudo de conversión', 'Vistas vs pedidos', 'Mejores y peores días', 'Reporte semanal PDF'],
-      noFeatures: [],
-    },
-  ]
+  // Precios y features: SIEMPRE desde lib/planes (fuente única, F4.a-1).
+  const planes = LISTA_PLANES
+  const descuentoAnual = Math.round((ahorroAnual('basico') / (PLANES.basico.precioMensual * 12)) * 100)
 
   return (
     <div style={{ background: 'var(--bg-primary)', minHeight: '100vh' }}>
@@ -135,7 +122,7 @@ export default function SuscripcionPage() {
               color: periodo === 'anual' ? 'var(--text-primary)' : 'var(--text-secondary)',
               boxShadow: periodo === 'anual' ? 'var(--shadow-sm)' : 'none',
             }}>
-              Anual <span style={{ fontSize: '10px', color: 'var(--color-green)', fontWeight: 500 }}>-20%</span>
+              Anual <span style={{ fontSize: '10px', color: 'var(--color-green)', fontWeight: 500 }}>-{descuentoAnual}%</span>
             </div>
           </div>
         </div>
