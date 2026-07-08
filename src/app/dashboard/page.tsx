@@ -11,6 +11,31 @@ import { useDashboardLifetime } from '@/hooks/data/useDashboardLifetime'
 import { useDashboardAlertas } from '@/hooks/data/useDashboardAlertas'
 import BottomNav from '@/components/BottomNav'
 
+// ── Fuentes únicas compartidas render ↔ PDF (deuda dirigida AUDIT-DASH) ──
+// Escala de intensidad del heatmap: umbrales y colores viven SOLO aquí
+// (los consumen la grilla del render, la leyenda, el teaser y el PDF).
+const NIVELES_HEATMAP = [
+  { min: 0.75, bg: '#E85D24', texto: '#FFFFFF', destacado: true },  // Intenso
+  { min: 0.5, bg: '#F5925A', texto: '#FFFFFF', destacado: true },   // Alto
+  { min: 0.25, bg: '#F9B27D', texto: '#7A3310', destacado: false }, // Medio
+  { min: 0, bg: '#FDE8D9', texto: '#7A3310', destacado: false },    // Bajo
+]
+
+// null cuando la celda no tiene visitas: cada superficie pinta su propio vacío.
+function nivelHeatmap(valor: number, max: number) {
+  if (valor <= 0 || max <= 0) return null
+  const ratio = valor / max
+  return NIVELES_HEATMAP.find(n => ratio >= n.min) ?? NIVELES_HEATMAP[NIVELES_HEATMAP.length - 1]
+}
+
+// Antigüedad de un plato sin vistas (en minúsculas; el PDF capitaliza la inicial).
+function etiquetaAntiguedad(diasCreado: number): string {
+  if (diasCreado === 0) return 'hoy'
+  if (diasCreado === 1) return 'hace 1 día'
+  if (diasCreado < 30) return `hace ${diasCreado} días`
+  if (diasCreado < 60) return 'hace 1 mes'
+  return `hace ${Math.floor(diasCreado / 30)} meses`
+}
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -399,14 +424,24 @@ export default function DashboardPage() {
   const { stats, statsAnterior, platosMasVistos, platosInteresBajo, platosSinVistas, horariosPico, escaneosPorDia, resenas, alertas, heatmapData } = derivados
 
   const esBasico = plan === 'basico' || plan === 'pro'
+  // CONTRATO DE INVOCACIÓN: esta función referencia consts declaradas MÁS ABAJO
+  // en el componente (esPro, contextoTemporal, labelAnterior, varEscaneos,
+  // varVisitas, varPedidos, embudoData, mejorDia). Es segura frente a TDZ SOLO
+  // porque se invoca al hacer click (post-render): no llamarla durante el render
+  // ni convertirla en efecto de montaje.
   async function generarReportePDF() {
     const jsPDF = (await import('jspdf')).default
     const autoTable = (await import('jspdf-autotable')).default
 
+    // Layout mobile-first sobre A4 vertical: una sola columna, tipografía grande
+    // (nada por debajo de 11pt) y varias páginas si hace falta. El reporte se lee
+    // en el teléfono a "ajustar al ancho": legibilidad antes que densidad.
     const doc = new jsPDF('p', 'mm', 'a4')
     const ancho = doc.internal.pageSize.getWidth()
     const alto = doc.internal.pageSize.getHeight()
-    const margen = 20
+    const margen = 15
+    const anchoUtil = ancho - margen * 2
+    const margenInferior = 26 // reserva del footer en todas las páginas
     let y = 0
 
     // ===== PALETA DE MARCA MENUAPP =====
@@ -441,14 +476,50 @@ export default function DashboardPage() {
       doc.setFillColor(...CREMA)
       doc.rect(0, 0, ancho, alto, 'F')
     }
+    // autoTable agrega páginas por su cuenta cuando una tabla larga no cabe
+    // (p. ej. actividad por día en 'mes'): se envuelve addPage para que TODA
+    // página nueva nazca con el fondo crema, sin importar quién la cree.
+    const addPageOriginal = doc.addPage.bind(doc)
+    ;(doc as any).addPage = (...args: any[]) => {
+      const resultado = (addPageOriginal as any)(...args)
+      pintarFondo()
+      return resultado
+    }
     pintarFondo()
 
+    // Salto de página si lo que viene no cabe. Se pide título + primer bloque
+    // juntos para no dejar encabezados huérfanos al pie de página.
+    function asegurarEspacio(alturaMinima: number) {
+      if (y + alturaMinima > alto - margenInferior) {
+        doc.addPage()
+        y = 20
+      }
+    }
+
+    // Título de sección (16pt) con subtítulo opcional (11pt)
+    function tituloSeccion(texto: string, subtitulo?: string) {
+      doc.setTextColor(...TEXTO)
+      doc.setFontSize(16)
+      doc.setFont('helvetica', 'bold')
+      doc.text(texto, margen, y)
+      if (subtitulo) {
+        doc.setTextColor(...TEXTO_SEC)
+        doc.setFontSize(11)
+        doc.setFont('helvetica', 'normal')
+        const lineas = doc.splitTextToSize(subtitulo, anchoUtil)
+        doc.text(lineas, margen, y + 6)
+        y += 6 + lineas.length * 5
+      } else {
+        y += 6
+      }
+    }
+
     // ===== HEADER CON MARCA =====
-    y = 22
+    y = 24
 
     // Logo "MenuApp" con "App" en naranja
     doc.setTextColor(...TEXTO)
-    doc.setFontSize(22)
+    doc.setFontSize(20)
     doc.setFont('helvetica', 'bold')
     doc.text('Menu', margen, y)
     const anchoMenu = doc.getTextWidth('Menu')
@@ -457,258 +528,276 @@ export default function DashboardPage() {
 
     // Etiqueta debajo del logo
     doc.setTextColor(...TEXTO_SEC)
-    doc.setFontSize(8)
+    doc.setFontSize(11)
     doc.setFont('helvetica', 'normal')
-    doc.text('REPORTE DE ESTADÍSTICAS', margen, y + 5)
+    doc.text('REPORTE DE ESTADÍSTICAS', margen, y + 7)
 
     // Info del periodo a la derecha
     doc.setTextColor(...TEXTO_SEC)
-    doc.setFontSize(8)
-    doc.text(contextoTemporal.titulo.toUpperCase(), ancho - margen, y - 6, { align: 'right' })
+    doc.setFontSize(11)
+    doc.text(contextoTemporal.titulo.toUpperCase(), ancho - margen, y - 8, { align: 'right' })
 
     doc.setTextColor(...TEXTO)
-    doc.setFontSize(12)
+    doc.setFontSize(15)
     doc.setFont('helvetica', 'bold')
     doc.text(contextoTemporal.rango, ancho - margen, y, { align: 'right' })
 
     if (contextoTemporal.progreso) {
       doc.setTextColor(...TEXTO_SEC)
-      doc.setFontSize(8)
+      doc.setFontSize(11)
       doc.setFont('helvetica', 'normal')
-      doc.text(contextoTemporal.progreso, ancho - margen, y + 5, { align: 'right' })
+      doc.text(contextoTemporal.progreso, ancho - margen, y + 7, { align: 'right' })
     }
 
     // Línea naranja separadora
-    y += 10
+    y += 13
     doc.setDrawColor(...NARANJA)
     doc.setLineWidth(0.8)
     doc.line(margen, y, ancho - margen, y)
 
-    y += 10
+    y += 12
 
     // ===== NOMBRE DEL RESTAURANTE =====
     doc.setTextColor(...TEXTO_SEC)
-    doc.setFontSize(9)
+    doc.setFontSize(11)
     doc.setFont('helvetica', 'normal')
     doc.text('Restaurante', margen, y)
 
-    y += 6
+    y += 8
     doc.setTextColor(...TEXTO)
-    doc.setFontSize(16)
+    doc.setFontSize(20)
     doc.setFont('helvetica', 'bold')
-    doc.text(restaurante.nombre, margen, y)
+    const lineasNombre = doc.splitTextToSize(restaurante.nombre, anchoUtil)
+    doc.text(lineasNombre, margen, y)
+    y += (lineasNombre.length - 1) * 8
 
     // Fecha de generación
     const fechaGen = new Date().toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
     doc.setTextColor(...TEXTO_TER)
-    doc.setFontSize(8)
+    doc.setFontSize(11)
     doc.setFont('helvetica', 'normal')
-    doc.text(`Generado ${fechaGen}`, margen, y + 5)
+    doc.text(`Generado ${fechaGen}`, margen, y + 7)
 
-    y += 14
+    y += 17
 
     // ===== RESUMEN EJECUTIVO =====
-    doc.setFillColor(...CREMA_OSCURO)
-    doc.roundedRect(margen, y, ancho - margen * 2, 32, 2, 2, 'F')
-
-    doc.setTextColor(...TEXTO_SEC)
-    doc.setFontSize(8)
-    doc.setFont('helvetica', 'bold')
-    doc.text('RESUMEN EJECUTIVO', margen + 6, y + 7)
-
-    doc.setTextColor(...TEXTO)
-    doc.setFontSize(10)
-    doc.setFont('helvetica', 'normal')
-
     // Línea 1: visitas con variación coloreada
     const textoInicio1 = `Recibiste ${stats.escaneos} visitas al menú`
-    doc.text(textoInicio1, margen + 6, y + 14)
-    const anchoInicio1 = doc.getTextWidth(textoInicio1)
+    const textoVar = varEscaneos.valor !== 0 && statsAnterior.escaneos > 0
+      ? ` (${varEscaneos.valor > 0 ? '+' : '−'}${Math.abs(varEscaneos.valor)}% vs ${labelAnterior})`
+      : ''
 
-    if (varEscaneos.valor !== 0 && statsAnterior.escaneos > 0) {
-      const signo = varEscaneos.valor > 0 ? '+' : '−'
-      const textoVar = ` (${signo}${Math.abs(varEscaneos.valor)}% vs ${labelAnterior})`
+    // Línea 2: diagnóstico del embudo — MISMA fuente que el render
+    // (diagnostico.mensaje); antes el PDF reconstruía el texto desde .tipo
+    // y la redacción ya había divergido (AUDIT-DASH).
+    const lineaResumen2 = esPro && embudoData.visitasMenu > 0
+      ? embudoData.diagnostico.mensaje
+      : `Total de pedidos por WhatsApp: ${stats.pedidosWhatsapp}.`
+
+    // Línea 3: mejor día — const `mejorDia` compartida con el render
+    const lineaResumen3 = mejorDia
+      ? `Mejor día: ${mejorDia.dia} ${mejorDia.numero} con ${mejorDia.actual} visitas.${horariosPico[0] ? ` Horario pico: ${horariosPico[0].rango}.` : ''}`
+      : 'Aún no hay suficientes datos para identificar patrones diarios.'
+
+    doc.setFontSize(13)
+    doc.setFont('helvetica', 'normal')
+    const anchoTextoResumen = anchoUtil - 14
+    const lineasResumen2 = doc.splitTextToSize(lineaResumen2, anchoTextoResumen)
+    const lineasResumen3 = doc.splitTextToSize(lineaResumen3, anchoTextoResumen)
+    const interlineado = 6.5
+    const totalLineasResumen = 1 + lineasResumen2.length + lineasResumen3.length
+    const alturaResumen = 18 + totalLineasResumen * interlineado
+
+    doc.setFillColor(...CREMA_OSCURO)
+    doc.roundedRect(margen, y, anchoUtil, alturaResumen, 2, 2, 'F')
+
+    doc.setTextColor(...TEXTO_SEC)
+    doc.setFontSize(11)
+    doc.setFont('helvetica', 'bold')
+    doc.text('RESUMEN EJECUTIVO', margen + 7, y + 9)
+
+    let yResumen = y + 18
+    doc.setTextColor(...TEXTO)
+    doc.setFontSize(13)
+    doc.setFont('helvetica', 'normal')
+    doc.text(textoInicio1, margen + 7, yResumen)
+    if (textoVar) {
+      const anchoInicio1 = doc.getTextWidth(textoInicio1)
       doc.setTextColor(...(varEscaneos.valor > 0 ? VERDE_EXITO : ROJO_PELIGRO))
       doc.setFont('helvetica', 'bold')
-      doc.text(textoVar, margen + 6 + anchoInicio1, y + 14)
+      doc.text(textoVar, margen + 7 + anchoInicio1, yResumen)
+      doc.setTextColor(...TEXTO)
+      doc.setFont('helvetica', 'normal')
     }
+    yResumen += interlineado
+    doc.text(lineasResumen2, margen + 7, yResumen)
+    yResumen += lineasResumen2.length * interlineado
+    doc.text(lineasResumen3, margen + 7, yResumen)
 
-    doc.setTextColor(...TEXTO)
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(10)
+    y += alturaResumen + 14
 
-    // Línea 2: conversión
-    const lineaResumen2 = esPro && embudoData.visitasMenu > 0
-      ? `Conversión del ${embudoData.conversionFinal}% — ${embudoData.diagnostico.tipo === 'excelente' ? 'tu menú está convirtiendo muy bien.'
-        : embudoData.diagnostico.tipo === 'bueno' ? 'buen ritmo, con espacio para optimizar.'
-        : embudoData.diagnostico.tipo === 'regular' ? 'hay oportunidades claras de mejora.'
-        : 'revisa los puntos de fuga para impulsar el pedido.'}`
-      : `Total de pedidos por WhatsApp: ${stats.pedidosWhatsapp}.`
-    doc.text(lineaResumen2, margen + 6, y + 20)
-
-    // Línea 3: mejor día
-    const mejorDiaResumen = escaneosPorDia.filter((d: any) => !d.esFuturo && d.actual > 0).sort((a: any, b: any) => b.actual - a.actual)[0]
-    const lineaResumen3 = mejorDiaResumen
-      ? `Mejor día: ${mejorDiaResumen.dia} ${mejorDiaResumen.numero} con ${mejorDiaResumen.actual} visitas.${horariosPico[0] ? ` Horario pico: ${horariosPico[0].rango}.` : ''}`
-      : 'Aún no hay suficientes datos para identificar patrones diarios.'
-    doc.text(lineaResumen3, margen + 6, y + 26)
-
-    y += 40
-
-    // ===== MÉTRICAS PRINCIPALES =====
-    doc.setTextColor(...TEXTO)
-    doc.setFontSize(12)
-    doc.setFont('helvetica', 'bold')
-    doc.text('Métricas principales', margen, y)
-    y += 5
+    // ===== MÉTRICAS PRINCIPALES (tarjetas apiladas a todo el ancho) =====
+    asegurarEspacio(48)
+    tituloSeccion('Métricas principales')
+    y += 4
 
     const formatearVariacion = (v: typeof varEscaneos) => {
-      if (v.tipo === 'neutro' && v.texto === '—') return '—'
+      if (v.tipo === 'neutro' && v.texto === '—') return ''
       if (v.tipo === 'nuevo') return 'Nuevo'
+      if (v.valor === 0) return 'Igual'
       const signo = v.valor > 0 ? '+' : '−'
       return `${signo}${Math.abs(v.valor)}%`
     }
 
-    const metricasBody = [
-      ['Visitas al menú', stats.escaneos.toString(), statsAnterior.escaneos.toString(), formatearVariacion(varEscaneos)],
-      ['Platos vistos', stats.visitas.toString(), statsAnterior.visitas.toString(), formatearVariacion(varVisitas)],
+    const tarjetas: { etiqueta: string; valor: string; contexto: string; variacion: typeof varEscaneos | null }[] = [
+      { etiqueta: 'Visitas al menú', valor: stats.escaneos.toString(), contexto: `vs ${statsAnterior.escaneos} ${labelAnterior}`, variacion: varEscaneos },
+      { etiqueta: 'Platos vistos', valor: stats.visitas.toString(), contexto: `vs ${statsAnterior.visitas} ${labelAnterior}`, variacion: varVisitas },
     ]
-
     if (esPro) {
-      metricasBody.push(['Pedidos WhatsApp', stats.pedidosWhatsapp.toString(), statsAnterior.pedidosWhatsapp.toString(), formatearVariacion(varPedidos)])
-      metricasBody.push(['Calificación', `${stats.calificacion}/5`, `${stats.totalResenas} reseñas`, '—'])
+      tarjetas.push({ etiqueta: 'Pedidos WhatsApp', valor: stats.pedidosWhatsapp.toString(), contexto: `vs ${statsAnterior.pedidosWhatsapp} ${labelAnterior}`, variacion: varPedidos })
+      tarjetas.push({ etiqueta: 'Calificación promedio', valor: `${stats.calificacion}/5`, contexto: `histórico · ${stats.totalResenas} ${stats.totalResenas === 1 ? 'reseña' : 'reseñas'}`, variacion: null })
     }
 
-    ;autoTable(doc, {
-      startY: y,
-      head: [['Métrica', 'Actual', labelAnterior.charAt(0).toUpperCase() + labelAnterior.slice(1), 'Cambio']],
-      body: metricasBody,
-      margin: { left: margen, right: margen },
-      styles: { fontSize: 9, cellPadding: 4, textColor: TEXTO, lineColor: BORDE_SUAVE, lineWidth: 0.1 },
-      headStyles: { fillColor: CREMA_OSCURO, textColor: TEXTO_SEC, fontStyle: 'bold', fontSize: 8 },
-      alternateRowStyles: { fillColor: CREMA_MEDIO },
-      columnStyles: {
-        0: { fontStyle: 'bold' },
-        1: { halign: 'right', fontStyle: 'bold' },
-        2: { halign: 'right', textColor: TEXTO_SEC },
-        3: { halign: 'right', fontStyle: 'bold' },
-      },
-      didParseCell: (data: any) => {
-        if (data.column.index === 3 && data.row.section === 'body') {
-          const texto = data.cell.raw as string
-          if (texto.startsWith('+')) data.cell.styles.textColor = VERDE_EXITO
-          else if (texto.startsWith('−')) data.cell.styles.textColor = ROJO_PELIGRO
-          else if (texto === 'Nuevo') data.cell.styles.textColor = AZUL_INFO
-        }
-      },
-    })
+    const alturaTarjeta = 32
+    tarjetas.forEach((tarjeta) => {
+      asegurarEspacio(alturaTarjeta + 5)
 
-    y = (doc as any).lastAutoTable.finalY + 12
+      doc.setFillColor(...CREMA_OSCURO)
+      doc.roundedRect(margen, y, anchoUtil, alturaTarjeta, 2, 2, 'F')
+
+      doc.setTextColor(...TEXTO_SEC)
+      doc.setFontSize(12)
+      doc.setFont('helvetica', 'normal')
+      doc.text(tarjeta.etiqueta, margen + 7, y + 9)
+
+      doc.setTextColor(...TEXTO)
+      doc.setFontSize(24)
+      doc.setFont('helvetica', 'bold')
+      doc.text(tarjeta.valor, margen + 7, y + 21)
+
+      doc.setTextColor(...TEXTO_TER)
+      doc.setFontSize(11)
+      doc.setFont('helvetica', 'normal')
+      doc.text(tarjeta.contexto, margen + 7, y + 28)
+
+      if (tarjeta.variacion) {
+        const etiquetaVar = formatearVariacion(tarjeta.variacion)
+        if (etiquetaVar) {
+          const colorVar = tarjeta.variacion.valor > 0 ? VERDE_EXITO
+            : tarjeta.variacion.valor < 0 ? ROJO_PELIGRO
+            : tarjeta.variacion.tipo === 'nuevo' ? AZUL_INFO
+            : TEXTO_SEC
+          doc.setTextColor(...colorVar)
+          doc.setFontSize(14)
+          doc.setFont('helvetica', 'bold')
+          doc.text(etiquetaVar, ancho - margen - 7, y + 21, { align: 'right' })
+        }
+      }
+
+      y += alturaTarjeta + 5
+    })
+    y += 9
 
     // ===== EMBUDO DE CONVERSIÓN (solo Pro) =====
     if (esPro && embudoData.visitasMenu > 0) {
-      if (y > 210) { doc.addPage(); pintarFondo(); y = 20 }
+      asegurarEspacio(60)
+      tituloSeccion('Embudo de conversión', 'Cuenta sesiones únicas (una visita = una sesión), no pedidos totales')
 
-      doc.setTextColor(...TEXTO)
-      doc.setFontSize(12)
-      doc.setFont('helvetica', 'bold')
-      doc.text('Embudo de conversión', margen, y)
-      y += 5
-
-      ;autoTable(doc, {
+      // Porcentajes directos de embudoData: el PDF no recalcula tasas.
+      autoTable(doc, {
         startY: y,
-        head: [['Etapa', 'Cantidad', '% del total', 'Tasa de paso']],
+        head: [['Etapa', 'Sesiones', '% del total']],
         body: [
-          ['Sesiones que abrieron el menú', embudoData.visitasMenu.toString(), '100%', '—'],
-          ['Sesiones que exploraron platos', embudoData.vieronPlatos.toString(), `${Math.round((embudoData.vieronPlatos / embudoData.visitasMenu) * 100)}%`, `${embudoData.tasaExploracion}%`],
-          ['Sesiones que pidieron', embudoData.pidieron.toString(), `${Math.round((embudoData.pidieron / embudoData.visitasMenu) * 100)}%`, `${embudoData.tasaPedido}%`],
+          ['Abrieron el menú', embudoData.visitasMenu.toString(), '100%'],
+          ['Exploraron platos', embudoData.vieronPlatos.toString(), `${embudoData.tasaExploracion}%`],
+          ['Pidieron por WhatsApp', embudoData.pidieron.toString(), `${embudoData.conversionFinal}%`],
         ],
-        margin: { left: margen, right: margen },
-        styles: { fontSize: 9, cellPadding: 4, textColor: TEXTO, lineColor: BORDE_SUAVE, lineWidth: 0.1 },
-        headStyles: { fillColor: CREMA_OSCURO, textColor: TEXTO_SEC, fontStyle: 'bold', fontSize: 8 },
+        margin: { left: margen, right: margen, top: 20, bottom: margenInferior },
+        styles: { fontSize: 13, cellPadding: 4, textColor: TEXTO, lineColor: BORDE_SUAVE, lineWidth: 0.1 },
+        headStyles: { fillColor: CREMA_OSCURO, textColor: TEXTO_SEC, fontStyle: 'bold', fontSize: 11 },
         alternateRowStyles: { fillColor: CREMA_MEDIO },
         columnStyles: {
           0: { fontStyle: 'bold' },
           1: { halign: 'right', fontStyle: 'bold' },
-          2: { halign: 'right', textColor: TEXTO_SEC },
-          3: { halign: 'right', textColor: NARANJA, fontStyle: 'bold' },
+          2: { halign: 'right', textColor: NARANJA, fontStyle: 'bold' },
         },
       })
 
-      y = (doc as any).lastAutoTable.finalY + 8
+      y = (doc as any).lastAutoTable.finalY + 10
 
-      // Caja de diagnóstico con barra lateral de color
+      // Caja de diagnóstico con barra lateral de color (estilo por tipo,
+      // texto SIEMPRE desde diagnostico.mensaje, igual que el render)
       const esExito = embudoData.diagnostico.tipo === 'excelente'
       const esBueno = embudoData.diagnostico.tipo === 'bueno'
       const esRegular = embudoData.diagnostico.tipo === 'regular'
 
       const colorFondoDiag = esExito ? VERDE_FONDO : esBueno ? AZUL_FONDO : esRegular ? NARANJA_CLARO : ROJO_FONDO
       const colorBarraDiag = esExito ? VERDE_EXITO : esBueno ? AZUL_INFO : esRegular ? NARANJA_BORDE : ROJO_PELIGRO
-      const colorTituloDiag = esExito ? VERDE_TEXTO : esBueno ? AZUL_TEXTO : esRegular ? NARANJA_TEXTO : ROJO_TEXTO
-      const colorCuerpoDiag = esExito ? VERDE_TEXTO : esBueno ? AZUL_TEXTO : esRegular ? NARANJA_TEXTO : ROJO_TEXTO
+      const colorTextoDiag = esExito ? VERDE_TEXTO : esBueno ? AZUL_TEXTO : esRegular ? NARANJA_TEXTO : ROJO_TEXTO
 
       const tituloDiag = esExito ? 'Rendimiento excelente' : esBueno ? 'Rendimiento bueno' : esRegular ? 'Rendimiento regular' : 'Rendimiento bajo'
 
-      const lineasDiag = doc.splitTextToSize(embudoData.diagnostico.mensaje, ancho - margen * 2 - 12)
-      const alturaDiag = 12 + lineasDiag.length * 4
+      doc.setFontSize(12)
+      const lineasDiag = doc.splitTextToSize(embudoData.diagnostico.mensaje, anchoUtil - 14)
+      const alturaDiag = 14 + lineasDiag.length * 6
+
+      asegurarEspacio(alturaDiag + 6)
 
       doc.setFillColor(...colorFondoDiag)
-      doc.roundedRect(margen, y, ancho - margen * 2, alturaDiag, 2, 2, 'F')
+      doc.roundedRect(margen, y, anchoUtil, alturaDiag, 2, 2, 'F')
 
       doc.setFillColor(...colorBarraDiag)
       doc.rect(margen, y, 2, alturaDiag, 'F')
 
-      doc.setTextColor(...colorTituloDiag)
-      doc.setFontSize(10)
+      doc.setTextColor(...colorTextoDiag)
+      doc.setFontSize(13)
       doc.setFont('helvetica', 'bold')
-      doc.text(tituloDiag, margen + 6, y + 7)
+      doc.text(tituloDiag, margen + 7, y + 8)
 
-      doc.setTextColor(...colorCuerpoDiag)
-      doc.setFontSize(9)
+      doc.setTextColor(...colorTextoDiag)
+      doc.setFontSize(12)
       doc.setFont('helvetica', 'normal')
-      doc.text(lineasDiag, margen + 6, y + 12)
+      doc.text(lineasDiag, margen + 7, y + 15)
 
-      y += alturaDiag + 6
+      y += alturaDiag + 8
 
       // Recomendación si existe
       if (embudoData.recomendacion) {
-        if (y > 245) { doc.addPage(); pintarFondo(); y = 20 }
+        doc.setFontSize(12)
+        const lineasRec = doc.splitTextToSize(embudoData.recomendacion, anchoUtil - 14)
+        const alturaRec = 14 + lineasRec.length * 6
 
-        const lineasRec = doc.splitTextToSize(embudoData.recomendacion, ancho - margen * 2 - 12)
-        const alturaRec = 12 + lineasRec.length * 4
+        asegurarEspacio(alturaRec + 6)
 
         doc.setFillColor(...NARANJA_CLARO)
-        doc.roundedRect(margen, y, ancho - margen * 2, alturaRec, 2, 2, 'F')
+        doc.roundedRect(margen, y, anchoUtil, alturaRec, 2, 2, 'F')
 
         doc.setFillColor(...NARANJA_BORDE)
         doc.rect(margen, y, 2, alturaRec, 'F')
 
         doc.setTextColor(...NARANJA_TEXTO)
-        doc.setFontSize(10)
+        doc.setFontSize(13)
         doc.setFont('helvetica', 'bold')
-        doc.text('Recomendación', margen + 6, y + 7)
+        doc.text('Recomendación', margen + 7, y + 8)
 
         doc.setTextColor(...NARANJA_TEXTO)
-        doc.setFontSize(9)
+        doc.setFontSize(12)
         doc.setFont('helvetica', 'normal')
-        doc.text(lineasRec, margen + 6, y + 12)
+        doc.text(lineasRec, margen + 7, y + 15)
 
-        y += alturaRec + 10
+        y += alturaRec + 8
       }
+
+      y += 6
     }
 
     // ===== ACTIVIDAD POR DÍA =====
     const diasConDatos = escaneosPorDia.filter((d: any) => !d.esFuturo)
     if (diasConDatos.length > 0 && diasConDatos.some((d: any) => d.actual > 0) && filtroTiempo !== 'hoy') {
-      if (y > 210) { doc.addPage(); pintarFondo(); y = 20 }
+      asegurarEspacio(60)
+      tituloSeccion('Actividad por día')
 
-      doc.setTextColor(...TEXTO)
-      doc.setFontSize(12)
-      doc.setFont('helvetica', 'bold')
-      doc.text('Actividad por día', margen, y)
-      y += 5
-
-      ;autoTable(doc, {
+      autoTable(doc, {
         startY: y,
         head: [['Día', 'Fecha', 'Visitas', 'Estado']],
         body: escaneosPorDia.map((d: any) => {
@@ -720,35 +809,25 @@ export default function DashboardPage() {
             etiqueta,
           ]
         }),
-        margin: { left: margen, right: margen },
-        styles: { fontSize: 9, cellPadding: 3.5, textColor: TEXTO, lineColor: BORDE_SUAVE, lineWidth: 0.1 },
-        headStyles: { fillColor: CREMA_OSCURO, textColor: TEXTO_SEC, fontStyle: 'bold', fontSize: 8 },
+        margin: { left: margen, right: margen, top: 20, bottom: margenInferior },
+        styles: { fontSize: 13, cellPadding: 4, textColor: TEXTO, lineColor: BORDE_SUAVE, lineWidth: 0.1 },
+        headStyles: { fillColor: CREMA_OSCURO, textColor: TEXTO_SEC, fontStyle: 'bold', fontSize: 11 },
         alternateRowStyles: { fillColor: CREMA_MEDIO },
         columnStyles: {
           0: { fontStyle: 'bold' },
           1: { halign: 'right', textColor: TEXTO_SEC },
           2: { halign: 'right', fontStyle: 'bold', textColor: NARANJA },
-          3: { textColor: TEXTO_TER, fontSize: 8 },
+          3: { textColor: TEXTO_TER, fontSize: 11 },
         },
       })
 
-      y = (doc as any).lastAutoTable.finalY + 12
+      y = (doc as any).lastAutoTable.finalY + 14
     }
 
     // ===== HEATMAP DÍA × HORA (solo Pro) =====
     if (esPro && heatmapData && heatmapData.hayDatosSuficientes) {
-      if (y > 190) { doc.addPage(); pintarFondo(); y = 20 }
-
-      doc.setTextColor(...TEXTO)
-      doc.setFontSize(12)
-      doc.setFont('helvetica', 'bold')
-      doc.text('Patrón de visitas día × hora', margen, y)
-
-      doc.setTextColor(...TEXTO_SEC)
-      doc.setFontSize(8)
-      doc.setFont('helvetica', 'normal')
-      doc.text('Número de visitas recibidas en cada franja horaria', margen, y + 4)
-      y += 9
+      asegurarEspacio(70)
+      tituloSeccion('Patrón de visitas día × hora', 'Número de visitas recibidas en cada franja horaria')
 
       const bloquesLabels = ['0—3h', '3—6h', '6—9h', '9—12h', '12—15h', '15—18h', '18—21h', '21—24h']
       const diasPDF = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
@@ -758,36 +837,25 @@ export default function DashboardPage() {
         return [bloquesLabels[b], ...fila.map((v: number) => v === 0 ? '—' : v.toString())]
       })
 
-      ;autoTable(doc, {
+      autoTable(doc, {
         startY: y,
         head: [['Horario', ...diasPDF]],
         body: heatmapBody,
-        margin: { left: margen, right: margen },
-        styles: { fontSize: 9, cellPadding: 3, textColor: TEXTO, lineColor: BORDE_SUAVE, lineWidth: 0.1, halign: 'center' },
-        headStyles: { fillColor: CREMA_OSCURO, textColor: TEXTO_SEC, fontStyle: 'bold', fontSize: 8, halign: 'center' },
+        margin: { left: margen, right: margen, top: 20, bottom: margenInferior },
+        styles: { fontSize: 12, cellPadding: 3.5, textColor: TEXTO, lineColor: BORDE_SUAVE, lineWidth: 0.1, halign: 'center', valign: 'middle' },
+        headStyles: { fillColor: CREMA_OSCURO, textColor: TEXTO_SEC, fontStyle: 'bold', fontSize: 11, halign: 'center' },
         columnStyles: {
-          0: { fontStyle: 'bold', halign: 'right', textColor: TEXTO_SEC, cellWidth: 22 },
+          0: { fontStyle: 'bold', halign: 'right', textColor: TEXTO_SEC, cellWidth: 26 },
         },
         didParseCell: (data: any) => {
           if (data.column.index > 0 && data.row.section === 'body') {
             const valor = parseInt(data.cell.raw as string)
-            if (!isNaN(valor) && valor > 0) {
-              const ratio = heatmapData.maxCelda > 0 ? valor / heatmapData.maxCelda : 0
-              if (ratio >= 0.75) {
-                data.cell.styles.fillColor = [232, 93, 36]
-                data.cell.styles.textColor = [255, 255, 255]
-                data.cell.styles.fontStyle = 'bold'
-              } else if (ratio >= 0.5) {
-                data.cell.styles.fillColor = [245, 146, 90]
-                data.cell.styles.textColor = [255, 255, 255]
-                data.cell.styles.fontStyle = 'bold'
-              } else if (ratio >= 0.25) {
-                data.cell.styles.fillColor = [249, 178, 125]
-                data.cell.styles.textColor = [122, 51, 16]
-              } else {
-                data.cell.styles.fillColor = [253, 232, 217]
-                data.cell.styles.textColor = [122, 51, 16]
-              }
+            // Umbrales y colores desde NIVELES_HEATMAP (misma fuente que el render)
+            const nivel = nivelHeatmap(isNaN(valor) ? 0 : valor, heatmapData.maxCelda)
+            if (nivel) {
+              data.cell.styles.fillColor = nivel.bg
+              data.cell.styles.textColor = nivel.texto
+              if (nivel.destacado) data.cell.styles.fontStyle = 'bold'
             } else {
               data.cell.styles.textColor = TEXTO_TER
             }
@@ -795,7 +863,7 @@ export default function DashboardPage() {
         },
       })
 
-      y = (doc as any).lastAutoTable.finalY + 6
+      y = (doc as any).lastAutoTable.finalY + 8
 
       // Insight del pico y días muertos
       const bloquesInsight = ['0:00 — 3:00', '3:00 — 6:00', '6:00 — 9:00', '9:00 — 12:00', '12:00 — 15:00', '15:00 — 18:00', '18:00 — 21:00', '21:00 — 24:00']
@@ -811,42 +879,39 @@ export default function DashboardPage() {
       }
 
       if (textosInsight.length > 0) {
-        const textoInsightCompleto = textosInsight.join(' ')
-        const lineasInsight = doc.splitTextToSize(textoInsightCompleto, ancho - margen * 2 - 12)
-        const alturaInsight = 8 + lineasInsight.length * 4
+        doc.setFontSize(12)
+        const lineasInsight = doc.splitTextToSize(textosInsight.join(' '), anchoUtil - 14)
+        const alturaInsight = 8 + lineasInsight.length * 6
+
+        asegurarEspacio(alturaInsight + 6)
 
         doc.setFillColor(...CREMA_OSCURO)
-        doc.roundedRect(margen, y, ancho - margen * 2, alturaInsight, 2, 2, 'F')
+        doc.roundedRect(margen, y, anchoUtil, alturaInsight, 2, 2, 'F')
 
         doc.setFillColor(...NARANJA)
         doc.rect(margen, y, 2, alturaInsight, 'F')
 
         doc.setTextColor(...TEXTO)
-        doc.setFontSize(9)
+        doc.setFontSize(12)
         doc.setFont('helvetica', 'normal')
-        doc.text(lineasInsight, margen + 6, y + 6)
+        doc.text(lineasInsight, margen + 7, y + 8)
 
-        y += alturaInsight + 10
+        y += alturaInsight + 12
       }
     }
 
     // ===== HORARIOS PICO (solo Básico, el heatmap lo reemplaza en Pro) =====
     if (!esPro && horariosPico.length > 0) {
-      if (y > 225) { doc.addPage(); pintarFondo(); y = 20 }
+      asegurarEspacio(55)
+      tituloSeccion('Horarios con más visitas')
 
-      doc.setTextColor(...TEXTO)
-      doc.setFontSize(12)
-      doc.setFont('helvetica', 'bold')
-      doc.text('Horarios con más visitas', margen, y)
-      y += 5
-
-      ;autoTable(doc, {
+      autoTable(doc, {
         startY: y,
         head: [['Horario', 'Visitas']],
         body: horariosPico.map((h: any) => [h.rango, h.escaneos.toString()]),
-        margin: { left: margen, right: margen },
-        styles: { fontSize: 9, cellPadding: 4, textColor: TEXTO, lineColor: BORDE_SUAVE, lineWidth: 0.1 },
-        headStyles: { fillColor: CREMA_OSCURO, textColor: TEXTO_SEC, fontStyle: 'bold', fontSize: 8 },
+        margin: { left: margen, right: margen, top: 20, bottom: margenInferior },
+        styles: { fontSize: 13, cellPadding: 4, textColor: TEXTO, lineColor: BORDE_SUAVE, lineWidth: 0.1 },
+        headStyles: { fillColor: CREMA_OSCURO, textColor: TEXTO_SEC, fontStyle: 'bold', fontSize: 11 },
         alternateRowStyles: { fillColor: CREMA_MEDIO },
         columnStyles: {
           0: { fontStyle: 'bold' },
@@ -854,59 +919,44 @@ export default function DashboardPage() {
         },
       })
 
-      y = (doc as any).lastAutoTable.finalY + 12
+      y = (doc as any).lastAutoTable.finalY + 14
     }
 
     // ===== PLATOS MÁS VISTOS =====
     if (platosMasVistos.length > 0) {
-      if (y > 210) { doc.addPage(); pintarFondo(); y = 20 }
+      asegurarEspacio(55)
+      tituloSeccion('Platos más vistos')
 
-      doc.setTextColor(...TEXTO)
-      doc.setFontSize(12)
-      doc.setFont('helvetica', 'bold')
-      doc.text('Platos más vistos', margen, y)
-      y += 5
-
-      ;autoTable(doc, {
+      autoTable(doc, {
         startY: y,
         head: [['#', 'Plato', 'Vistas']],
         body: platosMasVistos.map((p: any, i: number) => [(i + 1).toString(), p.nombre, p.vistas.toString()]),
-        margin: { left: margen, right: margen },
-        styles: { fontSize: 9, cellPadding: 4, textColor: TEXTO, lineColor: BORDE_SUAVE, lineWidth: 0.1 },
-        headStyles: { fillColor: CREMA_OSCURO, textColor: TEXTO_SEC, fontStyle: 'bold', fontSize: 8 },
+        margin: { left: margen, right: margen, top: 20, bottom: margenInferior },
+        styles: { fontSize: 13, cellPadding: 4, textColor: TEXTO, lineColor: BORDE_SUAVE, lineWidth: 0.1 },
+        headStyles: { fillColor: CREMA_OSCURO, textColor: TEXTO_SEC, fontStyle: 'bold', fontSize: 11 },
         alternateRowStyles: { fillColor: CREMA_MEDIO },
         columnStyles: {
-          0: { halign: 'center', cellWidth: 12, textColor: TEXTO_SEC },
+          0: { halign: 'center', cellWidth: 14, textColor: TEXTO_SEC },
           1: { fontStyle: 'bold' },
           2: { halign: 'right', fontStyle: 'bold', textColor: NARANJA },
         },
       })
 
-      y = (doc as any).lastAutoTable.finalY + 10
+      y = (doc as any).lastAutoTable.finalY + 14
     }
 
     // ===== PLATOS CON INTERÉS BAJO =====
     if (platosInteresBajo.length > 0) {
-      if (y > 210) { doc.addPage(); pintarFondo(); y = 20 }
+      asegurarEspacio(60)
+      tituloSeccion('Platos con interés bajo', 'Reciben visitas pero pocos los exploran. Revisa foto, descripción o precio.')
 
-      doc.setTextColor(...TEXTO)
-      doc.setFontSize(12)
-      doc.setFont('helvetica', 'bold')
-      doc.text('Platos con interés bajo', margen, y)
-
-      doc.setTextColor(...TEXTO_SEC)
-      doc.setFontSize(8)
-      doc.setFont('helvetica', 'normal')
-      doc.text('Reciben visitas pero pocos los exploran. Revisa foto, descripción o precio.', margen, y + 4)
-      y += 9
-
-      ;autoTable(doc, {
+      autoTable(doc, {
         startY: y,
         head: [['Plato', 'Vistas']],
         body: platosInteresBajo.map((p: any) => [p.nombre, p.vistas.toString()]),
-        margin: { left: margen, right: margen },
-        styles: { fontSize: 9, cellPadding: 4, textColor: TEXTO, lineColor: BORDE_SUAVE, lineWidth: 0.1 },
-        headStyles: { fillColor: CREMA_OSCURO, textColor: TEXTO_SEC, fontStyle: 'bold', fontSize: 8 },
+        margin: { left: margen, right: margen, top: 20, bottom: margenInferior },
+        styles: { fontSize: 13, cellPadding: 4, textColor: TEXTO, lineColor: BORDE_SUAVE, lineWidth: 0.1 },
+        headStyles: { fillColor: CREMA_OSCURO, textColor: TEXTO_SEC, fontStyle: 'bold', fontSize: 11 },
         alternateRowStyles: { fillColor: CREMA_MEDIO },
         columnStyles: {
           0: { fontStyle: 'bold' },
@@ -914,39 +964,26 @@ export default function DashboardPage() {
         },
       })
 
-      y = (doc as any).lastAutoTable.finalY + 10
+      y = (doc as any).lastAutoTable.finalY + 14
     }
 
     // ===== PLATOS SIN VISTAS =====
     if (platosSinVistas.length > 0) {
-      if (y > 210) { doc.addPage(); pintarFondo(); y = 20 }
-
-      doc.setTextColor(...TEXTO)
-      doc.setFontSize(12)
-      doc.setFont('helvetica', 'bold')
+      asegurarEspacio(60)
       const tituloSinVistas = `Sin vistas ${filtroTiempo === 'hoy' ? 'hoy' : filtroTiempo === 'semana' ? 'esta semana' : 'este mes'}`
-      doc.text(tituloSinVistas, margen, y)
+      tituloSeccion(tituloSinVistas, 'Revisa si están activos y considera promocionarlos.')
 
-      doc.setTextColor(...TEXTO_SEC)
-      doc.setFontSize(8)
-      doc.setFont('helvetica', 'normal')
-      doc.text('Revisa si están activos y considera promocionarlos.', margen, y + 4)
-      y += 9
-
-      ;autoTable(doc, {
+      autoTable(doc, {
         startY: y,
         head: [['Plato', 'Antigüedad']],
         body: platosSinVistas.map((p: any) => {
-          const antiguedad = p.diasCreado === 0 ? 'Hoy'
-            : p.diasCreado === 1 ? 'Hace 1 día'
-            : p.diasCreado < 30 ? `Hace ${p.diasCreado} días`
-            : p.diasCreado < 60 ? 'Hace 1 mes'
-            : `Hace ${Math.floor(p.diasCreado / 30)} meses`
-          return [p.nombre, antiguedad]
+          // Misma etiqueta que el render (fuente única), capitalizada para el PDF
+          const antiguedad = etiquetaAntiguedad(p.diasCreado)
+          return [p.nombre, antiguedad.charAt(0).toUpperCase() + antiguedad.slice(1)]
         }),
-        margin: { left: margen, right: margen },
-        styles: { fontSize: 9, cellPadding: 4, textColor: TEXTO, lineColor: BORDE_SUAVE, lineWidth: 0.1 },
-        headStyles: { fillColor: CREMA_OSCURO, textColor: TEXTO_SEC, fontStyle: 'bold', fontSize: 8 },
+        margin: { left: margen, right: margen, top: 20, bottom: margenInferior },
+        styles: { fontSize: 13, cellPadding: 4, textColor: TEXTO, lineColor: BORDE_SUAVE, lineWidth: 0.1 },
+        headStyles: { fillColor: CREMA_OSCURO, textColor: TEXTO_SEC, fontStyle: 'bold', fontSize: 11 },
         alternateRowStyles: { fillColor: CREMA_MEDIO },
         columnStyles: {
           0: { fontStyle: 'bold' },
@@ -954,42 +991,44 @@ export default function DashboardPage() {
         },
       })
 
-      y = (doc as any).lastAutoTable.finalY + 12
+      y = (doc as any).lastAutoTable.finalY + 14
     }
 
     // ===== ÚLTIMAS RESEÑAS =====
     if (esPro && resenas.length > 0) {
-      if (y > 195) { doc.addPage(); pintarFondo(); y = 20 }
+      asegurarEspacio(60)
+      tituloSeccion('Últimas reseñas de comensales')
 
-      doc.setTextColor(...TEXTO)
-      doc.setFontSize(12)
-      doc.setFont('helvetica', 'bold')
-      doc.text('Últimas reseñas de comensales', margen, y)
-      y += 5
-
-      ;autoTable(doc, {
+      autoTable(doc, {
         startY: y,
-        head: [['Plato', 'Calificación', 'Comentario', 'Fecha']],
+        head: [['Plato', 'Calif.', 'Comentario', 'Fecha']],
         body: resenas.map((r: any) => [
           r.plato,
           `${r.estrellas}/5`,
           r.comentario || '—',
           r.tiempo,
         ]),
-        margin: { left: margen, right: margen },
-        styles: { fontSize: 8, cellPadding: 4, textColor: TEXTO, lineColor: BORDE_SUAVE, lineWidth: 0.1 },
-        headStyles: { fillColor: CREMA_OSCURO, textColor: TEXTO_SEC, fontStyle: 'bold', fontSize: 8 },
+        margin: { left: margen, right: margen, top: 20, bottom: margenInferior },
+        styles: { fontSize: 12, cellPadding: 4, textColor: TEXTO, lineColor: BORDE_SUAVE, lineWidth: 0.1 },
+        headStyles: { fillColor: CREMA_OSCURO, textColor: TEXTO_SEC, fontStyle: 'bold', fontSize: 11 },
         alternateRowStyles: { fillColor: CREMA_MEDIO },
         columnStyles: {
-          0: { fontStyle: 'bold', cellWidth: 35 },
-          1: { halign: 'center', textColor: NARANJA_BORDE, fontStyle: 'bold', cellWidth: 22 },
-          2: { cellWidth: 80 },
-          3: { halign: 'right', textColor: TEXTO_SEC, cellWidth: 25 },
+          0: { fontStyle: 'bold', cellWidth: 38 },
+          1: { halign: 'center', textColor: NARANJA_BORDE, fontStyle: 'bold', cellWidth: 20 },
+          3: { halign: 'right', textColor: TEXTO_SEC, cellWidth: 24 },
         },
       })
     }
 
     // ===== FOOTER EN TODAS LAS PÁGINAS =====
+    // 11pt (antes 7pt, ilegible en el teléfono): marca + restaurante a la
+    // izquierda, paginación a la derecha; se trunca el nombre si no cabe.
+    doc.setFontSize(11)
+    doc.setFont('helvetica', 'normal')
+    let marcaFooter = `MenuApp · ${restaurante.nombre}`
+    while (doc.getTextWidth(marcaFooter) > anchoUtil - 40 && marcaFooter.length > 12) {
+      marcaFooter = `${marcaFooter.slice(0, -4).trimEnd()}…`
+    }
     const totalPaginas = doc.getNumberOfPages()
     for (let i = 1; i <= totalPaginas; i++) {
       doc.setPage(i)
@@ -997,14 +1036,13 @@ export default function DashboardPage() {
       // Línea separadora suave
       doc.setDrawColor(...BORDE)
       doc.setLineWidth(0.3)
-      doc.line(margen, alto - 15, ancho - margen, alto - 15)
+      doc.line(margen, alto - 16, ancho - margen, alto - 16)
 
       // Marca
-      doc.setFontSize(7)
+      doc.setFontSize(11)
       doc.setTextColor(...TEXTO_TER)
       doc.setFont('helvetica', 'normal')
-      doc.text('MenuApp · Menú digital para restaurantes', margen, alto - 9)
-      doc.text(`${restaurante.nombre}`, ancho / 2, alto - 9, { align: 'center' })
+      doc.text(marcaFooter, margen, alto - 9)
       doc.text(`Página ${i} de ${totalPaginas}`, ancho - margen, alto - 9, { align: 'right' })
     }
 
@@ -1103,6 +1141,13 @@ export default function DashboardPage() {
   const varEscaneos = calcularVariacion(stats.escaneos, statsAnterior.escaneos)
   const varVisitas = calcularVariacion(stats.visitas, statsAnterior.visitas)
   const varPedidos = calcularVariacion(stats.pedidosWhatsapp, statsAnterior.pedidosWhatsapp)
+
+  // Mejor día del periodo (días pasados con visitas): fuente única para el
+  // render (Actividad por día) y el PDF (resumen ejecutivo); antes ambos
+  // recomputaban la misma fórmula por su lado (AUDIT-DASH).
+  const mejorDia = escaneosPorDia
+    .filter((d: any) => !d.esFuturo && d.actual > 0)
+    .sort((a: any, b: any) => b.actual - a.actual)[0]
   // ===== Embudo de conversión por sesión (menú → pedido) =====
   // 2 etapas anidadas: sesiones que abrieron el menú → sesiones que pidieron
   // (entre las que abrieron). La exploración de platos es engagement lateral, NO
@@ -1639,8 +1684,8 @@ export default function DashboardPage() {
           const esMesChart = filtroTiempo === 'mes'
           const gapChart = esMesChart ? '2px' : '6px'
 
-          // Mejor día real (solo de días con datos)
-          const mejorDiaSemana = [...diasConDatos].sort((a: any, b: any) => b.actual - a.actual)[0]
+          // Mejor día real: const `mejorDia` compartida con el PDF (fuente única)
+          const mejorDiaSemana = mejorDia
 
           // Mejor horario (ya lo tenemos en horariosPico)
           const topHorario = horariosPico[0]
@@ -1795,14 +1840,12 @@ export default function DashboardPage() {
           ]
           const diasLabels = ['lun', 'mar', 'mié', 'jue', 'vie', 'sáb', 'dom']
 
-          // Función de color naranja escalado según intensidad
+          // Color según intensidad: umbrales/colores desde NIVELES_HEATMAP
+          // (misma fuente que el PDF, la leyenda y el teaser)
           function colorHeatmap(valor: number, max: number): { bg: string; opacity: number } {
-            if (valor === 0) return { bg: '#F5EFE6', opacity: 0.3 }
-            const ratio = valor / max
-            if (ratio >= 0.75) return { bg: '#E85D24', opacity: 1 }      // Intenso
-            if (ratio >= 0.5) return { bg: '#F5925A', opacity: 1 }       // Alto
-            if (ratio >= 0.25) return { bg: '#F9B27D', opacity: 1 }      // Medio
-            return { bg: '#FDE8D9', opacity: 1 }                          // Bajo
+            const nivel = nivelHeatmap(valor, max)
+            if (!nivel) return { bg: '#F5EFE6', opacity: 0.3 }
+            return { bg: nivel.bg, opacity: 1 }
           }
 
           // Resumen en lenguaje natural
@@ -1866,8 +1909,8 @@ export default function DashboardPage() {
                       {heatmapData.matriz[b].map((valor: number, d: number) => {
                         const color = colorHeatmap(valor, heatmapData.maxCelda)
                         const esPicoCelda = heatmapData.pico.bloque === b && heatmapData.pico.dia === d
-                        const ratio = heatmapData.maxCelda > 0 ? valor / heatmapData.maxCelda : 0
-                        const colorTexto = ratio >= 0.5 ? 'white' : valor === 0 ? 'var(--text-tertiary)' : '#7a3310'
+                        const nivel = nivelHeatmap(valor, heatmapData.maxCelda)
+                        const colorTexto = nivel ? nivel.texto : 'var(--text-tertiary)'
                         return (
                           <div
                             key={`c-${b}-${d}`}
@@ -1908,10 +1951,9 @@ export default function DashboardPage() {
                 }}>
                   <span>menos</span>
                   <div style={{ width: '14px', height: '10px', background: '#FBF7F0', border: '0.5px solid var(--border-light)', borderRadius: '1px' }} />
-                  <div style={{ width: '14px', height: '10px', background: '#FDE8D9', borderRadius: '1px' }} />
-                  <div style={{ width: '14px', height: '10px', background: '#F9B27D', borderRadius: '1px' }} />
-                  <div style={{ width: '14px', height: '10px', background: '#F5925A', borderRadius: '1px' }} />
-                  <div style={{ width: '14px', height: '10px', background: '#E85D24', borderRadius: '1px' }} />
+                  {[...NIVELES_HEATMAP].reverse().map((nivel) => (
+                    <div key={nivel.bg} style={{ width: '14px', height: '10px', background: nivel.bg, borderRadius: '1px' }} />
+                  ))}
                   <span>más</span>
                 </div>
 
@@ -2047,13 +2089,8 @@ export default function DashboardPage() {
                       {['0—3h', '3—6h', '6—9h', '9—12h', '12—15h', '15—18h', '18—21h', '21—24h'][b]}
                     </div>
                     {fila.map((v: number, d: number) => {
-                      const max = 9
-                      const ratio = v / max
-                      const bg = v === 0 ? '#F5EFE6'
-                        : ratio >= 0.75 ? '#E85D24'
-                        : ratio >= 0.5 ? '#F5925A'
-                        : ratio >= 0.25 ? '#F9B27D'
-                        : '#FDE8D9'
+                      const nivel = nivelHeatmap(v, 9)
+                      const bg = nivel ? nivel.bg : '#F5EFE6'
                       return (
                         <div key={`pv-${b}-${d}`} style={{
                           aspectRatio: '1',
@@ -2219,11 +2256,7 @@ export default function DashboardPage() {
                 }}>
                   <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{p.nombre}</span>
                   <span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>
-                    {p.diasCreado === 0 ? 'hoy'
-                      : p.diasCreado === 1 ? 'hace 1 día'
-                      : p.diasCreado < 30 ? `hace ${p.diasCreado} días`
-                      : p.diasCreado < 60 ? 'hace 1 mes'
-                      : `hace ${Math.floor(p.diasCreado / 30)} meses`}
+                    {etiquetaAntiguedad(p.diasCreado)}
                   </span>
                 </div>
               ))}
