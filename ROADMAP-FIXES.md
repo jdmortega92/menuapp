@@ -498,6 +498,14 @@ Decision 2026-07-03: Julian mantiene $15k/$29k mensual ($150k/$290k anual, ~2 me
 
 ## Items
 
+### PDF-MOVIL ✅ Reporte PDF del dashboard mobile-first + unificacion render/PDF — CLOSED
+- **Closed**: 2026-07-08. Motivacion: los restauranteros abren el reporte desde WhatsApp en el celular; el layout A4 previo (tipografia chica, pares lado a lado) era ilegible a fit-to-width.
+- **Layout**: A4 vertical conservado (imprime bien), UNA columna, escala tipografica grande (titulo ~20pt, secciones ~15-16pt, cuerpo 13-14pt, nada bajo 11pt), tarjetas de stats apiladas a lo ancho, saltos de pagina sin encabezados huerfanos. Multi-pagina esperado. Verificado por Julian en celular via WhatsApp (fit-to-width sin zoom).
+- **Deuda AUDIT-DASH saldada (las 4 duplicaciones PDF-vs-render)**: el PDF consume diagnostico.mensaje directo (muerta la divergencia de wording que YA existia), y mejor-dia, umbrales de color del heatmap y etiquetas de antiguedad leen de los mismos derivados del render. El PDF ya no puede diferir de la pantalla.
+- **Nota**: contrato de invocacion click-time (consts declaradas despues en el componente) ahora documentado en la funcion.
+- **Verificado**: tsc limpio, tests verdes, smoke movil OK. 1 archivo (+330/-297).
+- **Commit**: 48f6bac.
+
 ### F4.a-1 ✅ Fundaciones de pago: fuente unica de precios + tabla facturas — CLOSED
 - **Closed**: 2026-07-06. Primera fase de F4.a (ver F4-DISENO); cero llamadas a Wompi — todo el terreno listo para que F4.a-2 sea SOLO integracion.
 - **Precios (decision final de Julian, registrada tambien en STRATEGIC.1)**: Basico $15.000/mes, Pro $29.000/mes — se mantienen los vigentes; $19k/$39k de STRATEGIC.1 se percibe alto para el segmento Popayan. Anuales NUEVOS: $150.000/$290.000 (~2 meses gratis, ~17%, estandar de industria). Los pilotos validan ESTE precio; subir despues es mas facil que bajar.
