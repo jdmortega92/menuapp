@@ -1,6 +1,9 @@
 'use client'
 
 import { memo, useMemo, useState } from 'react'
+import { Check } from 'lucide-react'
+import Icono from '@/components/ui/Icono'
+import Boton from '@/components/ui/Boton'
 import { createClient } from '@/lib/supabase-browser'
 import Select from '@/components/ui/Select'
 import TimePicker from '@/components/ui/TimePicker'
@@ -411,14 +414,11 @@ function ComboForm({
         )
       })()}
       <div style={{ display: 'flex', gap: '8px' }}>
-        <button onClick={comboInicial ? actualizar : agregar} disabled={guardando || guardado} className="btn-primary"
-          style={{
-            flex: 1, padding: '10px', fontSize: '13px',
-            opacity: valido ? 1 : 0.5,
-            cursor: valido ? 'pointer' : 'default',
-            ...(valido ? {} : { transform: 'none', boxShadow: 'none' }),
-          }}>{guardando ? 'Guardando...' : guardado ? '✓ Guardado' : comboInicial ? 'Guardar cambios' : 'Crear'}</button>
-        <button onClick={onClose} className="btn-outline" style={{ flex: 1, padding: '10px', fontSize: '13px' }}>Cancelar</button>
+        <Boton onClick={comboInicial ? actualizar : agregar} disabled={guardando || guardado}
+          style={{ flex: 1, opacity: valido ? 1 : 0.5, cursor: valido ? 'pointer' : 'default' }}>
+          {guardando ? 'Guardando...' : guardado ? <><Icono icono={Check} size={14} /> Guardado</> : comboInicial ? 'Guardar cambios' : 'Crear'}
+        </Boton>
+        <Boton variante="secundario" onClick={onClose} style={{ flex: 1 }}>Cancelar</Boton>
       </div>
     </div>
   )

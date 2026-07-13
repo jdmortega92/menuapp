@@ -1,6 +1,9 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import { Lock, ChevronDown } from 'lucide-react'
+import Icono from '@/components/ui/Icono'
+import Boton from '@/components/ui/Boton'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks'
 import { fechaColombia } from '@/lib/fechas'
@@ -1401,19 +1404,9 @@ export default function DashboardPage() {
                   )}
                 </div>
               </div>
-              <div onClick={() => setMostrarFiltro(!mostrarFiltro)} style={{
-                border: '1px solid var(--border-light)',
-                borderRadius: 'var(--radius-md)',
-                padding: '8px 14px',
-                fontSize: '12px',
-                color: 'var(--text-secondary)',
-                background: 'var(--bg-secondary)',
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-                marginLeft: '12px',
-              }}>
-                Cambiar ↓
-              </div>
+              <Boton variante="secundario" tamano="sm" onClick={() => setMostrarFiltro(!mostrarFiltro)} style={{ marginLeft: '12px' }}>
+                Cambiar <Icono icono={ChevronDown} size={14} />
+              </Boton>
             </div>
 
             {mostrarFiltro && (
@@ -1510,12 +1503,12 @@ export default function DashboardPage() {
           <div style={{ padding: '0 20px', marginBottom: '10px' }}>
             <div style={{ display: 'flex', gap: '10px' }}>
               <div className="card" style={{ flex: 1, padding: '16px', textAlign: 'center', opacity: 0.5 }}>
-                <div style={{ fontSize: '20px', marginBottom: '4px' }}>🔒</div>
+                <div style={{ marginBottom: '4px', color: 'var(--text-tertiary)' }}><Icono icono={Lock} size={20} /></div>
                 <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Pedidos WhatsApp</div>
                 <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '2px' }}>Plan Pro</div>
               </div>
               <div className="card" style={{ flex: 1, padding: '16px', textAlign: 'center', opacity: 0.5 }}>
-                <div style={{ fontSize: '20px', marginBottom: '4px' }}>🔒</div>
+                <div style={{ marginBottom: '4px', color: 'var(--text-tertiary)' }}><Icono icono={Lock} size={20} /></div>
                 <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Calificación promedio</div>
                 <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '2px' }}>Plan Pro</div>
               </div>
@@ -1666,7 +1659,7 @@ export default function DashboardPage() {
         ) : !esBasico ? (
           <div style={{ padding: '0 20px', marginBottom: '10px' }}>
             <div className="card" style={{ padding: '20px', textAlign: 'center', opacity: 0.5 }}>
-              <div style={{ fontSize: '30px', marginBottom: '6px' }}>🔒</div>
+              <div style={{ marginBottom: '6px', color: 'var(--text-tertiary)' }}><Icono icono={Lock} size={30} /></div>
               <div style={{ fontSize: '13px', fontWeight: 500 }}>Embudo de conversión</div>
               <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>Disponible en Plan Pro</div>
             </div>
@@ -2185,7 +2178,7 @@ export default function DashboardPage() {
         ) : (
           <div style={{ padding: '0 20px', marginBottom: '10px' }}>
             <div className="card" style={{ padding: '20px', textAlign: 'center', opacity: 0.5 }}>
-              <div style={{ fontSize: '30px', marginBottom: '6px' }}>🔒</div>
+              <div style={{ marginBottom: '6px', color: 'var(--text-tertiary)' }}><Icono icono={Lock} size={30} /></div>
               <div style={{ fontSize: '13px', fontWeight: 500 }}>Platos más vistos</div>
               <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>Disponible en Plan Básico</div>
             </div>

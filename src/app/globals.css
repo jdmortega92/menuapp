@@ -45,6 +45,13 @@
   --transition-fast: 150ms ease;
   --transition-normal: 250ms ease;
   --transition-slow: 400ms ease;
+  /* Sistema de botones (Fase A.2) — consumidos por ui/Boton.tsx */
+  --radio-boton: 10px;
+  --altura-boton: 44px;
+  --altura-boton-sm: 36px;
+  --transicion-ui: 150ms ease;
+  /* Hover del primario: un paso mas oscuro que --text-primary (#1A1A18) */
+  --color-primario-hover: #000000;
 }
 
 /* =========================================================
@@ -283,6 +290,25 @@ p { font-size: 0.9375rem; line-height: 1.6; color: var(--text-secondary); }
   content: '';
   position: absolute;
   inset: -7px;
+}
+
+/* 44x44 efectivos para pressables de icono del admin (Fase A UI): misma
+   tecnica de overlay que .tap-target, dimensionada para cajas visuales de
+   ~26px (icono 16 + padding 5 en estiloBotonIcono de ui/Icono.tsx). */
+.tap-target-44 {
+  position: relative;
+}
+.tap-target-44::before {
+  content: '';
+  position: absolute;
+  inset: -9px;
+}
+
+/* Foco de teclado visible (antes: ningun anillo definido en toda la app).
+   Solo :focus-visible — el foco por click/tap no pinta anillo. */
+:focus-visible {
+  outline: 2px solid var(--color-info);
+  outline-offset: 2px;
 }
 
 .tap-bar {

@@ -1,6 +1,9 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { ChevronDown, Lock, ImagePlus, ArrowRight, Check } from 'lucide-react'
+import Icono from '@/components/ui/Icono'
+import Boton from '@/components/ui/Boton'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks'
 import { useConfigRestaurante } from '@/hooks/data/useConfigRestaurante'
@@ -389,7 +392,7 @@ export default function ConfigPage() {
                 <div style={{ fontSize: '14px', fontWeight: 500 }}>Datos del negocio</div>
                 <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>Nombre, tipo, ciudad, WhatsApp</div>
               </div>
-              <span style={{ color: 'var(--text-tertiary)', transition: 'transform 0.2s', transform: seccionActiva === 'datos' ? 'rotate(180deg)' : 'none' }}>▼</span>
+              <span style={{ display: 'inline-flex', color: 'var(--text-tertiary)', transition: 'transform 0.2s', transform: seccionActiva === 'datos' ? 'rotate(180deg)' : 'none' }}><Icono icono={ChevronDown} size={18} /></span>
             </div>
           </div>
           {seccionActiva === 'datos' && (
@@ -430,9 +433,9 @@ export default function ConfigPage() {
                   </span>
                 </div>
               </div>
-              <button onClick={guardarCambios} className="btn-primary" style={{ width: '100%', padding: '12px', fontSize: '13px' }}>
-                {guardando ? 'Guardando...' : guardado ? '✓ Guardado' : 'Guardar cambios'}
-              </button>
+              <Boton onClick={guardarCambios} style={{ width: '100%' }}>
+                {guardando ? 'Guardando...' : guardado ? <><Icono icono={Check} size={14} /> Guardado</> : 'Guardar cambios'}
+              </Boton>
             </div>
           )}
         </div>
@@ -449,8 +452,8 @@ export default function ConfigPage() {
                 </div>
                 <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>Color, tema y apariencia</div>
               </div>
-              {esBasico && <span style={{ color: 'var(--text-tertiary)', transition: 'transform 0.2s', transform: seccionActiva === 'personalizacion' ? 'rotate(180deg)' : 'none' }}>▼</span>}
-              {!esBasico && <span style={{ fontSize: '20px' }}>🔒</span>}
+              {esBasico && <span style={{ display: 'inline-flex', color: 'var(--text-tertiary)', transition: 'transform 0.2s', transform: seccionActiva === 'personalizacion' ? 'rotate(180deg)' : 'none' }}><Icono icono={ChevronDown} size={18} /></span>}
+              {!esBasico && <span style={{ display: 'inline-flex', color: 'var(--text-tertiary)' }}><Icono icono={Lock} size={20} /></span>}
             </div>
           </div>
           {seccionActiva === 'personalizacion' && esBasico && (
@@ -480,7 +483,7 @@ export default function ConfigPage() {
               <div style={{ marginBottom: '16px' }}>
                 <label className="label">Vista previa</label>
                 <div style={{ display: 'flex', gap: '8px', marginTop: '6px', alignItems: 'center' }}>
-                  <div style={{ padding: '8px 16px', borderRadius: '20px', background: colorPrincipal, color: 'white', fontSize: '12px', fontWeight: 500 }}>Categorías ↓</div>
+                  <div style={{ padding: '8px 16px', borderRadius: '20px', background: colorPrincipal, color: 'white', fontSize: '12px', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>Categorías <Icono icono={ChevronDown} size={12} /></div>
                   <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: colorPrincipal, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '14px' }}>+</div>
                   <span style={{ fontSize: '12px', color: colorPrincipal, fontWeight: 500 }}>Enlace</span>
                 </div>
@@ -525,14 +528,17 @@ export default function ConfigPage() {
                                 marginTop: '6px',
                                 cursor: 'pointer',
                                 fontWeight: 500,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
                               }}
                             >
-                              Desbloquear con Plan Pro →
+                              Desbloquear con Plan Pro <Icono icono={ArrowRight} size={12} />
                             </div>
                           )}
                         </div>
                         {bloqueado ? (
-                          <span style={{ fontSize: '16px', marginLeft: '8px' }}>🔒</span>
+                          <span style={{ display: 'inline-flex', color: 'var(--text-tertiary)', marginLeft: '8px' }}><Icono icono={Lock} size={16} /></span>
                         ) : (
                           tema === t.id && (
                             <div style={{
@@ -654,8 +660,10 @@ export default function ConfigPage() {
                         alignItems: 'center',
                         justifyContent: 'center',
                         fontSize: '18px',
+                        fontWeight: 500,
+                        color: colorPrincipal,
                       }}>
-                        🍔
+                        H
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{
@@ -720,7 +728,7 @@ export default function ConfigPage() {
                       border: '1px dashed var(--border-medium)', borderRadius: 'var(--radius-md)',
                       padding: '20px', textAlign: 'center',
                     }}>
-                      <div style={{ fontSize: '24px', marginBottom: '4px', color: 'var(--text-tertiary)' }}>⊕</div>
+                      <div style={{ marginBottom: '4px', color: 'var(--text-tertiary)' }}><Icono icono={ImagePlus} size={24} /></div>
                       <div style={{ fontSize: '13px', color: 'var(--color-info)' }}>{subiendoImagen ? 'Subiendo...' : 'Subir banner'}</div>
                       <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>JPG o PNG · Máximo 10MB · Se ajusta a 1200x400</div>
                     </div>
@@ -744,7 +752,7 @@ export default function ConfigPage() {
                       {logoUrl ? (
                         <img src={logoUrl} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                       ) : (
-                        <span style={{ fontSize: '20px', color: 'var(--text-tertiary)' }}>⊕</span>
+                        <span style={{ display: 'inline-flex', color: 'var(--text-tertiary)' }}><Icono icono={ImagePlus} size={20} /></span>
                       )}
                     </div>
                     <input type="file" accept="image/*" style={{ display: 'none' }} disabled={subiendoImagen}
@@ -761,9 +769,9 @@ export default function ConfigPage() {
                 </div>
               </div>
 
-              <button onClick={guardarCambios} className="btn-primary" style={{ width: '100%', padding: '12px', fontSize: '13px' }}>
-                {guardando ? 'Guardando...' : guardado ? '✓ Guardado' : 'Guardar cambios'}
-              </button>
+              <Boton onClick={guardarCambios} style={{ width: '100%' }}>
+                {guardando ? 'Guardando...' : guardado ? <><Icono icono={Check} size={14} /> Guardado</> : 'Guardar cambios'}
+              </Boton>
             </div>
           )}
         </div>
@@ -776,7 +784,7 @@ export default function ConfigPage() {
                 <div style={{ fontSize: '14px', fontWeight: 500 }}>Funciones del menú</div>
                 <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>Activa o desactiva funciones</div>
               </div>
-              <span style={{ color: 'var(--text-tertiary)', transition: 'transform 0.2s', transform: seccionActiva === 'funciones' ? 'rotate(180deg)' : 'none' }}>▼</span>
+              <span style={{ display: 'inline-flex', color: 'var(--text-tertiary)', transition: 'transform 0.2s', transform: seccionActiva === 'funciones' ? 'rotate(180deg)' : 'none' }}><Icono icono={ChevronDown} size={18} /></span>
             </div>
           </div>
           {seccionActiva === 'funciones' && (
@@ -808,12 +816,12 @@ export default function ConfigPage() {
                       <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>{item.desc}</div>
                     </div>
                     {bloqueado ? (
-                      <span style={{ fontSize: '16px' }}>🔒</span>
+                      <span style={{ display: 'inline-flex', color: 'var(--text-tertiary)' }}><Icono icono={Lock} size={16} /></span>
                     ) : (
                       <div onClick={() => handleToggle(item.key as keyof typeof toggles)} style={{
                         width: '36px', height: '20px', borderRadius: '10px',
-                        background: toggles[item.key as keyof typeof toggles] ? 'var(--color-info)' : 'var(--border-light)',
-                        position: 'relative', cursor: 'pointer', transition: 'background 0.2s',
+                        background: toggles[item.key as keyof typeof toggles] ? 'var(--text-primary)' : 'var(--border-light)',
+                        position: 'relative', cursor: 'pointer', transition: 'background var(--transicion-ui)',
                       }}>
                         <div style={{
                           width: '16px', height: '16px', borderRadius: '50%', background: 'white',
@@ -838,7 +846,7 @@ export default function ConfigPage() {
                 <div style={{ fontSize: '14px', fontWeight: 500 }}>Horarios</div>
                 <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>Horario de atención del negocio</div>
               </div>
-              <span style={{ color: 'var(--text-tertiary)', transition: 'transform 0.2s', transform: seccionActiva === 'horarios' ? 'rotate(180deg)' : 'none' }}>▼</span>
+              <span style={{ display: 'inline-flex', color: 'var(--text-tertiary)', transition: 'transform 0.2s', transform: seccionActiva === 'horarios' ? 'rotate(180deg)' : 'none' }}><Icono icono={ChevronDown} size={18} /></span>
             </div>
           </div>
           {seccionActiva === 'horarios' && (
@@ -940,9 +948,9 @@ export default function ConfigPage() {
                   )}
                 </div>
               ))}
-              <button onClick={guardarHorarios} className="btn-primary" style={{ width: '100%', padding: '12px', fontSize: '13px', marginTop: '14px' }}>
-                {guardandoHorarios ? 'Guardando...' : guardadoHorarios ? '✓ Guardado' : 'Guardar horarios'}
-              </button>
+              <Boton onClick={guardarHorarios} style={{ width: '100%', marginTop: '14px' }}>
+                {guardandoHorarios ? 'Guardando...' : guardadoHorarios ? <><Icono icono={Check} size={14} /> Guardado</> : 'Guardar horarios'}
+              </Boton>
             </div>
           )}
         </div>
@@ -955,7 +963,7 @@ export default function ConfigPage() {
                 <div style={{ fontSize: '14px', fontWeight: 500 }}>Cuenta</div>
                 <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>Email y contraseña</div>
               </div>
-              <span style={{ color: 'var(--text-tertiary)', transition: 'transform 0.2s', transform: seccionActiva === 'cuenta' ? 'rotate(180deg)' : 'none' }}>▼</span>
+              <span style={{ display: 'inline-flex', color: 'var(--text-tertiary)', transition: 'transform 0.2s', transform: seccionActiva === 'cuenta' ? 'rotate(180deg)' : 'none' }}><Icono icono={ChevronDown} size={18} /></span>
             </div>
           </div>
           {seccionActiva === 'cuenta' && (
@@ -992,12 +1000,11 @@ export default function ConfigPage() {
                       <div style={{ fontSize: '11px', color: 'var(--color-danger)', marginBottom: '8px' }}>Las contraseñas no coinciden</div>
                     )}
                     <div style={{ display: 'flex', gap: '8px' }}>
-                      <button onClick={cambiarPassword} disabled={!isPasswordValid(nuevaPassword) || nuevaPassword !== confirmarPassword || guardandoPass}
-                        className="btn-primary" style={{ flex: 1, padding: '10px', fontSize: '12px', opacity: !isPasswordValid(nuevaPassword) ? 0.5 : 1 }}>
-                        {guardandoPass ? 'Guardando...' : passGuardada ? '✓ Contraseña actualizada' : 'Guardar nueva contraseña'}
-                      </button>
-                      <button onClick={() => { setMostrarCambiarPass(false); setNuevaPassword(''); setConfirmarPassword('') }}
-                        className="btn-outline" style={{ padding: '10px 14px', fontSize: '12px' }}>Cancelar</button>
+                      <Boton onClick={cambiarPassword} disabled={!isPasswordValid(nuevaPassword) || nuevaPassword !== confirmarPassword || guardandoPass}
+                        tamano="sm" style={{ flex: 1 }}>
+                        {guardandoPass ? 'Guardando...' : passGuardada ? <><Icono icono={Check} size={14} /> Contraseña actualizada</> : 'Guardar nueva contraseña'}
+                      </Boton>
+                      <Boton variante="secundario" tamano="sm" onClick={() => { setMostrarCambiarPass(false); setNuevaPassword(''); setConfirmarPassword('') }}>Cancelar</Boton>
                     </div>
                   </div>
                 )}
@@ -1013,7 +1020,7 @@ export default function ConfigPage() {
                     <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--color-danger)' }}>Eliminar cuenta</div>
                     <div style={{ fontSize: '11px', color: 'var(--color-danger)', opacity: 0.7, marginTop: '2px' }}>Se perderán todos tus datos</div>
                   </div>
-                  <span style={{ fontSize: '12px', color: 'var(--color-danger)' }}>Eliminar →</span>
+                  <span style={{ fontSize: '12px', color: 'var(--color-danger)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>Eliminar <Icono icono={ArrowRight} size={12} /></span>
                 </div>
               ) : (
                 <div style={{ padding: '14px', background: 'var(--color-danger-light)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-danger)' }}>
@@ -1027,20 +1034,13 @@ export default function ConfigPage() {
                   <input className="input" value={textoConfirmar} onChange={(e) => setTextoConfirmar(e.target.value)}
                     placeholder="Escribe ELIMINAR" style={{ marginBottom: '10px' }} />
                   <div style={{ display: 'flex', gap: '8px' }}>
-                    <button onClick={eliminarCuenta} disabled={textoConfirmar !== 'ELIMINAR' || eliminando}
-                      style={{
-                        flex: 1, padding: '10px', fontSize: '13px', fontWeight: 500,
-                        background: textoConfirmar === 'ELIMINAR' ? 'var(--color-danger)' : 'var(--border-light)',
-                        color: textoConfirmar === 'ELIMINAR' ? 'white' : 'var(--text-tertiary)',
-                        border: 'none', borderRadius: 'var(--radius-sm)', cursor: textoConfirmar === 'ELIMINAR' ? 'pointer' : 'default',
-                        fontFamily: 'var(--font-body)',
-                      }}>
+                    <Boton variante="peligro" tamano="sm" onClick={eliminarCuenta}
+                      disabled={textoConfirmar !== 'ELIMINAR' || eliminando} style={{ flex: 1 }}>
                       {eliminando ? 'Eliminando...' : 'Eliminar cuenta permanentemente'}
-                    </button>
-                    <button onClick={() => { setMostrarConfirmarEliminar(false); setTextoConfirmar('') }}
-                      className="btn-outline" style={{ padding: '10px 16px', fontSize: '13px' }}>
+                    </Boton>
+                    <Boton variante="secundario" tamano="sm" onClick={() => { setMostrarConfirmarEliminar(false); setTextoConfirmar('') }}>
                       Cancelar
-                    </button>
+                    </Boton>
                   </div>
                 </div>
               )}

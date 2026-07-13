@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Boton from '@/components/ui/Boton'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks'
 import { createClient } from '@/lib/supabase-browser'
@@ -184,12 +185,12 @@ export default function SuscripcionPage() {
 
                 {/* Botón */}
                 {!(esActual && periodo === (rest?.periodo_plan || 'mensual')) && (
-                  <button onClick={() => cambiarPlan(plan.id)}
-                    className={plan.id === 'gratis' ? 'btn-outline' : plan.id === 'pro' ? 'btn-accent' : 'btn-primary'}
-                    style={{ width: '100%', padding: '12px', fontSize: '13px', marginTop: '10px' }}
+                  <Boton variante={plan.id === 'gratis' ? 'secundario' : 'primario'}
+                    onClick={() => cambiarPlan(plan.id)}
+                    style={{ width: '100%', marginTop: '10px' }}
                     disabled={cambiando}>
                     {cambiando ? 'Cambiando...' : plan.id === 'gratis' ? 'Bajar a Gratis' : `Subir a ${plan.nombre}`}
-                  </button>
+                  </Boton>
                 )}
               </div>
             </div>

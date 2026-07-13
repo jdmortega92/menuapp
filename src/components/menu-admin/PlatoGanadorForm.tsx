@@ -1,6 +1,9 @@
 'use client'
 
 import { memo, useState } from 'react'
+import { Star, Check } from 'lucide-react'
+import Icono from '@/components/ui/Icono'
+import Boton from '@/components/ui/Boton'
 import { createClient } from '@/lib/supabase-browser'
 import Select from '@/components/ui/Select'
 import { formato12h } from '@/lib/time'
@@ -239,7 +242,9 @@ function PlatoGanadorForm({
             <div style={{ background: 'linear-gradient(135deg, var(--gold-bg-start) 0%, var(--gold-bg-end) 100%)', borderRadius: 'var(--radius-sm)', padding: '12px', marginBottom: '12px' }}>
               <div style={{ fontSize: '11px', fontWeight: 500, color: 'var(--gold-ink)', marginBottom: '6px' }}>Vista previa</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-                <span style={{ fontSize: '14px' }}>⭐</span>
+                <span style={{ display: 'inline-flex' }}>
+                  <Icono icono={Star} size={14} color="var(--color-rating)" fill="var(--color-rating)" />
+                </span>
                 <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--gold-ink)' }}>{config.titulo.toUpperCase()}</span>
               </div>
               <div style={{ fontSize: '14px', fontWeight: 500 }}>
@@ -261,19 +266,14 @@ function PlatoGanadorForm({
           )
         })()}
 
-        <button onClick={guardar} disabled={guardando || guardado} className="btn-primary"
-          style={{
-            width: '100%', padding: '12px', fontSize: '13px',
-            opacity: valido ? 1 : 0.5,
-            cursor: valido ? 'pointer' : 'default',
-            ...(valido ? {} : { transform: 'none', boxShadow: 'none' }),
-          }}>
-          {guardando ? 'Guardando...' : guardado ? '✓ Guardado' : activo ? 'Actualizar plato ganador' : 'Guardar plato ganador'}
-        </button>
+        <Boton onClick={guardar} disabled={guardando || guardado}
+          style={{ width: '100%', opacity: valido ? 1 : 0.5, cursor: valido ? 'pointer' : 'default' }}>
+          {guardando ? 'Guardando...' : guardado ? <><Icono icono={Check} size={14} /> Guardado</> : activo ? 'Actualizar plato ganador' : 'Guardar plato ganador'}
+        </Boton>
         {activo && (
-          <button onClick={desactivar} className="btn-outline" style={{ width: '100%', padding: '12px', fontSize: '13px', marginTop: '8px', color: 'var(--color-danger)' }}>
+          <Boton variante="peligro" onClick={desactivar} style={{ width: '100%', marginTop: '8px' }}>
             Desactivar plato ganador
-          </button>
+          </Boton>
         )}
       </div>
     </div>

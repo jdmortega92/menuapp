@@ -1,6 +1,9 @@
 'use client'
 
 import { memo, useRef, useState } from 'react'
+import { Camera, Check } from 'lucide-react'
+import Icono from '@/components/ui/Icono'
+import Boton from '@/components/ui/Boton'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-browser'
 import { LIMITE_FOTOS_GRATIS } from '@/lib/fotosGate'
@@ -439,7 +442,7 @@ function PlatoEditPanel({
                   color: inhabilitado ? 'var(--text-tertiary)' : 'var(--color-info)',
                   opacity: inhabilitado ? 0.6 : 1,
                 }}>
-                  {subiendoFoto ? 'Subiendo...' : plato.foto_url ? 'Cambiar foto' : '📷 Subir foto'}
+                  {subiendoFoto ? 'Subiendo...' : plato.foto_url ? 'Cambiar foto' : <><Icono icono={Camera} size={14} /> Subir foto</>}
                   <input type="file" accept="image/*" style={{ display: 'none' }}
                     disabled={inhabilitado}
                     onChange={(e) => {
@@ -468,16 +471,11 @@ function PlatoEditPanel({
         )
       })()}
       <div style={{ display: 'flex', gap: '8px' }}>
-        <button onClick={guardar}
-          disabled={guardando || guardado}
-          className="btn-primary"
-          style={{
-            flex: 1, padding: '10px', fontSize: '13px',
-            opacity: valido ? 1 : 0.5,
-            cursor: valido ? 'pointer' : 'default',
-            ...(valido ? {} : { transform: 'none', boxShadow: 'none' }),
-          }}>{guardando ? 'Guardando...' : guardado ? '✓ Guardado' : 'Guardar'}</button>
-        <button onClick={onClose} className="btn-outline" style={{ flex: 1, padding: '10px', fontSize: '13px' }}>Cancelar</button>
+        <Boton onClick={guardar} disabled={guardando || guardado}
+          style={{ flex: 1, opacity: valido ? 1 : 0.5, cursor: valido ? 'pointer' : 'default' }}>
+          {guardando ? 'Guardando...' : guardado ? <><Icono icono={Check} size={14} /> Guardado</> : 'Guardar'}
+        </Boton>
+        <Boton variante="secundario" onClick={onClose} style={{ flex: 1 }}>Cancelar</Boton>
       </div>
 
       {/* Modal aviso cascade (al eliminar variantes vinculadas) */}
@@ -523,28 +521,28 @@ function PlatoEditPanel({
           </div>
 
           <div style={{ display: 'flex', gap: '8px' }}>
-            <button
+            <Boton
+              variante="peligro"
               onClick={() => {
                 const cb = cascadeWarning.onConfirm
                 setCascadeWarning(null)
                 cb()
               }}
-              className="btn-primary"
-              style={{ flex: 1, padding: '10px', fontSize: '13px', background: 'var(--color-danger)', borderColor: 'var(--color-danger)' }}
+              style={{ flex: 1 }}
             >
               Sí, continuar
-            </button>
-            <button
+            </Boton>
+            <Boton
+              variante="secundario"
               onClick={() => {
                 const cb = cascadeWarning.onCancel
                 setCascadeWarning(null)
                 cb()
               }}
-              className="btn-outline"
-              style={{ flex: 1, padding: '10px', fontSize: '13px' }}
+              style={{ flex: 1 }}
             >
               Cancelar
-            </button>
+            </Boton>
           </div>
         </Modal>
       )}

@@ -1,6 +1,8 @@
 'use client'
 
 import type { MutableRefObject } from 'react'
+import { ChevronUp, ChevronDown, X, Undo2 } from 'lucide-react'
+import Icono from '@/components/ui/Icono'
 import CampoTexto from '@/components/ui/CampoTexto'
 
 // Arma una frase de vinculaciones a partir de cláusulas con count > 0, con
@@ -164,20 +166,22 @@ export default function VarianteEditor({
               if (pending || i === 0) return
               moverFila(i, -1)
             }}
-            className="tap-control"
+            className="tap-control tap-target-44"
             style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
               padding: '6px 14px',
               background: 'transparent',
               border: '1px solid var(--border-light)',
               borderRadius: '4px',
               cursor: (pending || i === 0) ? 'not-allowed' : 'pointer',
               opacity: (pending || i === 0) ? 0.4 : 1,
-              fontSize: '11px',
               color: 'var(--text-primary)',
             }}
             aria-label="Mover arriba"
           >
-            ▲
+            <Icono icono={ChevronUp} size={16} />
           </button>
 
           <button
@@ -187,39 +191,43 @@ export default function VarianteEditor({
               if (pending || esUltima) return
               moverFila(i, 1)
             }}
-            className="tap-control"
+            className="tap-control tap-target-44"
             style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
               padding: '6px 14px',
               background: 'transparent',
               border: '1px solid var(--border-light)',
               borderRadius: '4px',
               cursor: (pending || esUltima) ? 'not-allowed' : 'pointer',
               opacity: (pending || esUltima) ? 0.4 : 1,
-              fontSize: '11px',
               color: 'var(--text-primary)',
             }}
             aria-label="Mover abajo"
           >
-            ▼
+            <Icono icono={ChevronDown} size={16} />
           </button>
 
           {!pending && (
             <button
               type="button"
               onClick={() => quitarFila(i)}
-              className="tap-control"
+              className="tap-control tap-target-44"
               style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
                 padding: '6px 14px',
                 background: 'transparent',
                 border: '1px solid var(--color-danger)',
                 borderRadius: '4px',
                 cursor: 'pointer',
                 color: 'var(--color-danger)',
-                fontSize: '12px',
               }}
               aria-label="Eliminar variante"
             >
-              ✕
+              <Icono icono={X} size={16} />
             </button>
           )}
           </div>
@@ -249,6 +257,9 @@ export default function VarianteEditor({
                   }}
                   className="tap-control"
                   style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
                     padding: '4px 8px',
                     background: 'transparent',
                     border: '1px solid var(--color-danger)',
@@ -256,12 +267,13 @@ export default function VarianteEditor({
                     cursor: 'pointer',
                     color: 'var(--color-danger)',
                     fontSize: '12px',
+                    fontFamily: 'var(--font-body)',
                     whiteSpace: 'nowrap',
                     flexShrink: 0,
                   }}
                   aria-label="Deshacer quitar variante"
                 >
-                  ↩ Deshacer
+                  <Icono icono={Undo2} size={14} /> Deshacer
                 </button>
                 <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
                   Se quitará al guardar.{textoRefs ? ` Está en ${textoRefs}.` : ''}

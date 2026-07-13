@@ -1,6 +1,8 @@
 'use client'
 
 import { useState } from 'react'
+import { Target, ChevronDown, Check, ArrowRight } from 'lucide-react'
+import Icono from '@/components/ui/Icono'
 import { useRouter } from 'next/navigation'
 import type { OnboardingStatus } from '@/hooks/useOnboardingStatus'
 
@@ -109,7 +111,9 @@ export default function OnboardingChecklist({ status }: OnboardingChecklistProps
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, textAlign: 'left' }}>
-            <span style={{ fontSize: '20px' }} aria-hidden="true">🎯</span>
+            <span style={{ display: 'inline-flex', color: 'var(--color-info)' }} aria-hidden="true">
+              <Icono icono={Target} size={20} />
+            </span>
             <div>
               <div style={{ fontSize: '13px', fontWeight: 500 }}>
                 Completa tu menú
@@ -121,14 +125,14 @@ export default function OnboardingChecklist({ status }: OnboardingChecklistProps
           </div>
           <span
             style={{
-              fontSize: '11px',
+              display: 'inline-flex',
               color: 'var(--text-tertiary)',
               transition: 'transform 0.2s',
               transform: expandido ? 'rotate(180deg)' : 'none',
             }}
             aria-hidden="true"
           >
-            ▼
+            <Icono icono={ChevronDown} size={16} />
           </span>
         </button>
 
@@ -214,7 +218,7 @@ export default function OnboardingChecklist({ status }: OnboardingChecklistProps
                     }}
                     aria-hidden="true"
                   >
-                    {paso.completado ? '✓' : ''}
+                    {paso.completado ? <Icono icono={Check} size={12} strokeWidth={3} /> : null}
                   </div>
 
                   {/* Texto del paso */}
@@ -244,13 +248,13 @@ export default function OnboardingChecklist({ status }: OnboardingChecklistProps
                   {!paso.completado && (
                     <span
                       style={{
-                        fontSize: '12px',
+                        display: 'inline-flex',
                         color: 'var(--color-info)',
                         flexShrink: 0,
                       }}
                       aria-hidden="true"
                     >
-                      →
+                      <Icono icono={ArrowRight} size={14} />
                     </span>
                   )}
                 </button>

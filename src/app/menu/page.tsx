@@ -1,6 +1,9 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { Search, Lock, X } from 'lucide-react'
+import Icono, { estiloBotonIcono } from '@/components/ui/Icono'
+import Boton from '@/components/ui/Boton'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks'
 import { useCategoriasYPlatos } from '@/hooks/data/useCategoriasYPlatos'
@@ -841,9 +844,9 @@ export default function MiMenuPage() {
         <div style={{ padding: '16px 20px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ fontSize: '18px', fontWeight: 500 }}>Mi menú</div>
           {rest?.slug && (
-            <a href={'/' + rest.slug} target="_blank" rel="noopener" className="btn-outline" style={{ padding: '8px 14px', fontSize: '12px', textDecoration: 'none' }}>
+            <Boton variante="secundario" tamano="sm" onClick={() => window.open('/' + rest.slug, '_blank', 'noopener')}>
               Ver mi menú
-            </a>
+            </Boton>
           )}
         </div>
 
@@ -881,10 +884,9 @@ export default function MiMenuPage() {
 
             {/* Botón agregar categoría */}
             <div style={{ padding: '0 20px 12px' }}>
-              <button onClick={() => setMostrarFormCategoria(true)}
-                className="btn-primary" style={{ padding: '10px 16px', fontSize: '13px' }}>
+              <Boton tamano="sm" onClick={() => setMostrarFormCategoria(true)}>
                 + Categoría
-              </button>
+              </Boton>
             </div>
 
             {/* Form nueva categoría */}
@@ -900,7 +902,7 @@ export default function MiMenuPage() {
             {/* Sin resultados */}
             {busqueda.trim() && totalResultados === 0 && (
               <div style={{ padding: '40px 20px', textAlign: 'center' }}>
-                <div style={{ fontSize: '32px', marginBottom: '8px' }}>🔍</div>
+                <div style={{ marginBottom: '8px', color: 'var(--text-tertiary)' }}><Icono icono={Search} size={32} /></div>
                 <div style={{ fontSize: '14px', fontWeight: 500, marginBottom: '4px' }}>No se encontraron platos</div>
                 <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Intenta con otro nombre</div>
               </div>
@@ -955,18 +957,14 @@ export default function MiMenuPage() {
           <>
             {!esPro ? (
               <div style={{ padding: '40px 20px', textAlign: 'center' }}>
-                <div style={{ fontSize: '40px', marginBottom: '12px' }}>🔒</div>
+                <div style={{ marginBottom: '12px', color: 'var(--text-tertiary)' }}><Icono icono={Lock} size={40} /></div>
                 <div style={{ fontSize: '16px', fontWeight: 500, marginBottom: '6px' }}>Combos, Promos, Plato del día y Plato ganador</div>
                 <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '20px', lineHeight: 1.6 }}>
                   Crea paquetes con descuento, promociones por día y destaca tu plato estrella. Disponible en el Plan Pro.
                 </div>
-                <div onClick={() => router.push('/suscripcion')} style={{
-                  display: 'inline-block', background: 'var(--text-primary)', color: 'white',
-                  padding: '12px 24px', borderRadius: 'var(--radius-md)', fontSize: '13px',
-                  fontWeight: 500, cursor: 'pointer',
-                }}>
+                <Boton onClick={() => router.push('/suscripcion')}>
                   Ver Plan Pro — ${formatoPrecio(PLANES.pro.precioMensual)}/mes
-                </div>
+                </Boton>
               </div>
             ) : (
             <>
@@ -993,12 +991,12 @@ export default function MiMenuPage() {
                     <div style={{ fontSize: '32px', marginBottom: '8px' }}>🍱</div>
                     <div style={{ fontSize: '14px', fontWeight: 500, marginBottom: '4px' }}>Sin combos</div>
                     <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '16px' }}>Crea paquetes de platos con descuento</div>
-                    <button onClick={() => { setEditandoComboId(null); setMostrarFormCombo(true) }} className="btn-primary" style={{ padding: '10px 20px', fontSize: '13px' }}>+ Crear combo</button>
+                    <Boton tamano="sm" onClick={() => { setEditandoComboId(null); setMostrarFormCombo(true) }}>+ Crear combo</Boton>
                   </div>
                 ) : (
                   <>
                     {!mostrarFormCombo && (
-                      <button onClick={() => { setEditandoComboId(null); setMostrarFormCombo(true) }} className="btn-primary" style={{ padding: '8px 14px', fontSize: '13px', marginBottom: '14px' }}>+ Crear combo</button>
+                      <Boton tamano="sm" onClick={() => { setEditandoComboId(null); setMostrarFormCombo(true) }} style={{ marginBottom: '14px' }}>+ Crear combo</Boton>
                     )}
                   </>
                 )}
@@ -1040,8 +1038,8 @@ export default function MiMenuPage() {
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <div onClick={() => toggleCombo(combo.id)} style={{
                           width: '36px', height: '20px', borderRadius: '10px',
-                          background: combo.activo ? 'var(--color-info)' : 'var(--border-light)',
-                          position: 'relative', cursor: 'pointer',
+                          background: combo.activo ? 'var(--text-primary)' : 'var(--border-light)',
+                          position: 'relative', cursor: 'pointer', transition: 'background var(--transicion-ui)',
                         }}>
                           <div style={{ width: '16px', height: '16px', borderRadius: '50%', background: 'white', position: 'absolute', top: '2px', left: combo.activo ? '18px' : '2px', transition: 'left 0.2s' }} />
                         </div>
@@ -1057,7 +1055,11 @@ export default function MiMenuPage() {
     <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
   </svg>
 </span>
-                        <span onClick={() => eliminarCombo(combo.id)} style={{ fontSize: '12px', color: 'var(--color-danger)', cursor: 'pointer' }}>✕</span>
+                        <button type="button" aria-label="Eliminar combo" className="tap-target-44"
+                          onClick={() => eliminarCombo(combo.id)}
+                          style={{ ...estiloBotonIcono, color: 'var(--color-danger)', cursor: 'pointer' }}>
+                          <Icono icono={X} size={16} />
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -1073,12 +1075,12 @@ export default function MiMenuPage() {
                     <div style={{ fontSize: '32px', marginBottom: '8px' }}>🏷️</div>
                     <div style={{ fontSize: '14px', fontWeight: 500, marginBottom: '4px' }}>Sin promociones</div>
                     <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '16px' }}>Crea ofertas para atraer más clientes</div>
-                    <button onClick={() => { setEditandoPromoId(null); setMostrarFormPromo(true) }} className="btn-primary" style={{ padding: '10px 20px', fontSize: '13px' }}>+ Crear promo</button>
+                    <Boton tamano="sm" onClick={() => { setEditandoPromoId(null); setMostrarFormPromo(true) }}>+ Crear promo</Boton>
                   </div>
                 ) : (
                   <>
                     {!mostrarFormPromo && (
-                      <button onClick={() => { setEditandoPromoId(null); setMostrarFormPromo(true) }} className="btn-primary" style={{ padding: '8px 14px', fontSize: '13px', marginBottom: '14px' }}>+ Crear promo</button>
+                      <Boton tamano="sm" onClick={() => { setEditandoPromoId(null); setMostrarFormPromo(true) }} style={{ marginBottom: '14px' }}>+ Crear promo</Boton>
                     )}
                   </>
                 )}
@@ -1112,8 +1114,8 @@ export default function MiMenuPage() {
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <div onClick={() => togglePromo(promo.id)} style={{
                           width: '36px', height: '20px', borderRadius: '10px',
-                          background: promo.activo ? 'var(--color-info)' : 'var(--border-light)',
-                          position: 'relative', cursor: 'pointer',
+                          background: promo.activo ? 'var(--text-primary)' : 'var(--border-light)',
+                          position: 'relative', cursor: 'pointer', transition: 'background var(--transicion-ui)',
                         }}>
                           <div style={{ width: '16px', height: '16px', borderRadius: '50%', background: 'white', position: 'absolute', top: '2px', left: promo.activo ? '18px' : '2px', transition: 'left 0.2s' }} />
                         </div>
@@ -1129,7 +1131,11 @@ export default function MiMenuPage() {
     <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
   </svg>
 </span>
-                        <span onClick={() => eliminarPromo(promo.id)} style={{ fontSize: '12px', color: 'var(--color-danger)', cursor: 'pointer' }}>✕</span>
+                        <button type="button" aria-label="Eliminar promo" className="tap-target-44"
+                          onClick={() => eliminarPromo(promo.id)}
+                          style={{ ...estiloBotonIcono, color: 'var(--color-danger)', cursor: 'pointer' }}>
+                          <Icono icono={X} size={16} />
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -1177,18 +1183,14 @@ export default function MiMenuPage() {
         {/* === SORPRÉNDEME === */}
         {tabActiva === 'sorprendeme' && !(plan === 'basico' || plan === 'pro') && (
           <div style={{ padding: '40px 20px', textAlign: 'center' }}>
-            <div style={{ fontSize: '40px', marginBottom: '12px' }}>🔒</div>
+            <div style={{ marginBottom: '12px', color: 'var(--text-tertiary)' }}><Icono icono={Lock} size={40} /></div>
             <div style={{ fontSize: '16px', fontWeight: 500, marginBottom: '6px' }}>Sorpréndeme</div>
             <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '20px', lineHeight: 1.6 }}>
               Configura una combinación aleatoria para tus clientes. Disponible desde el Plan Básico.
             </div>
-            <div onClick={() => router.push('/suscripcion')} style={{
-              display: 'inline-block', background: 'var(--text-primary)', color: 'white',
-              padding: '12px 24px', borderRadius: 'var(--radius-md)', fontSize: '13px',
-              fontWeight: 500, cursor: 'pointer',
-            }}>
+            <Boton onClick={() => router.push('/suscripcion')}>
               Ver Planes
-            </div>
+            </Boton>
           </div>
         )}
         {tabActiva === 'sorprendeme' && (plan === 'basico' || plan === 'pro') && (
@@ -1295,11 +1297,15 @@ export default function MiMenuPage() {
             color: 'var(--text-primary)',
           }}>
             <span>{aviso}</span>
-            <span
+            <button
+              type="button"
               onClick={() => setAviso(null)}
-              style={{ cursor: 'pointer', color: 'var(--text-tertiary)', fontSize: '14px', lineHeight: 1, flexShrink: 0 }}
+              className="tap-target-44"
+              style={{ ...estiloBotonIcono, cursor: 'pointer', color: 'var(--text-tertiary)', flexShrink: 0 }}
               aria-label="Cerrar aviso"
-            >✕</span>
+            >
+              <Icono icono={X} size={16} />
+            </button>
           </div>
         )}
 
@@ -1346,24 +1352,24 @@ export default function MiMenuPage() {
               </div>
 
               <div style={{ display: 'flex', gap: '8px' }}>
-                <button
+                <Boton
+                  variante="peligro"
                   onClick={() => {
                     const cb = platoDeleteWarning.onConfirm
                     setPlatoDeleteWarning(null)
                     cb()
                   }}
-                  className="btn-primary"
-                  style={{ flex: 1, padding: '10px', fontSize: '13px', background: 'var(--color-danger)', borderColor: 'var(--color-danger)' }}
+                  style={{ flex: 1 }}
                 >
                   Sí, eliminar
-                </button>
-                <button
+                </Boton>
+                <Boton
+                  variante="secundario"
                   onClick={() => setPlatoDeleteWarning(null)}
-                  className="btn-outline"
-                  style={{ flex: 1, padding: '10px', fontSize: '13px' }}
+                  style={{ flex: 1 }}
                 >
                   Cancelar
-                </button>
+                </Boton>
               </div>
             </Modal>
           )
@@ -1417,24 +1423,24 @@ export default function MiMenuPage() {
               </div>
 
               <div style={{ display: 'flex', gap: '8px' }}>
-                <button
+                <Boton
+                  variante="peligro"
                   onClick={() => {
                     const cb = categoriaDeleteWarning.onConfirm
                     setCategoriaDeleteWarning(null)
                     cb()
                   }}
-                  className="btn-primary"
-                  style={{ flex: 1, padding: '10px', fontSize: '13px', background: 'var(--color-danger)', borderColor: 'var(--color-danger)' }}
+                  style={{ flex: 1 }}
                 >
                   Sí, eliminar
-                </button>
-                <button
+                </Boton>
+                <Boton
+                  variante="secundario"
                   onClick={() => setCategoriaDeleteWarning(null)}
-                  className="btn-outline"
-                  style={{ flex: 1, padding: '10px', fontSize: '13px' }}
+                  style={{ flex: 1 }}
                 >
                   Cancelar
-                </button>
+                </Boton>
               </div>
             </Modal>
           )

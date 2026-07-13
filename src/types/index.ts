@@ -262,18 +262,21 @@ export interface Referido {
 }
 
 /** Fila de la tabla facturas (F4.a-1). La escribe SOLO el service role via
- *  webhook de Wompi (F4.a-2); el dueño solo lee las suyas (RLS select). */
+ *  webhook de Wompi (F4.a-2); el dueño solo lee las suyas (RLS select).
+ *  Columnas espejadas de la tabla REAL (verificadas contra prod): el tipo
+ *  anterior usaba nombres legacy (creada_en/monto_centavos/...) que nunca
+ *  existieron en la base y causaban 400 al ordenar. */
 export interface Factura {
   id: string
   restaurante_id: string
-  wompi_transaction_id: string | null
-  referencia: string
-  plan: string
-  periodo: string
-  monto_centavos: number
+  numero: string
+  monto: number
+  metodo_pago: string
+  periodo_mes: number
+  periodo_ano: number
+  fecha_pago: string | null
   estado: 'pendiente' | 'aprobada' | 'rechazada' | 'anulada'
-  creada_en: string
-  pagada_en: string | null
+  created_at: string
 }
 
 export interface DatosFacturacion {

@@ -1,6 +1,9 @@
 'use client'
 
 import { memo, useState } from 'react'
+import { ChevronUp, ChevronDown, MoreHorizontal, X, Check } from 'lucide-react'
+import Icono, { estiloBotonIcono } from '@/components/ui/Icono'
+import Boton from '@/components/ui/Boton'
 import { createClient } from '@/lib/supabase-browser'
 import { formato12h } from '@/lib/time'
 import { validarCategoria } from './CategoriaForm'
@@ -75,14 +78,13 @@ function CategoriaRenameForm({
             flex: 1,
             borderColor: intento && touched.nombre && errores.nombre ? 'var(--color-danger)' : undefined,
           }} />
-        <button onClick={guardar} disabled={guardando || guardado} className="btn-primary"
-          style={{
-            padding: '8px 14px', fontSize: '12px',
-            opacity: valido ? 1 : 0.5,
-            cursor: valido ? 'pointer' : 'default',
-            ...(valido ? {} : { transform: 'none', boxShadow: 'none' }),
-          }}>{guardando ? 'Guardando...' : guardado ? '✓ Guardado' : 'OK'}</button>
-        <button onClick={onClose} className="btn-outline" style={{ padding: '8px 14px', fontSize: '12px' }}>✕</button>
+        <Boton tamano="sm" onClick={guardar} disabled={guardando || guardado}
+          style={{ opacity: valido ? 1 : 0.5, cursor: valido ? 'pointer' : 'default' }}>
+          {guardando ? 'Guardando...' : guardado ? <><Icono icono={Check} size={14} /> Guardado</> : 'OK'}
+        </Boton>
+        <Boton variante="secundario" tamano="sm" onClick={onClose} aria-label="Cerrar">
+          <Icono icono={X} size={14} />
+        </Boton>
       </div>
       {intento && touched.nombre && errores.nombre && (
         <div style={{ fontSize: '11px', color: 'var(--color-danger)', marginTop: '4px' }}>
@@ -188,12 +190,19 @@ function CategoriaSection({
       ) : (
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            {/* Flechas mover categoría */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
-              <span onClick={() => onMoverCategoria(cat.id, 'arriba')}
-                style={{ fontSize: '10px', cursor: catIdx > 0 ? 'pointer' : 'default', color: catIdx > 0 ? 'var(--text-secondary)' : 'var(--border-light)', lineHeight: 1 }}>▲</span>
-              <span onClick={() => onMoverCategoria(cat.id, 'abajo')}
-                style={{ fontSize: '10px', cursor: catIdx < totalCategorias - 1 ? 'pointer' : 'default', color: catIdx < totalCategorias - 1 ? 'var(--text-secondary)' : 'var(--border-light)', lineHeight: 1 }}>▼</span>
+            {/* Flechas mover categoría — par horizontal (44px efectivos apilados
+                se solaparían verticalmente; espeja el patrón de PlatoCard) */}
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <button type="button" aria-label="Subir categoría" className="tap-target-44"
+                onClick={() => onMoverCategoria(cat.id, 'arriba')}
+                style={{ ...estiloBotonIcono, cursor: catIdx > 0 ? 'pointer' : 'default', color: catIdx > 0 ? 'var(--text-secondary)' : 'var(--border-light)' }}>
+                <Icono icono={ChevronUp} size={16} />
+              </button>
+              <button type="button" aria-label="Bajar categoría" className="tap-target-44"
+                onClick={() => onMoverCategoria(cat.id, 'abajo')}
+                style={{ ...estiloBotonIcono, cursor: catIdx < totalCategorias - 1 ? 'pointer' : 'default', color: catIdx < totalCategorias - 1 ? 'var(--text-secondary)' : 'var(--border-light)' }}>
+                <Icono icono={ChevronDown} size={16} />
+              </button>
             </div>
             <span style={{ fontSize: '14px', fontWeight: 500 }}>{cat.nombre}</span>
             <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', background: 'var(--bg-tertiary)', padding: '2px 6px', borderRadius: '4px' }}>{cat.platos.length}</span>
@@ -206,8 +215,11 @@ function CategoriaSection({
           <div style={{ display: 'flex', gap: '12px' }}>
             <span onClick={() => onToggleFormPlato(cat.id)} className="tap-cta"
               style={{ fontSize: '12px', color: 'var(--color-info)', cursor: 'pointer' }}>+ Plato</span>
-            <span onClick={() => onToggleMenuCategoria(cat.id)} className="tap-control"
-              style={{ fontSize: '12px', color: 'var(--text-tertiary)', cursor: 'pointer' }}>⋯</span>
+            <button type="button" aria-label="Opciones de categoría" className="tap-control tap-target-44"
+              onClick={() => onToggleMenuCategoria(cat.id)}
+              style={{ ...estiloBotonIcono, color: 'var(--text-tertiary)', cursor: 'pointer' }}>
+              <Icono icono={MoreHorizontal} size={16} />
+            </button>
           </div>
         </div>
       )}

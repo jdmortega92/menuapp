@@ -1,6 +1,9 @@
 'use client'
 
 import { memo, useRef, useState } from 'react'
+import { Camera, Check } from 'lucide-react'
+import Icono from '@/components/ui/Icono'
+import Boton from '@/components/ui/Boton'
 import { createClient } from '@/lib/supabase-browser'
 import CampoTexto from '@/components/ui/CampoTexto'
 import VarianteEditor from './VarianteEditor'
@@ -271,19 +274,16 @@ function PlatoForm({
         />
       )}
 
-      <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginBottom: '8px' }}>
-        📷 Podrás agregar foto después de crear el plato
+      <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <Icono icono={Camera} size={14} />
+        Podrás agregar foto después de crear el plato
       </div>
       <div style={{ display: 'flex', gap: '8px' }}>
-        <button onClick={guardar} disabled={guardando || guardado}
-          className="btn-primary"
-          style={{
-            flex: 1, padding: '10px', fontSize: '13px',
-            opacity: valido ? 1 : 0.5,
-            cursor: valido ? 'pointer' : 'default',
-            ...(valido ? {} : { transform: 'none', boxShadow: 'none' }),
-          }}>{guardando ? 'Guardando...' : guardado ? '✓ Guardado' : 'Agregar'}</button>
-        <button onClick={onClose} className="btn-outline" style={{ flex: 1, padding: '10px', fontSize: '13px' }}>Cancelar</button>
+        <Boton onClick={guardar} disabled={guardando || guardado}
+          style={{ flex: 1, opacity: valido ? 1 : 0.5, cursor: valido ? 'pointer' : 'default' }}>
+          {guardando ? 'Guardando...' : guardado ? <><Icono icono={Check} size={14} /> Guardado</> : 'Agregar'}
+        </Boton>
+        <Boton variante="secundario" onClick={onClose} style={{ flex: 1 }}>Cancelar</Boton>
       </div>
     </div>
   )

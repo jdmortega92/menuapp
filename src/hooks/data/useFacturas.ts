@@ -12,7 +12,7 @@ async function fetchFacturasByRestauranteId(restauranteId: string): Promise<Fact
     .from('facturas')
     .select('*')
     .eq('restaurante_id', restauranteId)
-    .order('creada_en', { ascending: false })
+    .order('created_at', { ascending: false })
   return (data as Factura[] | null) ?? []
 }
 

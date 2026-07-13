@@ -1,6 +1,9 @@
 'use client'
 
 import { memo, useState } from 'react'
+import { Check } from 'lucide-react'
+import Icono from '@/components/ui/Icono'
+import Boton from '@/components/ui/Boton'
 import { createClient } from '@/lib/supabase-browser'
 import Select from '@/components/ui/Select'
 import TimePicker from '@/components/ui/TimePicker'
@@ -346,19 +349,14 @@ function PlatoDelDiaForm({
           )
         })()}
 
-        <button onClick={guardar} disabled={guardando || guardado} className="btn-primary"
-          style={{
-            width: '100%', padding: '12px', fontSize: '13px',
-            opacity: valido ? 1 : 0.5,
-            cursor: valido ? 'pointer' : 'default',
-            ...(valido ? {} : { transform: 'none', boxShadow: 'none' }),
-          }}>
-          {guardando ? 'Guardando...' : guardado ? '✓ Guardado' : activo ? 'Actualizar plato del día' : 'Guardar plato del día'}
-        </button>
+        <Boton onClick={guardar} disabled={guardando || guardado}
+          style={{ width: '100%', opacity: valido ? 1 : 0.5, cursor: valido ? 'pointer' : 'default' }}>
+          {guardando ? 'Guardando...' : guardado ? <><Icono icono={Check} size={14} /> Guardado</> : activo ? 'Actualizar plato del día' : 'Guardar plato del día'}
+        </Boton>
         {activo && (
-          <button onClick={desactivar} className="btn-outline" style={{ width: '100%', padding: '12px', fontSize: '13px', marginTop: '8px', color: 'var(--color-danger)' }}>
+          <Boton variante="peligro" onClick={desactivar} style={{ width: '100%', marginTop: '8px' }}>
             Desactivar plato del día
-          </button>
+          </Boton>
         )}
       </div>
     </div>

@@ -5,8 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks'
 import { useFacturas } from '@/hooks/data/useFacturas'
 import { formatoPrecio } from '@/lib/precio'
-import { PLANES } from '@/lib/planes'
-import type { Factura, Plan } from '@/types'
+import type { Factura } from '@/types'
 
 // Etiqueta y color por estado de factura (tabla facturas, F4.a-1).
 const ESTADOS: Record<Factura['estado'], { label: string; color: string; bg: string }> = {
@@ -15,6 +14,9 @@ const ESTADOS: Record<Factura['estado'], { label: string; color: string; bg: str
   rechazada: { label: 'Rechazada', color: 'var(--color-danger)', bg: 'transparent' },
   anulada: { label: 'Anulada', color: 'var(--text-tertiary)', bg: 'transparent' },
 }
+
+// Nombre de mes para el periodo facturado (periodo_mes 1-12 de la tabla).
+const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
 
 function fechaCorta(iso: string): string {
   return new Date(iso).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' })
@@ -71,23 +73,23 @@ export default function FacturasPage() {
               <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Historial</div>
               {lista.map((factura) => {
                 const estado = ESTADOS[factura.estado] ?? ESTADOS.pendiente
-                const nombrePlan = PLANES[factura.plan as Plan]?.nombre ?? factura.plan
+                const periodoLabel = `${MESES[factura.periodo_mes - 1] ?? factura.periodo_mes} ${factura.periodo_ano}`
                 return (
                   <div key={factura.id} className="card" style={{ padding: '14px', marginBottom: '8px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '8px' }}>
                       <div>
-                        <div style={{ fontSize: '13px', fontWeight: 500 }}>Plan {nombrePlan} · {factura.periodo}</div>
-                        <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>#{factura.referencia}</div>
+                        <div style={{ fontSize: '13px', fontWeight: 500 }}>{periodoLabel}</div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>#{factura.numero} · {factura.metodo_pago}</div>
                       </div>
                       <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontSize: '13px', fontWeight: 500 }}>${formatoPrecio(factura.monto_centavos / 100)}</div>
+                        <div style={{ fontSize: '13px', fontWeight: 500 }}>${formatoPrecio(factura.monto)}</div>
                         <div style={{ fontSize: '10px', color: estado.color, marginTop: '2px' }}>{estado.label}</div>
                       </div>
                     </div>
                     <div style={{ paddingTop: '8px', borderTop: '1px solid var(--border-light)', fontSize: '11px', color: 'var(--text-tertiary)' }}>
-                      {factura.estado === 'aprobada' && factura.pagada_en
-                        ? `Pagada el ${fechaCorta(factura.pagada_en)}`
-                        : `Creada el ${fechaCorta(factura.creada_en)}`}
+                      {factura.estado === 'aprobada' && factura.fecha_pago
+                        ? `Pagada el ${fechaCorta(factura.fecha_pago)}`
+                        : `Creada el ${fechaCorta(factura.created_at)}`}
                     </div>
                   </div>
                 )

@@ -1,6 +1,9 @@
 'use client'
 
 import { useState } from 'react'
+import { Check } from 'lucide-react'
+import Icono from '@/components/ui/Icono'
+import Boton from '@/components/ui/Boton'
 import { createClient } from '@/lib/supabase-browser'
 import Modal from '@/components/ui/Modal'
 import TimePicker from '@/components/ui/TimePicker'
@@ -102,21 +105,12 @@ function HorarioCategoriaModal({
       )}
 
       <div style={{ display: 'flex', gap: '8px' }}>
-        <button
-          onClick={guardar}
-          disabled={guardando}
-          className="btn-primary"
-          style={{ flex: 1, padding: '12px', fontSize: '13px' }}
-        >
-          {guardando ? 'Guardando...' : guardado ? '✓ Guardado' : 'Guardar'}
-        </button>
-        <button
-          onClick={() => { setInicio(''); setFin('') }}
-          className="btn-outline"
-          style={{ padding: '12px 16px', fontSize: '13px' }}
-        >
+        <Boton onClick={guardar} disabled={guardando} style={{ flex: 1 }}>
+          {guardando ? 'Guardando...' : guardado ? <><Icono icono={Check} size={14} /> Guardado</> : 'Guardar'}
+        </Boton>
+        <Boton variante="secundario" onClick={() => { setInicio(''); setFin('') }}>
           Limpiar
-        </button>
+        </Boton>
       </div>
     </Modal>
   )
