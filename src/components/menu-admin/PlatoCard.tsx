@@ -3,6 +3,7 @@
 import { memo } from 'react'
 import { ChevronUp, ChevronDown, X } from 'lucide-react'
 import Icono, { estiloBotonIcono } from '@/components/ui/Icono'
+import Boton from '@/components/ui/Boton'
 import { formatoPrecio } from '@/lib/precio'
 import type { Variante } from '@/types'
 
@@ -63,26 +64,27 @@ function PlatoCard({
           <div style={{ fontSize: '13px', fontWeight: 500 }}>{plato.nombre}</div>
           <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
             {/* Flechas mover plato */}
-            <button type="button" aria-label="Subir plato" className="tap-target-44"
+            <button type="button" aria-label="Subir plato" className="tap-target-44 accion-icono"
               onClick={(e) => { e.stopPropagation(); onMoverPlato(categoriaId, plato.id, 'arriba') }}
-              style={{ ...estiloBotonIcono, cursor: pIdx > 0 ? 'pointer' : 'default', color: pIdx > 0 ? 'var(--text-secondary)' : 'var(--border-light)' }}>
+              style={{ ...estiloBotonIcono, cursor: pIdx > 0 ? 'pointer' : 'default', color: pIdx > 0 ? undefined : 'var(--border-light)' }}>
               <Icono icono={ChevronUp} size={16} />
             </button>
-            <button type="button" aria-label="Bajar plato" className="tap-target-44"
+            <button type="button" aria-label="Bajar plato" className="tap-target-44 accion-icono"
               onClick={(e) => { e.stopPropagation(); onMoverPlato(categoriaId, plato.id, 'abajo') }}
-              style={{ ...estiloBotonIcono, cursor: pIdx < totalPlatos - 1 ? 'pointer' : 'default', color: pIdx < totalPlatos - 1 ? 'var(--text-secondary)' : 'var(--border-light)' }}>
+              style={{ ...estiloBotonIcono, cursor: pIdx < totalPlatos - 1 ? 'pointer' : 'default', color: pIdx < totalPlatos - 1 ? undefined : 'var(--border-light)' }}>
               <Icono icono={ChevronDown} size={16} />
             </button>
-            <button type="button" onClick={(e) => { e.stopPropagation(); onToggleDisponible(categoriaId, plato.id) }} className="tap-control tap-target-44"
-              style={{ display: 'inline-flex', alignItems: 'center', padding: '5px 4px', background: 'transparent', border: 'none', fontSize: '11px', fontFamily: 'var(--font-body)', color: 'var(--color-info)', cursor: 'pointer', marginLeft: '4px' }}>
+            <Boton variante="terciario" tono="neutro" tamano="sm"
+              onClick={(e) => { e.stopPropagation(); onToggleDisponible(categoriaId, plato.id) }}
+              style={{ padding: '0 8px', marginLeft: '4px' }}>
               {plato.disponible ? 'Agotar' : 'Activar'}
-            </button>
-            <button type="button" aria-label="Eliminar plato" className="tap-control tap-target-44"
+            </Boton>
+            <button type="button" aria-label="Eliminar plato" className="tap-control tap-target-44 accion-icono-peligro"
               onClick={(e) => {
                 e.stopPropagation()
                 onRequestDeletePlato(categoriaId, plato.id)
               }}
-              style={{ ...estiloBotonIcono, color: 'var(--color-danger)', cursor: 'pointer' }}>
+              style={{ ...estiloBotonIcono, cursor: 'pointer' }}>
               <Icono icono={X} size={16} />
             </button>
           </div>

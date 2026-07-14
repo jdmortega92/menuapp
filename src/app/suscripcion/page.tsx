@@ -84,20 +84,20 @@ export default function SuscripcionPage() {
         {/* Plan actual */}
         <div style={{ padding: '0 20px', marginBottom: '16px' }}>
           <div style={{
-            background: 'var(--color-info-light)', border: '1px solid var(--color-info)',
+            background: 'var(--color-accent-light)', border: '1px solid var(--color-accent)',
             borderRadius: 'var(--radius-md)', padding: '14px',
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           }}>
             <div>
-              <div style={{ fontSize: '11px', color: 'var(--color-info)' }}>Tu plan actual</div>
-              <div style={{ fontSize: '16px', fontWeight: 500, color: 'var(--color-info)', marginTop: '2px' }}>
+              <div style={{ fontSize: '11px', color: 'var(--color-accent-dark)' }}>Tu plan actual</div>
+              <div style={{ fontSize: '16px', fontWeight: 500, color: 'var(--color-accent-dark)', marginTop: '2px' }}>
                 Plan {planes.find(p => p.id === planActual)?.nombre}
               </div>
-              <div style={{ fontSize: '12px', color: 'var(--color-info)', opacity: 0.7, marginTop: '2px' }}>
+              <div style={{ fontSize: '12px', color: 'var(--color-accent-dark)', opacity: 0.7, marginTop: '2px' }}>
                 {planActual === 'gratis' ? 'Sin fecha de renovación' : 'Pago pendiente — Wompi próximamente'}
               </div>
             </div>
-            <div style={{ fontSize: '20px', fontWeight: 500, color: 'var(--color-info)' }}>
+            <div style={{ fontSize: '20px', fontWeight: 500, color: 'var(--color-accent-dark)' }}>
               ${formatoPrecio(planes.find(p => p.id === planActual)?.precioMensual)}
               <span style={{ fontSize: '11px', fontWeight: 400 }}>/mes</span>
             </div>
@@ -138,13 +138,13 @@ export default function SuscripcionPage() {
             <div key={plan.id} style={{ padding: '0 20px', marginBottom: '10px' }}>
               <div style={{
                 background: 'var(--bg-secondary)',
-                border: esActual ? '2px solid var(--color-info)' : '1px solid var(--border-light)',
+                border: esActual ? '2px solid var(--color-accent)' : '1px solid var(--border-light)',
                 borderRadius: 'var(--radius-md)', padding: '16px', position: 'relative',
               }}>
                 {esActual && periodo === periodoActual && (
                   <div style={{
                     position: 'absolute', top: '-1px', right: '16px',
-                    background: 'var(--color-info)', color: 'white',
+                    background: 'var(--color-accent)', color: 'white',
                     fontSize: '10px', fontWeight: 500, padding: '3px 10px',
                     borderRadius: '0 0 6px 6px',
                   }}>Tu plan</div>

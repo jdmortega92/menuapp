@@ -354,7 +354,7 @@ function PlatoDelDiaForm({
           {guardando ? 'Guardando...' : guardado ? <><Icono icono={Check} size={14} /> Guardado</> : activo ? 'Actualizar plato del día' : 'Guardar plato del día'}
         </Boton>
         {activo && (
-          <Boton variante="peligro" onClick={desactivar} style={{ width: '100%', marginTop: '8px' }}>
+          <Boton variante="oscuro" onClick={desactivar} style={{ width: '100%', marginTop: '8px' }}>
             Desactivar plato del día
           </Boton>
         )}

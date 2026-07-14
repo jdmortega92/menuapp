@@ -111,7 +111,7 @@ export default function OnboardingChecklist({ status }: OnboardingChecklistProps
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, textAlign: 'left' }}>
-            <span style={{ display: 'inline-flex', color: 'var(--color-info)' }} aria-hidden="true">
+            <span style={{ display: 'inline-flex', color: 'var(--color-accent)' }} aria-hidden="true">
               <Icono icono={Target} size={20} />
             </span>
             <div>
@@ -154,7 +154,7 @@ export default function OnboardingChecklist({ status }: OnboardingChecklistProps
             style={{
               height: '100%',
               width: `${status.porcentaje}%`,
-              background: 'var(--color-info)',
+              background: 'var(--color-accent)',
               transition: 'width 0.4s ease',
             }}
           />
@@ -249,7 +249,7 @@ export default function OnboardingChecklist({ status }: OnboardingChecklistProps
                     <span
                       style={{
                         display: 'inline-flex',
-                        color: 'var(--color-info)',
+                        color: 'var(--color-accent)',
                         flexShrink: 0,
                       }}
                       aria-hidden="true"

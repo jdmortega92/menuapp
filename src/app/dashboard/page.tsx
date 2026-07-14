@@ -1123,7 +1123,7 @@ export default function DashboardPage() {
       positivo: { bg: 'var(--color-success-light)', text: 'var(--color-success)' },
       negativo: { bg: 'var(--color-danger-light)', text: 'var(--color-danger)' },
       neutro: { bg: 'var(--bg-tertiary)', text: 'var(--text-tertiary)' },
-      nuevo: { bg: 'var(--color-info-light)', text: 'var(--color-info)' },
+      nuevo: { bg: 'var(--color-accent-light)', text: 'var(--color-accent-dark)' },
     }
     const c = colores[variacion.tipo as keyof typeof colores]
     return (
@@ -1239,13 +1239,13 @@ export default function DashboardPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <div style={{
               fontSize: '10px', fontWeight: 500, padding: '3px 8px', borderRadius: '4px',
-              background: esPro ? 'var(--color-warning-light)' : esBasico ? 'var(--color-info-light)' : 'var(--bg-tertiary)',
-              color: esPro ? 'var(--color-warning)' : esBasico ? 'var(--color-info)' : 'var(--text-secondary)',
+              background: esPro ? 'var(--color-warning-light)' : 'var(--bg-tertiary)',
+              color: esPro ? 'var(--color-warning)' : 'var(--text-secondary)',
             }}>
               {esPro ? 'Pro' : esBasico ? 'Básico' : 'Gratis'}
             </div>
             <div onClick={() => setMostrarPerfil(!mostrarPerfil)} style={{
-              width: '36px', height: '36px', borderRadius: '50%', background: 'var(--color-info)',
+              width: '36px', height: '36px', borderRadius: '50%', background: 'var(--color-accent)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontSize: '14px', fontWeight: 500, color: 'white', cursor: 'pointer', overflow: 'hidden',
             }}>
@@ -1267,7 +1267,7 @@ export default function DashboardPage() {
               boxShadow: 'var(--shadow-lg)', animation: 'scaleIn 0.2s ease',
             }}>
               <div style={{ padding: '14px', display: 'flex', alignItems: 'center', gap: '12px', borderBottom: '1px solid var(--border-light)' }}>
-                <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'var(--color-info)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '15px', fontWeight: 500, color: 'white', overflow: 'hidden' }}>
+                <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'var(--color-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '15px', fontWeight: 500, color: 'white', overflow: 'hidden' }}>
                   {rest?.logo_url ? (
                     <img src={rest.logo_url} alt={restaurante.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   ) : restaurante.iniciales}
@@ -1319,9 +1319,9 @@ export default function DashboardPage() {
                   text: 'var(--color-warning)',
                 },
                 info: {
-                  bg: 'var(--color-info-light)',
-                  border: 'var(--color-info)',
-                  text: 'var(--color-info)',
+                  bg: 'var(--bg-tertiary)',
+                  border: 'var(--border-medium)',
+                  text: 'var(--text-secondary)',
                 },
                 oportunidad: {
                   bg: 'var(--color-success-light)',
@@ -1426,8 +1426,8 @@ export default function DashboardPage() {
                     <div key={f.id} onClick={() => { setFiltroTiempo(f.id as any); setMostrarFiltro(false) }}
                       style={{
                         padding: '11px 14px', fontSize: '13px', cursor: 'pointer',
-                        background: filtroTiempo === f.id ? 'var(--color-info-light)' : 'transparent',
-                        color: filtroTiempo === f.id ? 'var(--color-info)' : 'var(--text-primary)',
+                        background: filtroTiempo === f.id ? 'var(--color-accent-light)' : 'transparent',
+                        color: filtroTiempo === f.id ? 'var(--color-accent-dark)' : 'var(--text-primary)',
                         borderBottom: i < 2 ? '1px solid var(--border-light)' : 'none',
                         fontWeight: filtroTiempo === f.id ? 500 : 400,
                       }}>
@@ -1467,8 +1467,8 @@ export default function DashboardPage() {
         </div>
         {stats.escaneos === 0 && stats.visitas === 0 && (
           <div style={{ padding: '0 20px', marginBottom: '14px' }}>
-            <div style={{ background: 'var(--color-info-light)', borderRadius: 'var(--radius-md)', padding: '12px', fontSize: '12px', color: 'var(--color-info)' }}>
-              {filtroTiempo === 'hoy' 
+            <div style={{ background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-md)', padding: '12px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+              {filtroTiempo === 'hoy'
                 ? 'Aún no hay visitas hoy. Los datos se actualizan en tiempo real cuando los comensales abren tu menú.'
                 : 'Comparte tu enlace o QR para empezar a recibir visitas. Los datos aparecen aquí automáticamente.'}
             </div>
@@ -1644,11 +1644,11 @@ export default function DashboardPage() {
               {/* Estado vacío */}
               {embudoData.visitasMenu === 0 && (
                 <div style={{
-                  background: 'var(--color-info-light)',
+                  background: 'var(--bg-tertiary)',
                   borderRadius: 'var(--radius-md)',
                   padding: '10px 12px',
                   fontSize: '11px',
-                  color: 'var(--color-info)',
+                  color: 'var(--text-secondary)',
                   lineHeight: 1.4,
                 }}>
                   Aún no hay datos de conversión. Comparte tu QR o enlace para empezar a medir cómo los comensales recorren tu menú.

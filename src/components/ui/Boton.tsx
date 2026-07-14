@@ -4,10 +4,15 @@ import { useState } from 'react'
 import type { ButtonHTMLAttributes, CSSProperties } from 'react'
 
 // ── Boton — jerarquia de botones: SOLO aqui ──
-// primario   = accion principal (relleno negro de casa; hover --color-primario-hover)
+// primario   = accion principal (relleno naranja de marca --color-accent; hover --color-primario-hover)
 // secundario = accion de apoyo (outline neutro; sucesor de .btn-outline)
-// terciario  = accion de texto inline (+ Plato, links de accion; hover lavado info)
-// peligro    = destructivo (relleno danger; "Si, eliminar", "Desactivar...")
+// terciario  = accion de texto inline (links de accion; naranja de marca).
+//              tono='neutro' (solo terciario): gris en reposo, naranja al hover —
+//              para acciones repetidas por fila (Agotar, + Plato) que no deben
+//              gritar; los links sueltos (Limpiar, PNG/SVG, Desbloquear) quedan
+//              naranja en reposo porque en movil no existe hover.
+// peligro    = destructivo IRREVERSIBLE (relleno danger; "Si, eliminar")
+// oscuro     = accion seria pero REVERSIBLE (relleno neutro oscuro; "Desactivar...")
 // Tokens en globals.css (:root): --radio-boton, --altura-boton(-sm),
 // --transicion-ui, --color-primario-hover. El `style` del call site se aplica
 // de ULTIMO y es SOLO para layout (width/flex/margin) — la jerarquia visual
@@ -15,8 +20,9 @@ import type { ButtonHTMLAttributes, CSSProperties } from 'react'
 // Estados: hover (shift de fondo via estado), active (scale 0.98 via pointer),
 // disabled (opacity .5 + cursor), focus-visible (regla global en globals.css).
 
-type Variante = 'primario' | 'secundario' | 'terciario' | 'peligro'
+type Variante = 'primario' | 'secundario' | 'terciario' | 'peligro' | 'oscuro'
 type Tamano = 'normal' | 'sm'
+type Tono = 'marca' | 'neutro'
 
 const base: CSSProperties = {
   display: 'inline-flex',
@@ -36,30 +42,42 @@ const porTamano: Record<Tamano, CSSProperties> = {
   sm: { height: 'var(--altura-boton-sm)', padding: '0 14px', fontSize: '13px' },
 }
 
+// Borde SIEMPRE en propiedades separadas (borderWidth/Style/Color): mezclar el
+// shorthand `border` con `borderColor` en el rerender de hover dispara el
+// warning de React de estilos shorthand/longhand.
 const porVariante: Record<Variante, { reposo: CSSProperties; hover: CSSProperties }> = {
   primario: {
-    reposo: { background: 'var(--text-primary)', color: 'var(--bg-secondary)', border: '1px solid transparent' },
+    // Blanco sobre #E85D24 ~= 3.5:1 — cumple WCAG para componentes UI /
+    // texto grande; decision de marca de Julian para labels de boton.
+    reposo: { background: 'var(--color-accent)', color: 'white', borderWidth: '1px', borderStyle: 'solid', borderColor: 'transparent' },
     hover: { background: 'var(--color-primario-hover)' },
   },
   secundario: {
-    reposo: { background: 'transparent', color: 'var(--text-primary)', border: '1px solid var(--border-light)' },
+    reposo: { background: 'transparent', color: 'var(--text-primary)', borderWidth: '1px', borderStyle: 'solid', borderColor: 'var(--border-light)' },
     hover: { background: 'var(--bg-tertiary)', borderColor: 'var(--border-medium)' },
   },
   terciario: {
-    reposo: { background: 'transparent', color: 'var(--color-info)', border: '1px solid transparent' },
-    hover: { background: 'var(--color-info-light)' },
+    reposo: { background: 'transparent', color: 'var(--color-accent)', borderWidth: '1px', borderStyle: 'solid', borderColor: 'transparent' },
+    hover: { background: 'var(--color-accent-light)' },
   },
   peligro: {
     // Sin variable danger-hover en la paleta: el shift de hover es por filter
     // (ningun hex nuevo).
-    reposo: { background: 'var(--color-danger)', color: 'white', border: '1px solid transparent' },
+    reposo: { background: 'var(--color-danger)', color: 'white', borderWidth: '1px', borderStyle: 'solid', borderColor: 'transparent' },
     hover: { filter: 'brightness(0.94)' },
+  },
+  oscuro: {
+    // Reversible pero serio: relleno neutro oscuro. Hover por filter (aclara
+    // el negro de casa sin token nuevo).
+    reposo: { background: 'var(--text-primary)', color: 'var(--bg-secondary)', borderWidth: '1px', borderStyle: 'solid', borderColor: 'transparent' },
+    hover: { filter: 'brightness(1.6)' },
   },
 }
 
 export default function Boton({
   variante = 'primario',
   tamano = 'normal',
+  tono = 'marca',
   disabled,
   style,
   children,
@@ -67,10 +85,19 @@ export default function Boton({
 }: {
   variante?: Variante
   tamano?: Tamano
+  tono?: Tono
 } & ButtonHTMLAttributes<HTMLButtonElement>) {
   const [hover, setHover] = useState(false)
   const [presionado, setPresionado] = useState(false)
-  const v = porVariante[variante]
+  const base_v = porVariante[variante]
+  // tono='neutro' solo altera terciario: gris en reposo, naranja al hover.
+  const esNeutro = variante === 'terciario' && tono === 'neutro'
+  const v = esNeutro
+    ? {
+        reposo: { ...base_v.reposo, color: 'var(--text-secondary)' },
+        hover: { ...base_v.hover, color: 'var(--color-accent)' },
+      }
+    : base_v
   return (
     <button
       type="button"

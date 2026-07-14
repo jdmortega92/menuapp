@@ -155,7 +155,7 @@ export default function BottomNav() {
               background: 'transparent',
               border: 'none',
               cursor: 'pointer',
-              color: activo ? 'var(--text-primary)' : 'var(--text-tertiary)',
+              color: activo ? 'var(--color-accent)' : 'var(--text-tertiary)',
               fontFamily: 'var(--font-body)',
               transition: 'transform 0.15s ease, color 0.2s ease',
               position: 'relative',

@@ -385,7 +385,7 @@ function PromoForm({
           }} style={{
             padding: '8px 10px',
             borderBottom: '1px solid var(--border-light)', cursor: 'pointer',
-            background: isSelected ? 'var(--color-info-light)' : 'transparent',
+            background: isSelected ? 'var(--color-accent-light)' : 'transparent',
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
@@ -394,7 +394,7 @@ function PromoForm({
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>${formatoPrecio(precioMostrar)}</span>
-                {isSelected && <span style={{ color: 'var(--color-info)', fontSize: '12px' }}>✓</span>}
+                {isSelected && <span style={{ color: 'var(--color-accent)', fontSize: '12px' }}>✓</span>}
               </div>
             </div>
             {isSelected && tieneVariantes && (

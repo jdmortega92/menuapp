@@ -439,7 +439,7 @@ function PlatoEditPanel({
                   display: 'inline-flex', alignItems: 'center', gap: '6px',
                   padding: '8px 14px', borderRadius: 'var(--radius-sm)', fontSize: '12px',
                   border: '1px solid var(--border-light)', cursor: inhabilitado ? 'not-allowed' : 'pointer',
-                  color: inhabilitado ? 'var(--text-tertiary)' : 'var(--color-info)',
+                  color: inhabilitado ? 'var(--text-tertiary)' : 'var(--color-accent)',
                   opacity: inhabilitado ? 0.6 : 1,
                 }}>
                   {subiendoFoto ? 'Subiendo...' : plato.foto_url ? 'Cambiar foto' : <><Icono icono={Camera} size={14} /> Subir foto</>}

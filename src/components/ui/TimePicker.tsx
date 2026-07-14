@@ -165,7 +165,7 @@ export default function TimePicker({ value, onChange, disabled, placeholder }: T
       borderRadius: '6px',
       cursor: 'pointer',
       textAlign: 'center' as const,
-      background: activo ? 'var(--color-info)' : 'transparent',
+      background: activo ? 'var(--color-accent)' : 'transparent',
       color: activo ? 'white' : 'var(--text-primary)',
       fontWeight: activo ? 600 : 400,
       transition: 'background 0.12s',
@@ -263,7 +263,7 @@ export default function TimePicker({ value, onChange, disabled, placeholder }: T
         style={{
           padding: '7px 12px',
           fontSize: '12px',
-          border: `1px solid ${abierto ? 'var(--color-info)' : 'var(--border-light)'}`,
+          border: `1px solid ${abierto ? 'var(--color-accent)' : 'var(--border-light)'}`,
           borderRadius: '8px',
           background: disabled ? 'var(--bg-tertiary)' : 'var(--bg-secondary)',
           color: value ? 'var(--text-primary)' : 'var(--text-tertiary)',

@@ -860,8 +860,8 @@ export default function MiMenuPage() {
               style={{
                 flex: 1, padding: '10px', textAlign: 'center', fontSize: '13px', cursor: 'pointer',
                 fontWeight: tabActiva === tab ? 500 : 400,
-                color: tabActiva === tab ? 'var(--color-info)' : 'var(--text-tertiary)',
-                borderBottom: `2px solid ${tabActiva === tab ? 'var(--color-info)' : 'var(--border-light)'}`,
+                color: tabActiva === tab ? 'var(--color-accent)' : 'var(--text-tertiary)',
+                borderBottom: `2px solid ${tabActiva === tab ? 'var(--color-accent)' : 'var(--border-light)'}`,
                 whiteSpace: 'nowrap', minWidth: 'fit-content',
               }}>
               {tab === 'platos' ? 'Platos' : tab === 'combos' ? 'Combos / Promos' : 'Sorpréndeme'}
@@ -877,7 +877,7 @@ export default function MiMenuPage() {
               {busqueda.trim() && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
                   <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{totalResultados} resultado{totalResultados !== 1 ? 's' : ''} para &quot;{busqueda}&quot;</span>
-                  <span onClick={() => setBusqueda('')} style={{ fontSize: '12px', color: 'var(--color-info)', cursor: 'pointer' }}>Limpiar</span>
+                  <Boton variante="terciario" tamano="sm" onClick={() => setBusqueda('')} style={{ padding: '0 8px' }}>Limpiar</Boton>
                 </div>
               )}
             </div>
@@ -968,18 +968,17 @@ export default function MiMenuPage() {
               </div>
             ) : (
             <>
-            {/* Sub-tabs */}
-            <div style={{ padding: '12px 20px 0', display: 'flex', gap: '8px', justifyContent: 'center' }}>
+            {/* Sub-tabs — Boton (variante por seleccion); flexWrap evita
+                desborde en 320px ahora que los labels no parten linea */}
+            <div style={{ padding: '12px 20px 0', display: 'flex', gap: '6px', justifyContent: 'center', flexWrap: 'wrap' }}>
               {['combos', 'promos', 'plato-dia', 'plato-ganador'].map((sub) => (
-                <div key={sub} onClick={() => setSubTab(sub as typeof subTab)}
-                  style={{
-                    padding: '7px 14px', borderRadius: '20px', fontSize: '12px', cursor: 'pointer',
-                    background: subTab === sub ? 'var(--text-primary)' : 'var(--bg-secondary)',
-                    color: subTab === sub ? 'var(--bg-secondary)' : 'var(--text-secondary)',
-                    border: subTab === sub ? 'none' : '1px solid var(--border-light)',
-                  }}>
+                <Boton key={sub}
+                  variante={subTab === sub ? 'primario' : 'secundario'}
+                  tamano="sm"
+                  onClick={() => setSubTab(sub as typeof subTab)}
+                  style={{ padding: '0 12px' }}>
                   {sub === 'combos' ? 'Combos' : sub === 'promos' ? 'Promos' : sub === 'plato-dia' ? 'Plato del día' : 'Ganador'}
-                </div>
+                </Boton>
               ))}
             </div>
 
@@ -1038,7 +1037,7 @@ export default function MiMenuPage() {
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <div onClick={() => toggleCombo(combo.id)} style={{
                           width: '36px', height: '20px', borderRadius: '10px',
-                          background: combo.activo ? 'var(--text-primary)' : 'var(--border-light)',
+                          background: combo.activo ? 'var(--color-accent)' : 'var(--border-light)',
                           position: 'relative', cursor: 'pointer', transition: 'background var(--transicion-ui)',
                         }}>
                           <div style={{ width: '16px', height: '16px', borderRadius: '50%', background: 'white', position: 'absolute', top: '2px', left: combo.activo ? '18px' : '2px', transition: 'left 0.2s' }} />
@@ -1049,15 +1048,15 @@ export default function MiMenuPage() {
                           setEditandoComboId(combo.id)
                           setMostrarFormCombo(true)
                           window.scrollTo({ top: 0, behavior: 'smooth' })
-                        }} style={{ display: 'inline-flex', alignItems: 'center', cursor: 'pointer', color: 'var(--color-info)' }}>
+                        }} className="accion-icono" style={{ display: 'inline-flex', alignItems: 'center', cursor: 'pointer' }}>
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M12 20h9"/>
     <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
   </svg>
 </span>
-                        <button type="button" aria-label="Eliminar combo" className="tap-target-44"
+                        <button type="button" aria-label="Eliminar combo" className="tap-target-44 accion-icono-peligro"
                           onClick={() => eliminarCombo(combo.id)}
-                          style={{ ...estiloBotonIcono, color: 'var(--color-danger)', cursor: 'pointer' }}>
+                          style={{ ...estiloBotonIcono, cursor: 'pointer' }}>
                           <Icono icono={X} size={16} />
                         </button>
                       </div>
@@ -1114,7 +1113,7 @@ export default function MiMenuPage() {
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <div onClick={() => togglePromo(promo.id)} style={{
                           width: '36px', height: '20px', borderRadius: '10px',
-                          background: promo.activo ? 'var(--text-primary)' : 'var(--border-light)',
+                          background: promo.activo ? 'var(--color-accent)' : 'var(--border-light)',
                           position: 'relative', cursor: 'pointer', transition: 'background var(--transicion-ui)',
                         }}>
                           <div style={{ width: '16px', height: '16px', borderRadius: '50%', background: 'white', position: 'absolute', top: '2px', left: promo.activo ? '18px' : '2px', transition: 'left 0.2s' }} />
@@ -1125,15 +1124,15 @@ export default function MiMenuPage() {
                           setEditandoPromoId(promo.id)
                           setMostrarFormPromo(true)
                           window.scrollTo({ top: 0, behavior: 'smooth' })
-                        }} style={{ display: 'inline-flex', alignItems: 'center', cursor: 'pointer', color: 'var(--color-info)' }}>
+                        }} className="accion-icono" style={{ display: 'inline-flex', alignItems: 'center', cursor: 'pointer' }}>
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M12 20h9"/>
     <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
   </svg>
 </span>
-                        <button type="button" aria-label="Eliminar promo" className="tap-target-44"
+                        <button type="button" aria-label="Eliminar promo" className="tap-target-44 accion-icono-peligro"
                           onClick={() => eliminarPromo(promo.id)}
-                          style={{ ...estiloBotonIcono, color: 'var(--color-danger)', cursor: 'pointer' }}>
+                          style={{ ...estiloBotonIcono, cursor: 'pointer' }}>
                           <Icono icono={X} size={16} />
                         </button>
                       </div>
@@ -1213,8 +1212,8 @@ export default function MiMenuPage() {
                         }
                       }} style={{
                         padding: '12px', borderRadius: '10px', marginBottom: '8px', cursor: puedeSeleccionar || seleccionada ? 'pointer' : 'default',
-                        border: seleccionada ? '2px solid var(--color-info)' : '1px solid var(--border-light)',
-                        background: seleccionada ? 'var(--color-info-light)' : 'transparent',
+                        border: seleccionada ? '2px solid var(--color-accent)' : '1px solid var(--border-light)',
+                        background: seleccionada ? 'var(--color-accent-light)' : 'transparent',
                         opacity: !puedeSeleccionar && !seleccionada ? 0.4 : 1,
                         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                       }}>
@@ -1227,7 +1226,7 @@ export default function MiMenuPage() {
                             )}
                           </div>
                         </div>
-                        {seleccionada && <span style={{ color: 'var(--color-info)', fontSize: '16px' }}>✓</span>}
+                        {seleccionada && <span style={{ color: 'var(--color-accent)', fontSize: '16px' }}>✓</span>}
                       </div>
                     )
                   })}

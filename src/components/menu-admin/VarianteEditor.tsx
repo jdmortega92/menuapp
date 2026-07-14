@@ -166,7 +166,7 @@ export default function VarianteEditor({
               if (pending || i === 0) return
               moverFila(i, -1)
             }}
-            className="tap-control tap-target-44"
+            className="tap-control tap-target-44 accion-icono"
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -177,7 +177,6 @@ export default function VarianteEditor({
               borderRadius: '4px',
               cursor: (pending || i === 0) ? 'not-allowed' : 'pointer',
               opacity: (pending || i === 0) ? 0.4 : 1,
-              color: 'var(--text-primary)',
             }}
             aria-label="Mover arriba"
           >
@@ -191,7 +190,7 @@ export default function VarianteEditor({
               if (pending || esUltima) return
               moverFila(i, 1)
             }}
-            className="tap-control tap-target-44"
+            className="tap-control tap-target-44 accion-icono"
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -202,7 +201,6 @@ export default function VarianteEditor({
               borderRadius: '4px',
               cursor: (pending || esUltima) ? 'not-allowed' : 'pointer',
               opacity: (pending || esUltima) ? 0.4 : 1,
-              color: 'var(--text-primary)',
             }}
             aria-label="Mover abajo"
           >
@@ -213,17 +211,16 @@ export default function VarianteEditor({
             <button
               type="button"
               onClick={() => quitarFila(i)}
-              className="tap-control tap-target-44"
+              className="tap-control tap-target-44 accion-icono-peligro"
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 padding: '6px 14px',
                 background: 'transparent',
-                border: '1px solid var(--color-danger)',
+                border: '1px solid var(--border-light)',
                 borderRadius: '4px',
                 cursor: 'pointer',
-                color: 'var(--color-danger)',
               }}
               aria-label="Eliminar variante"
             >

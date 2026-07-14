@@ -117,10 +117,10 @@ export default function ReferidosPage() {
           <div className="card" style={{
             padding: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           }}>
-            <div style={{ fontSize: '12px', color: 'var(--color-info)', wordBreak: 'break-all' }}>{enlaceReferidoDisplay}</div>
+            <div style={{ fontSize: '12px', color: 'var(--color-accent)', wordBreak: 'break-all' }}>{enlaceReferidoDisplay}</div>
             <span onClick={copiarEnlace} style={{
               fontSize: '12px', fontWeight: 500, cursor: 'pointer', flexShrink: 0, marginLeft: '10px',
-              color: copiado ? 'var(--color-green)' : 'var(--color-info)',
+              color: copiado ? 'var(--color-green)' : 'var(--color-accent)',
             }}>
               {copiado ? '✓ Copiado' : 'Copiar'}
             </span>

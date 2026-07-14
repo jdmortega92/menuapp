@@ -50,8 +50,10 @@
   --altura-boton: 44px;
   --altura-boton-sm: 36px;
   --transicion-ui: 150ms ease;
-  /* Hover del primario: un paso mas oscuro que --text-primary (#1A1A18) */
-  --color-primario-hover: #000000;
+  /* Hover del primario: naranja de marca ~8% mas oscuro que --color-accent
+     (#E85D24). El primario de MenuApp es el naranja zapote — el negro fue
+     una inconsistencia historica, no una decision. */
+  --color-primario-hover: #D55621;
 }
 
 /* =========================================================
@@ -307,8 +309,29 @@ p { font-size: 0.9375rem; line-height: 1.6; color: var(--text-secondary); }
 /* Foco de teclado visible (antes: ningun anillo definido en toda la app).
    Solo :focus-visible — el foco por click/tap no pinta anillo. */
 :focus-visible {
-  outline: 2px solid var(--color-info);
+  outline: 2px solid var(--color-accent-dark);
   outline-offset: 2px;
+}
+
+/* Iconos de accion por fila (lapiz, chevrons, kebab): neutros en reposo,
+   naranja al hover. Un color inline (p.ej. estado limite/deshabilitado de
+   flechas) GANA sobre esta clase y apaga el hover — intencional. */
+.accion-icono {
+  color: var(--text-secondary);
+  transition: color var(--transicion-ui);
+}
+.accion-icono:hover:not(:disabled) {
+  color: var(--color-accent);
+}
+
+/* X de borrado: gris en reposo, ROJO al acercarse (aviso destructivo en hover,
+   no rojo permanente). */
+.accion-icono-peligro {
+  color: var(--text-secondary);
+  transition: color var(--transicion-ui);
+}
+.accion-icono-peligro:hover:not(:disabled) {
+  color: var(--color-danger);
 }
 
 .tap-bar {
@@ -383,7 +406,9 @@ p { font-size: 0.9375rem; line-height: 1.6; color: var(--text-secondary); }
 .badge-success { background: var(--color-green-light); color: var(--color-green); }
 .badge-danger { background: var(--color-danger-light); color: var(--color-danger); }
 .badge-warning { background: var(--color-warning-light); color: var(--color-warning); }
-.badge-info { background: var(--color-info-light); color: var(--color-info); }
+/* badge-info neutralizado (disciplina naranja+neutro): etiqueta de nivel
+   "Basico" en gris; Pro conserva badge-warning dorado. */
+.badge-info { background: var(--bg-tertiary); color: var(--text-secondary); }
 
 .pill {
   padding: 7px 14px; border-radius: var(--radius-full);

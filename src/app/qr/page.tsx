@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import Boton from '@/components/ui/Boton'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks'
 import { createClient } from '@/lib/supabase-browser'
@@ -164,7 +165,7 @@ export default function MiQRPage() {
             </div>
 
             <div style={{ fontSize: '15px', fontWeight: 500, marginBottom: '4px' }}>{restaurante.nombre}</div>
-            <div style={{ fontSize: '13px', color: 'var(--color-info)', marginBottom: '16px' }}>{urlMenu}</div>
+            <div style={{ fontSize: '13px', color: 'var(--color-accent)', marginBottom: '16px' }}>{urlMenu}</div>
 
             {/* Copiar enlace */}
             <div
@@ -218,8 +219,8 @@ export default function MiQRPage() {
                 style={{
                   flex: 1, padding: '10px', textAlign: 'center', fontSize: '13px', cursor: 'pointer',
                   fontWeight: tabFormato === tab ? 500 : 400,
-                  color: tabFormato === tab ? 'var(--color-info)' : 'var(--text-tertiary)',
-                  borderBottom: `2px solid ${tabFormato === tab ? 'var(--color-info)' : 'var(--border-light)'}`,
+                  color: tabFormato === tab ? 'var(--color-accent)' : 'var(--text-tertiary)',
+                  borderBottom: `2px solid ${tabFormato === tab ? 'var(--color-accent)' : 'var(--border-light)'}`,
                 }}>
                 {tab === 'mesa' ? 'QR para mesas' : 'Enlace web'}
               </div>
@@ -254,9 +255,9 @@ export default function MiQRPage() {
                     <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{urlMenu}?qr=mesa{i + 1}</div>
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <span onClick={() => descargarQR('png', `${urlCompleta}?qr=mesa${i + 1}`, `mesa-${i + 1}-${restaurante.slug}`)} style={{ fontSize: '12px', color: 'var(--color-info)', cursor: 'pointer' }}>PNG</span>
-                  <span onClick={() => descargarQR('svg', `${urlCompleta}?qr=mesa${i + 1}`, `mesa-${i + 1}-${restaurante.slug}`)} style={{ fontSize: '12px', color: 'var(--color-info)', cursor: 'pointer' }}>SVG</span>
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  <Boton variante="terciario" tamano="sm" onClick={() => descargarQR('png', `${urlCompleta}?qr=mesa${i + 1}`, `mesa-${i + 1}-${restaurante.slug}`)} style={{ padding: '0 8px' }}>PNG</Boton>
+                  <Boton variante="terciario" tamano="sm" onClick={() => descargarQR('svg', `${urlCompleta}?qr=mesa${i + 1}`, `mesa-${i + 1}-${restaurante.slug}`)} style={{ padding: '0 8px' }}>SVG</Boton>
                 </div>
               </div>
             ))}
@@ -267,7 +268,7 @@ export default function MiQRPage() {
                 flex: 1, border: '1px dashed var(--border-medium)', borderRadius: 'var(--radius-md)',
                 padding: '14px', textAlign: 'center', cursor: 'pointer',
               }}>
-                <span style={{ fontSize: '13px', color: 'var(--color-info)' }}>+ Agregar mesa</span>
+                <span style={{ fontSize: '13px', color: 'var(--color-accent)' }}>+ Agregar mesa</span>
               </div>
               {mesas > 1 && (
                 <div onClick={() => setMesas(mesas - 1)} style={{
@@ -299,8 +300,8 @@ export default function MiQRPage() {
 
             {/* Tip */}
             <div style={{
-              background: 'var(--color-info-light)', borderRadius: 'var(--radius-md)',
-              padding: '12px', fontSize: '12px', color: 'var(--color-info)', marginBottom: '14px',
+              background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-md)',
+              padding: '12px', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '14px',
             }}>
               Imprime los QR y pégalos en cada mesa. Cuando el comensal escanea, llega directo al menú y el pedido le aparece al mesero.
             </div>
@@ -321,7 +322,7 @@ export default function MiQRPage() {
                 background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-sm)',
                 padding: '12px',
               }}>
-                <div style={{ fontSize: '12px', color: 'var(--color-info)', marginBottom: '4px' }}>https://{urlMenu}</div>
+                <div style={{ fontSize: '12px', color: 'var(--color-accent)', marginBottom: '4px' }}>https://{urlMenu}</div>
                 <div style={{ fontSize: '14px', fontWeight: 500, marginBottom: '2px' }}>{restaurante.nombre}</div>
                 <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Menú digital · Ve los platos y pide por WhatsApp</div>
               </div>
@@ -363,8 +364,8 @@ export default function MiQRPage() {
 
             {/* Tip */}
             <div style={{
-              background: 'var(--color-info-light)', borderRadius: 'var(--radius-md)',
-              padding: '12px', fontSize: '12px', color: 'var(--color-info)', marginBottom: '14px',
+              background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-md)',
+              padding: '12px', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '14px',
             }}>
               Pon este enlace en tu bio de Instagram, en tu página de Facebook, o envíalo por WhatsApp a tus clientes frecuentes.
             </div>

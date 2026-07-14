@@ -54,7 +54,7 @@ export default function PasswordInput({
             padding: '6px 10px',
             fontSize: '11px',
             fontWeight: 500,
-            color: 'var(--color-info)',
+            color: 'var(--color-accent)',
             fontFamily: 'var(--font-body)',
             userSelect: 'none',
             borderRadius: '6px',

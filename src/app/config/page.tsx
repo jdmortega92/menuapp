@@ -520,21 +520,14 @@ export default function ConfigPage() {
                             {t.desc}
                           </div>
                           {bloqueado && (
-                            <div
+                            <Boton
+                              variante="terciario"
+                              tamano="sm"
                               onClick={(e) => { e.stopPropagation(); router.push('/suscripcion') }}
-                              style={{
-                                fontSize: '11px',
-                                color: 'var(--color-info)',
-                                marginTop: '6px',
-                                cursor: 'pointer',
-                                fontWeight: 500,
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '4px',
-                              }}
+                              style={{ padding: '0 8px', marginTop: '6px' }}
                             >
                               Desbloquear con Plan Pro <Icono icono={ArrowRight} size={12} />
-                            </div>
+                            </Boton>
                           )}
                         </div>
                         {bloqueado ? (
@@ -716,7 +709,7 @@ export default function ConfigPage() {
                     <div style={{ width: '100%', aspectRatio: '3/1', borderRadius: '10px', overflow: 'hidden', marginBottom: '8px' }}>
                       <img src={bannerUrl} alt="Banner" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     </div>
-                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', fontSize: '12px', border: '1px solid var(--border-light)', cursor: 'pointer', color: 'var(--color-info)' }}>
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', fontSize: '12px', border: '1px solid var(--border-light)', cursor: 'pointer', color: 'var(--color-accent)' }}>
                       {subiendoImagen ? 'Subiendo...' : 'Cambiar banner'}
                       <input type="file" accept="image/*" style={{ display: 'none' }} disabled={subiendoImagen}
                         onChange={(e) => { const f = e.target.files?.[0]; if (f) seleccionarImagen('banner', f) }} />
@@ -729,7 +722,7 @@ export default function ConfigPage() {
                       padding: '20px', textAlign: 'center',
                     }}>
                       <div style={{ marginBottom: '4px', color: 'var(--text-tertiary)' }}><Icono icono={ImagePlus} size={24} /></div>
-                      <div style={{ fontSize: '13px', color: 'var(--color-info)' }}>{subiendoImagen ? 'Subiendo...' : 'Subir banner'}</div>
+                      <div style={{ fontSize: '13px', color: 'var(--color-accent)' }}>{subiendoImagen ? 'Subiendo...' : 'Subir banner'}</div>
                       <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>JPG o PNG · Máximo 10MB · Se ajusta a 1200x400</div>
                     </div>
                     <input type="file" accept="image/*" style={{ display: 'none' }} disabled={subiendoImagen}
@@ -759,7 +752,7 @@ export default function ConfigPage() {
                       onChange={(e) => { const f = e.target.files?.[0]; if (f) seleccionarImagen('logo', f) }} />
                   </label>
                   <div>
-                    <label style={{ fontSize: '13px', color: 'var(--color-info)', cursor: 'pointer' }}>
+                    <label style={{ fontSize: '13px', color: 'var(--color-accent)', cursor: 'pointer' }}>
                       {subiendoImagen ? 'Subiendo...' : logoUrl ? 'Cambiar logo' : 'Subir logo'}
                       <input type="file" accept="image/*" style={{ display: 'none' }} disabled={subiendoImagen}
                         onChange={(e) => { const f = e.target.files?.[0]; if (f) seleccionarImagen('logo', f) }} />
@@ -820,7 +813,7 @@ export default function ConfigPage() {
                     ) : (
                       <div onClick={() => handleToggle(item.key as keyof typeof toggles)} style={{
                         width: '36px', height: '20px', borderRadius: '10px',
-                        background: toggles[item.key as keyof typeof toggles] ? 'var(--text-primary)' : 'var(--border-light)',
+                        background: toggles[item.key as keyof typeof toggles] ? 'var(--color-accent)' : 'var(--border-light)',
                         position: 'relative', cursor: 'pointer', transition: 'background var(--transicion-ui)',
                       }}>
                         <div style={{
@@ -877,7 +870,7 @@ export default function ConfigPage() {
                       <span style={{
                         fontSize: '11px',
                         fontWeight: 500,
-                        color: h.cerrado ? 'var(--text-tertiary)' : 'var(--color-info)',
+                        color: h.cerrado ? 'var(--text-tertiary)' : 'var(--color-accent)',
                         letterSpacing: '0.3px',
                       }}>
                         {h.cerrado ? 'Cerrado' : 'Abierto'}
@@ -892,7 +885,7 @@ export default function ConfigPage() {
                           width: '36px',
                           height: '20px',
                           borderRadius: '10px',
-                          background: h.cerrado ? 'var(--border-medium)' : 'var(--color-info)',
+                          background: h.cerrado ? 'var(--border-medium)' : 'var(--color-accent)',
                           position: 'relative',
                           cursor: 'pointer',
                           transition: 'background 0.2s',
@@ -977,7 +970,7 @@ export default function ConfigPage() {
                 {!mostrarCambiarPass ? (
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-sm)' }}>
                     <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>••••••••</span>
-                    <span onClick={() => setMostrarCambiarPass(true)} style={{ fontSize: '12px', color: 'var(--color-info)', cursor: 'pointer' }}>Cambiar</span>
+                    <Boton variante="terciario" tamano="sm" onClick={() => setMostrarCambiarPass(true)} style={{ padding: '0 8px' }}>Cambiar</Boton>
                   </div>
                 ) : (
                   <div style={{ background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-sm)', padding: '12px' }}>

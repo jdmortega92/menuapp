@@ -193,31 +193,31 @@ function CategoriaSection({
             {/* Flechas mover categoría — par horizontal (44px efectivos apilados
                 se solaparían verticalmente; espeja el patrón de PlatoCard) */}
             <div style={{ display: 'flex', alignItems: 'center' }}>
-              <button type="button" aria-label="Subir categoría" className="tap-target-44"
+              <button type="button" aria-label="Subir categoría" className="tap-target-44 accion-icono"
                 onClick={() => onMoverCategoria(cat.id, 'arriba')}
-                style={{ ...estiloBotonIcono, cursor: catIdx > 0 ? 'pointer' : 'default', color: catIdx > 0 ? 'var(--text-secondary)' : 'var(--border-light)' }}>
+                style={{ ...estiloBotonIcono, cursor: catIdx > 0 ? 'pointer' : 'default', color: catIdx > 0 ? undefined : 'var(--border-light)' }}>
                 <Icono icono={ChevronUp} size={16} />
               </button>
-              <button type="button" aria-label="Bajar categoría" className="tap-target-44"
+              <button type="button" aria-label="Bajar categoría" className="tap-target-44 accion-icono"
                 onClick={() => onMoverCategoria(cat.id, 'abajo')}
-                style={{ ...estiloBotonIcono, cursor: catIdx < totalCategorias - 1 ? 'pointer' : 'default', color: catIdx < totalCategorias - 1 ? 'var(--text-secondary)' : 'var(--border-light)' }}>
+                style={{ ...estiloBotonIcono, cursor: catIdx < totalCategorias - 1 ? 'pointer' : 'default', color: catIdx < totalCategorias - 1 ? undefined : 'var(--border-light)' }}>
                 <Icono icono={ChevronDown} size={16} />
               </button>
             </div>
             <span style={{ fontSize: '14px', fontWeight: 500 }}>{cat.nombre}</span>
             <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', background: 'var(--bg-tertiary)', padding: '2px 6px', borderRadius: '4px' }}>{cat.platos.length}</span>
             {cat.hora_inicio && cat.hora_fin && (
-              <span style={{ fontSize: '10px', color: 'var(--color-info)', background: 'var(--color-info-light)', padding: '2px 6px', borderRadius: '4px' }}>
+              <span style={{ fontSize: '10px', color: 'var(--color-warning)', background: 'var(--color-warning-light)', padding: '2px 6px', borderRadius: '4px' }}>
                 {formato12h(cat.hora_inicio)}–{formato12h(cat.hora_fin)}
               </span>
             )}
           </div>
           <div style={{ display: 'flex', gap: '12px' }}>
-            <span onClick={() => onToggleFormPlato(cat.id)} className="tap-cta"
-              style={{ fontSize: '12px', color: 'var(--color-info)', cursor: 'pointer' }}>+ Plato</span>
-            <button type="button" aria-label="Opciones de categoría" className="tap-control tap-target-44"
+            <Boton variante="terciario" tono="neutro" tamano="sm" onClick={() => onToggleFormPlato(cat.id)}
+              style={{ padding: '0 8px' }}>+ Plato</Boton>
+            <button type="button" aria-label="Opciones de categoría" className="tap-control tap-target-44 accion-icono"
               onClick={() => onToggleMenuCategoria(cat.id)}
-              style={{ ...estiloBotonIcono, color: 'var(--text-tertiary)', cursor: 'pointer' }}>
+              style={{ ...estiloBotonIcono, cursor: 'pointer' }}>
               <Icono icono={MoreHorizontal} size={16} />
             </button>
           </div>
