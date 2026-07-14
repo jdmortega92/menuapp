@@ -498,6 +498,19 @@ Decision 2026-07-03: Julian mantiene $15k/$29k mensual ($150k/$290k anual, ~2 me
 
 ## Items
 
+### UI-ADMIN ✅ Sistema visual profesional del admin: iconos, botones, tokens, disciplina naranja — CLOSED
+- **Closed**: 2026-07-13. Motivacion de Julian: el admin se veia amateur — emojis/glifos como iconografia, botones sin jerarquia, cuatro colores compitiendo (naranja, azul, negro, rojo).
+- **Sistema de iconos**: lucide-react via puente src/components/ui/Icono.tsx ("cambiar libreria o trazo SOLO aqui"). Reemplazo TOTAL de emojis/glifos en las 6 superficies admin + onboarding: chevrons de reordenar (area tactil 44px + aria-labels), X, camara, checks, candados, target. Colores via currentColor — cero hex nuevos.
+- **Sistema de botones**: src/components/ui/Boton.tsx sobre tokens nuevos (--radio-boton, --altura-boton, --altura-boton-sm, --transicion-ui), variantes primario/secundario/terciario/peligro/oscuro x 2 tamanos, estados completos. Pildoras de tabs (Combos/Promos/Plato del dia/Ganador) eran elementos crudos con negro hardcodeado fuera del sistema — migradas.
+- **DECISION DE MARCA (Julian)**: el primario de accion es el naranja zapote, NO el negro (incoherencia historica resuelta). El azul ELIMINADO por completo del admin (tabs, links-accion, nav inferior).
+- **Disciplina de color final (direccion de arte de Julian, iterada en vivo)**: UNA accion dominante naranja por pantalla + seleccion naranja (nav inferior estilo Facebook: solo el item activo encendido). Acciones de fila (Agotar, +Plato, chevrons, lapiz): gris neutro en reposo + naranja en hover. X de eliminar: gris en reposo + ROJO en hover (advertencia al acercarse). Acciones reversibles de desactivar (plato del dia, ganador): variante oscuro (negro sobrio) — peligro reservado para destruccion real de datos. Toggles checked = naranja.
+- **A11y**: :focus-visible global (el foco de teclado era invisible), aria-labels en pressables de solo-icono, areas tactiles 44px.
+- **Fixes colados**: (1) useFacturas ordenaba por creada_en pero la columna real es created_at — 400 silencioso enmascarado como empty state (mismo patron fantasma del incidente RLS), detectado en smoke visual; (2) warning React de border shorthand vs borderColor en el hover de Boton.
+- **Proceso**: 5 sesiones de CC (2 muertas por limite a mitad de vuelo, reconciliadas contra git status/diff — protocolo de reanudacion ya estandar). Smoke visual de Julian ANTES de cada commit. La direccion de arte se itero con screenshots reales, no en abstracto.
+- **PENDIENTE — UI Fase B**: menu publico [slug] + temas (dado de Sorprendeme, estrella del chef, coherencia de iconos con las paletas por tema). Es la cara que ven los comensales.
+- **Verificado**: tsc limpio, tests verdes, smoke visual en dev + celular.
+- **Commits**: 8587fa0, 007de72.
+
 ### PDF-MOVIL ✅ Reporte PDF del dashboard mobile-first + unificacion render/PDF — CLOSED
 - **Closed**: 2026-07-08. Motivacion: los restauranteros abren el reporte desde WhatsApp en el celular; el layout A4 previo (tipografia chica, pares lado a lado) era ilegible a fit-to-width.
 - **Layout**: A4 vertical conservado (imprime bien), UNA columna, escala tipografica grande (titulo ~20pt, secciones ~15-16pt, cuerpo 13-14pt, nada bajo 11pt), tarjetas de stats apiladas a lo ancho, saltos de pagina sin encabezados huerfanos. Multi-pagina esperado. Verificado por Julian en celular via WhatsApp (fit-to-width sin zoom).
