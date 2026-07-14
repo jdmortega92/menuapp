@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { X, Star, Plus, Minus } from 'lucide-react'
+import Icono from '@/components/ui/Icono'
 import Modal from '@/components/ui/Modal'
 import CalificarModal from '@/components/menu-publico/CalificarModal'
 import { createClient } from '@/lib/supabase-browser'
@@ -162,21 +164,21 @@ export default function PlatoDetalleModal({
         ) : (
           <span style={{ fontSize: '60px', fontWeight: 500, color: color, opacity: 0.3 }}>{plato.nombre.charAt(0)}</span>
         )}
-        <div onClick={onClose} className="tap-control" style={{
+        <button type="button" onClick={onClose} aria-label="Cerrar" className="tap-control tap-target-44" style={{
           position: 'absolute',
           top: '12px',
           right: '12px',
           width: '32px',
           height: '32px',
           borderRadius: '50%',
+          border: 'none',
           background: 'rgba(0,0,0,0.3)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           color: 'white',
-          fontSize: '16px',
           cursor: 'pointer',
-        }}>✕</div>
+        }}><Icono icono={X} size={18} /></button>
       </div>
 
       <div style={{ padding: '16px 20px' }}>
@@ -194,7 +196,7 @@ export default function PlatoDetalleModal({
           </div>
           {calificacionesActivo && plato.resenas > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span style={{ fontSize: '13px', color: '#F2A623' }}>★</span>
+              <span style={{ color: 'var(--color-rating)', display: 'inline-flex', alignItems: 'center' }}><Icono icono={Star} size={13} fill="currentColor" /></span>
               <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--theme-text)' }}>{plato.estrellas}</span>
               <span style={{ fontSize: '12px', color: 'var(--theme-text-subtle)' }}>({plato.resenas})</span>
             </div>
@@ -444,7 +446,11 @@ export default function PlatoDetalleModal({
                       borderBottom: i < arr.length - 1 ? '1px solid var(--theme-border)' : 'none',
                     }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                        <div style={{ fontSize: '11px', color: '#F2A623' }}>{'★'.repeat(r.estrellas)}{'☆'.repeat(5 - r.estrellas)}</div>
+                        <div style={{ color: 'var(--color-rating)', display: 'inline-flex', alignItems: 'center', gap: '1px' }}>
+                          {[1, 2, 3, 4, 5].map(n => (
+                            <Icono key={n} icono={Star} size={11} fill={n <= r.estrellas ? 'currentColor' : 'none'} />
+                          ))}
+                        </div>
                         <div style={{ fontSize: '10px', color: 'var(--theme-text-subtle)' }}>
                           {new Date(r.created_at).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })}
                         </div>
@@ -489,7 +495,7 @@ export default function PlatoDetalleModal({
                       cursor: 'pointer',
                       marginBottom: '14px',
                       borderRadius: 'var(--theme-radius-image)',
-                      transition: 'background 0.15s ease',
+                      transition: 'background var(--transicion-ui)',
                     }}
                   >
                     {mostrarTodasResenas
@@ -535,18 +541,18 @@ export default function PlatoDetalleModal({
             borderRadius: 'var(--theme-radius-card)',
             padding: '10px 14px',
           }}>
-            <div onClick={() => { if (cantidadActual > 0) quitarDelPedido(cartKey) }} className="tap-control tap-target" style={{
+            <button type="button" onClick={() => { if (cantidadActual > 0) quitarDelPedido(cartKey) }} aria-label="Quitar uno" className="tap-control tap-target-44" style={{
               width: '28px',
               height: '28px',
               borderRadius: '50%',
               border: '1px solid var(--theme-border)',
+              background: 'transparent',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: '16px',
               cursor: 'pointer',
               color: cantidadActual > 0 ? 'var(--theme-text-muted)' : 'var(--theme-border)',
-            }}>-</div>
+            }}><Icono icono={Minus} size={16} /></button>
             <span style={{
               fontSize: '16px',
               fontWeight: 500,
@@ -556,18 +562,18 @@ export default function PlatoDetalleModal({
             }}>
               {cantidadMostrar}
             </span>
-            <div onClick={() => agregarAlPedido(cartKey)} className="tap-control tap-target" style={{
+            <button type="button" onClick={() => agregarAlPedido(cartKey)} aria-label="Agregar uno" className="tap-control tap-target-44" style={{
               width: '28px',
               height: '28px',
               borderRadius: '50%',
+              border: 'none',
               background: color,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               color: 'white',
-              fontSize: '16px',
               cursor: 'pointer',
-            }}>+</div>
+            }}><Icono icono={Plus} size={16} /></button>
           </div>
           {(() => {
             // PIEZA 3c (label promo-aware): la etiqueta REFLEJA lo que cobra

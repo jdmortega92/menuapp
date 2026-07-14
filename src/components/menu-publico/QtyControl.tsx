@@ -1,10 +1,13 @@
 'use client'
 
 import type { MouseEvent } from 'react'
+import { Plus, Minus } from 'lucide-react'
+import Icono from '@/components/ui/Icono'
 
 // Control presentacional de cantidad (+/−) del menú público. El stopPropagation
 // vive en los call sites (qtyProps de la página): las tarjetas que lo hospedan
-// son clickeables.
+// son clickeables. El círculo "+" conserva el acento del restaurante (`color`
+// inline); solo el glifo interior es lucide (Fase B UI).
 export default function QtyControl({ count, onAdd, onRemove, color }: {
   count: number
   onAdd: (e: MouseEvent) => void
@@ -13,11 +16,11 @@ export default function QtyControl({ count, onAdd, onRemove, color }: {
 }) {
   return count > 0 ? (
     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-      <div onClick={onRemove} className="tap-control tap-target" style={{ width: '26px', height: '26px', borderRadius: '50%', border: '1px solid var(--theme-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', cursor: 'pointer', color: 'var(--theme-text-muted)' }}>-</div>
+      <button type="button" onClick={onRemove} aria-label="Quitar uno" className="tap-control tap-target-44" style={{ width: '26px', height: '26px', borderRadius: '50%', border: '1px solid var(--theme-border)', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--theme-text-muted)' }}><Icono icono={Minus} size={14} /></button>
       <span style={{ fontSize: '14px', fontWeight: 500, minWidth: '16px', textAlign: 'center' }}>{count}</span>
-      <div onClick={onAdd} className="tap-control tap-target" style={{ width: '26px', height: '26px', borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '14px', cursor: 'pointer' }}>+</div>
+      <button type="button" onClick={onAdd} aria-label="Agregar uno" className="tap-control tap-target-44" style={{ width: '26px', height: '26px', borderRadius: '50%', border: 'none', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', cursor: 'pointer' }}><Icono icono={Plus} size={14} /></button>
     </div>
   ) : (
-    <div onClick={onAdd} className="tap-control tap-target" style={{ width: '26px', height: '26px', borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '14px', cursor: 'pointer' }}>+</div>
+    <button type="button" onClick={onAdd} aria-label="Agregar uno" className="tap-control tap-target-44" style={{ width: '26px', height: '26px', borderRadius: '50%', border: 'none', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', cursor: 'pointer' }}><Icono icono={Plus} size={14} /></button>
   )
 }

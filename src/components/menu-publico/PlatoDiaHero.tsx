@@ -1,6 +1,8 @@
 'use client'
 
 import type { ComponentProps } from 'react'
+import { Clock } from 'lucide-react'
+import Icono from '@/components/ui/Icono'
 import QtyControl from '@/components/menu-publico/QtyControl'
 import { makeCartKey } from '@/lib/cart'
 import { formatoPrecio } from '@/lib/precio'
@@ -41,7 +43,7 @@ export default function PlatoDiaHero({
         cursor: 'pointer',
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-          <span style={{ fontSize: '11px', fontWeight: 500, color: color }}>⏰ PLATO DEL DÍA</span>
+          <span style={{ fontSize: '11px', fontWeight: 500, color: color, display: 'inline-flex', alignItems: 'center', gap: '4px' }}><Icono icono={Clock} size={12} /> PLATO DEL DÍA</span>
           {platoDia.horaInicio && platoDia.horaFin && (
             <span style={{ fontSize: '10px', color: 'var(--theme-text-subtle)' }}>
               {formato12h(platoDia.horaInicio)} — {formato12h(platoDia.horaFin)}

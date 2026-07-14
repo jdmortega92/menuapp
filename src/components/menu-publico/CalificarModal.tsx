@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import { mutate } from 'swr'
+import { Check, Star } from 'lucide-react'
+import Icono from '@/components/ui/Icono'
 import Modal from '@/components/ui/Modal'
 import { createClient } from '@/lib/supabase-browser'
 import { tintPlaceholder } from '@/lib/brandTints'
@@ -89,7 +91,7 @@ export default function CalificarModal({
         stackLevel={1}
       >
         <div style={{ textAlign: 'center', padding: '20px 0' }}>
-          <div style={{ fontSize: '40px', marginBottom: '12px' }}>✓</div>
+          <div style={{ marginBottom: '12px', color: 'var(--theme-text)' }}><Icono icono={Check} size={40} /></div>
           <div style={{
             fontSize: '18px',
             fontWeight: 'var(--theme-title-weight)' as any,
@@ -133,14 +135,17 @@ export default function CalificarModal({
       {/* Estrellas */}
       <div style={{ textAlign: 'center', marginBottom: '24px' }}>
         <div style={{ fontSize: '14px', fontWeight: 500, marginBottom: '12px' }}>¿Qué te pareció?</div>
-        <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', marginBottom: '8px' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '8px' }}>
           {[1, 2, 3, 4, 5].map(n => (
-            <span key={n} onClick={() => setCalEstrellas(n)} style={{
-              fontSize: '36px', cursor: 'pointer',
-              color: n <= calEstrellas ? '#F2A623' : 'var(--theme-border-strong)',
-              transition: 'transform 0.15s',
+            <button key={n} type="button" onClick={() => setCalEstrellas(n)} aria-label={`${n} ${n === 1 ? 'estrella' : 'estrellas'}`} style={{
+              width: '44px', height: '44px', padding: 0,
+              background: 'transparent', border: 'none',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: 'pointer',
+              color: n <= calEstrellas ? 'var(--color-rating)' : 'var(--theme-border-strong)',
+              transition: 'transform var(--transicion-ui)',
               transform: n <= calEstrellas ? 'scale(1.1)' : 'scale(1)',
-            }}>★</span>
+            }}><Icono icono={Star} size={32} fill={n <= calEstrellas ? 'currentColor' : 'none'} /></button>
           ))}
         </div>
         {calEstrellas > 0 && <div style={{ fontSize: '13px', color: 'var(--theme-text-muted)' }}>{textoEstrellas[calEstrellas]}</div>}
@@ -156,7 +161,7 @@ export default function CalificarModal({
               background: calTags.includes(tag.id) ? 'var(--theme-text)' : 'var(--theme-surface)',
               color: calTags.includes(tag.id) ? 'var(--theme-surface)' : 'var(--theme-text-muted)',
               border: calTags.includes(tag.id) ? '1px solid var(--theme-text)' : '1px solid var(--theme-border)',
-              transition: 'all 0.15s',
+              transition: 'all var(--transicion-ui)',
             }}>{tag.label}</div>
           ))}
         </div>

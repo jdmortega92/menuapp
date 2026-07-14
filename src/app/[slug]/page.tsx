@@ -3,6 +3,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import type { MouseEvent } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
+import { Dices, X, ChevronDown, ChevronUp, Utensils, UtensilsCrossed } from 'lucide-react'
+import Icono from '@/components/ui/Icono'
 import { createClient } from '@/lib/supabase-browser'
 import QtyControl from '@/components/menu-publico/QtyControl'
 import PedidoModal from '@/components/menu-publico/PedidoModal'
@@ -275,7 +277,7 @@ export default function MenuPublicoPage() {
     return (
       <div className="theme-claro" style={{ background: 'var(--theme-bg)', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '40px', marginBottom: '12px' }}>🍽️</div>
+          <div style={{ marginBottom: '12px', color: 'var(--theme-text-subtle)' }}><Icono icono={UtensilsCrossed} size={40} /></div>
           <div style={{ fontSize: '18px', fontWeight: 500, color: 'var(--theme-text)' }}>Restaurante no encontrado</div>
           <div style={{ fontSize: '13px', color: 'var(--theme-text-muted)', marginTop: '8px' }}>Verifica el enlace e intenta de nuevo</div>
         </div>
@@ -431,8 +433,8 @@ export default function MenuPublicoPage() {
 
         {/* Filtros */}
         <div style={{ padding: '4px 16px 10px', display: 'flex', gap: '6px', overflowX: 'auto' }}>
-          <div onClick={() => setCategoriaAbierta(categoriaAbierta ? null : 'open')} style={{ padding: '6px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 500, background: color, color: 'white', cursor: 'pointer', whiteSpace: 'nowrap' }}>Categorías ↓</div>
-          {esProPublico && config?.combos_activo && combosVisibles.length > 0 && <div onClick={() => setMostrarCombos(!mostrarCombos)} style={{ padding: '6px 12px', borderRadius: '20px', fontSize: '11px', border: mostrarCombos ? 'none' : '1px solid var(--theme-border)', color: mostrarCombos ? 'white' : 'var(--theme-text-muted)', background: mostrarCombos ? color : 'var(--theme-surface)', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.2s' }}>Combos</div>}
+          <div onClick={() => setCategoriaAbierta(categoriaAbierta ? null : 'open')} style={{ padding: '6px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 500, background: color, color: 'white', cursor: 'pointer', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>Categorías <Icono icono={categoriaAbierta ? ChevronUp : ChevronDown} size={12} /></div>
+          {esProPublico && config?.combos_activo && combosVisibles.length > 0 && <div onClick={() => setMostrarCombos(!mostrarCombos)} style={{ padding: '6px 12px', borderRadius: '20px', fontSize: '11px', border: mostrarCombos ? 'none' : '1px solid var(--theme-border)', color: mostrarCombos ? 'white' : 'var(--theme-text-muted)', background: mostrarCombos ? color : 'var(--theme-surface)', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all var(--transicion-ui)' }}>Combos</div>}
         </div>
 
         {/* Dropdown categorías */}
@@ -496,8 +498,8 @@ export default function MenuPublicoPage() {
               cursor: 'pointer',
               background: mostrarSorpresa ? washSutil(color) : 'transparent',
             }}>
-              <span style={{ fontSize: '13px', color: mostrarSorpresa ? color : 'var(--theme-text-muted)' }}>
-                🎲 {mostrarSorpresa ? 'Generar otra combinación' : 'Sorpréndeme — ¿No sabes qué pedir?'}
+              <span style={{ fontSize: '13px', color: mostrarSorpresa ? color : 'var(--theme-text-muted)', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <Icono icono={Dices} size={18} /> {mostrarSorpresa ? 'Generar otra combinación' : 'Sorpréndeme — ¿No sabes qué pedir?'}
               </span>
             </div>
           </div>
@@ -513,8 +515,8 @@ export default function MenuPublicoPage() {
               padding: '12px',
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                <span style={{ fontSize: '13px', fontWeight: 500, color: color }}>🎲 Tu combinación</span>
-                <span onClick={() => setMostrarSorpresa(false)} style={{ fontSize: '11px', color: 'var(--theme-text-subtle)', cursor: 'pointer' }}>✕ Cerrar</span>
+                <span style={{ fontSize: '13px', fontWeight: 500, color: color, display: 'inline-flex', alignItems: 'center', gap: '6px' }}><Icono icono={Dices} size={18} /> Tu combinación</span>
+                <span onClick={() => setMostrarSorpresa(false)} style={{ fontSize: '11px', color: 'var(--theme-text-subtle)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '10px', margin: '-10px' }}><Icono icono={X} size={12} /> Cerrar</span>
               </div>
               {sorpresaPlatos.map((plato: any) => {
                 const esEstePlatoElDia = esProPublico && config?.plato_dia_activo && platoDiaVisible && platoDia && platoDia.id === plato.id
@@ -623,8 +625,11 @@ export default function MenuPublicoPage() {
               color: 'var(--theme-text)',
               marginBottom: '8px',
               paddingTop: '4px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
             }}>
-              🍱 Combos
+              <Icono icono={Utensils} size={16} /> Combos
             </div>
             {combosVisibles.map((combo: any) => (
               <div key={combo.id} onClick={() => setComboDetalle(combo)} className="tap-card" style={{

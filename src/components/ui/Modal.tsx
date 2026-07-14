@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { X } from 'lucide-react'
+import Icono from '@/components/ui/Icono'
 
 interface ModalProps {
   isOpen: boolean
@@ -167,19 +169,20 @@ export default function Modal({
               <button
                 onClick={onClose}
                 aria-label="Cerrar"
+                className="tap-target-44"
                 style={{
                   background: 'transparent',
                   border: 'none',
                   cursor: 'pointer',
-                  fontSize: '18px',
                   color: colorTextoSubtle,
                   padding: '4px 8px',
                   borderRadius: '6px',
-                  lineHeight: 1,
-                  fontFamily: 'var(--font-body)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
                 }}
               >
-                ✕
+                <Icono icono={X} size={18} />
               </button>
             )}
           </div>

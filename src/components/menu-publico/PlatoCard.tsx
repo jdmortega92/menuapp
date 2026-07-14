@@ -1,6 +1,8 @@
 'use client'
 
 import type { ComponentProps } from 'react'
+import { Star } from 'lucide-react'
+import Icono from '@/components/ui/Icono'
 import QtyControl from '@/components/menu-publico/QtyControl'
 import { makeCartKey } from '@/lib/cart'
 import { formatoPrecio } from '@/lib/precio'
@@ -180,8 +182,8 @@ export default function PlatoCard({
               )
             })()}
             {calificacionesActivo && plato.resenas > 0 && (
-              <span style={{ fontSize: '10px', color: '#F2A623' }}>
-                ★ {plato.estrellas} <span style={{ color: 'var(--theme-text-subtle)' }}>({plato.resenas})</span>
+              <span style={{ fontSize: '10px', color: 'var(--color-rating)', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                <Icono icono={Star} size={11} fill="currentColor" /> {plato.estrellas} <span style={{ color: 'var(--theme-text-subtle)' }}>({plato.resenas})</span>
               </span>
             )}
           </div>

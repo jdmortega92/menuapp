@@ -1,6 +1,8 @@
 'use client'
 
 import type { ComponentProps } from 'react'
+import { Star } from 'lucide-react'
+import Icono from '@/components/ui/Icono'
 import QtyControl from '@/components/menu-publico/QtyControl'
 import { makeCartKey } from '@/lib/cart'
 import { formatoPrecio } from '@/lib/precio'
@@ -33,7 +35,7 @@ export default function PlatoGanadorHero({
         cursor: 'pointer',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
-          <span style={{ fontSize: '16px' }}>⭐</span>
+          <span style={{ color: 'var(--gold-ink)', display: 'inline-flex' }}><Icono icono={Star} size={16} fill="currentColor" /></span>
           <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--gold-ink)', letterSpacing: '0.5px' }}>{platoGanador.titulo?.toUpperCase() || 'RECOMENDADO DEL CHEF'}</span>
         </div>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>

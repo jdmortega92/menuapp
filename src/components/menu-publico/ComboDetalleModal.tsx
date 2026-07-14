@@ -1,5 +1,7 @@
 'use client'
 
+import { Utensils, X } from 'lucide-react'
+import Icono from '@/components/ui/Icono'
 import Modal from '@/components/ui/Modal'
 import { formatoPrecio } from '@/lib/precio'
 import { tintPlaceholder } from '@/lib/brandTints'
@@ -60,6 +62,7 @@ export default function ComboDetalleModal({
       {/* Header con nombre y badge de ahorro */}
       <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--theme-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+          <span style={{ color: 'var(--theme-text)', display: 'inline-flex', flexShrink: 0 }}><Icono icono={Utensils} size={16} /></span>
           <span style={{
             fontSize: '16px',
             fontWeight: 'var(--theme-title-weight)' as any,
@@ -70,7 +73,7 @@ export default function ComboDetalleModal({
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
-          }}>🍱 {combo.nombre}</span>
+          }}>{combo.nombre}</span>
           <span style={{
             fontSize: '11px',
             fontWeight: 500,
@@ -83,15 +86,18 @@ export default function ComboDetalleModal({
             -{porcentajeAhorro}%
           </span>
         </div>
-        <span onClick={onClose} className="tap-control" style={{
-          fontSize: '18px',
+        <button type="button" onClick={onClose} aria-label="Cerrar" className="tap-control tap-target-44" style={{
           color: 'var(--theme-text-subtle)',
           cursor: 'pointer',
           marginLeft: '12px',
           padding: '4px 8px',
           borderRadius: '6px',
-          lineHeight: 1,
-        }}>✕</span>
+          border: 'none',
+          background: 'transparent',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}><Icono icono={X} size={18} /></button>
       </div>
 
       <div style={{ padding: '16px 20px' }}>

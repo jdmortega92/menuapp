@@ -1,5 +1,7 @@
 'use client'
 
+import { Plus, Minus } from 'lucide-react'
+import Icono from '@/components/ui/Icono'
 import Modal from '@/components/ui/Modal'
 import { formatoPrecio } from '@/lib/precio'
 
@@ -81,18 +83,18 @@ export default function PedidoModal({
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div onClick={() => onQuitar(item.cartKey)} className="tap-control tap-target" style={{
-                width: '24px',
-                height: '24px',
+              <button type="button" onClick={() => onQuitar(item.cartKey)} aria-label="Quitar uno" className="tap-control tap-target-44" style={{
+                width: '26px',
+                height: '26px',
                 borderRadius: '50%',
                 border: '1px solid var(--theme-border)',
+                background: 'transparent',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontSize: '14px',
                 cursor: 'pointer',
                 color: 'var(--theme-text-muted)',
-              }}>-</div>
+              }}><Icono icono={Minus} size={14} /></button>
               <span style={{
                 fontSize: '14px',
                 fontWeight: 500,
@@ -103,7 +105,7 @@ export default function PedidoModal({
               }}>
                 {item.cantidad}
               </span>
-              <div onClick={() => onAgregar(item.cartKey)} className="tap-control tap-target" style={{ width: '24px', height: '24px', borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '14px', cursor: 'pointer' }}>+</div>
+              <button type="button" onClick={() => onAgregar(item.cartKey)} aria-label="Agregar uno" className="tap-control tap-target-44" style={{ width: '26px', height: '26px', borderRadius: '50%', border: 'none', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', cursor: 'pointer' }}><Icono icono={Plus} size={14} /></button>
             </div>
             <div style={{
               fontSize: '13px',

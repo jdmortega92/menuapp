@@ -1,5 +1,7 @@
 'use client'
 
+import { MessageCircle } from 'lucide-react'
+import Icono from '@/components/ui/Icono'
 import { formato12h } from '@/lib/time'
 import { glowBoton, gradientHeader } from '@/lib/brandTints'
 
@@ -334,7 +336,7 @@ export default function RestaurantLanding({
               alignItems: 'center',
               gap: '10px',
             }}>
-              <span style={{ fontSize: '20px' }}>💬</span>
+              <span style={{ color: 'var(--theme-text-muted)', display: 'inline-flex', flexShrink: 0 }}><Icono icono={MessageCircle} size={20} /></span>
               <div>
                 <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--theme-text)' }}>Pedidos por WhatsApp</div>
                 <div style={{ fontSize: '12px', color: 'var(--theme-text-muted)' }}>Arma tu pedido en el menú y envíalo directo</div>
