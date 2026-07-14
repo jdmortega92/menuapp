@@ -498,6 +498,16 @@ Decision 2026-07-03: Julian mantiene $15k/$29k mensual ($150k/$290k anual, ~2 me
 
 ## Items
 
+### UI-PUBLICO ✅ Fase B: menu publico profesional con iconos que heredan del tema — CLOSED
+- **Closed**: 2026-07-14. Cierra el arco de UI iniciado en UI-ADMIN: admin y publico hablan ahora un solo idioma de diseno.
+- **REGLA ESTRUCTURAL**: los iconos del publico heredan del TEMA ACTIVO via currentColor y variables CSS de tema — NUNCA el naranja de marca. La identidad visual que el restaurante eligio es la duena de la superficie publica; MenuApp no compite con ella.
+- **Fundacion primero**: colores de tema hardcodeados por componente migrados al sistema de variables ANTES de tocar iconos (mismo output visual por tema, ahora mantenible — los temas futuros heredan gratis).
+- **Iconos (via Icono.tsx, size 18 — mas discretos que el admin: en un menu la estrella es la comida)**: dado de Sorprendeme -> Dices; estrellas de rating -> Star fill/stroke; X de modales (PlatoDetalle, ComboDetalle, Calificar, Pedido) -> X con area 44px + aria-label; chevrons de categorias; Plus dentro de los circulos de agregar (el fondo acento de cada tema intacto); steppers de cantidad. La estrella del chef CONSERVA su dorado — el unico protagonista autorizado (es un badge: su trabajo ES destacar).
+- **Consistencia geometrica sin tocar matices**: tokens universales (--radio-boton, --transicion-ui, minimos tactiles 44px) aplicados a pressables publicos sin alterar el color de ningun tema. :focus-visible verificado por tema.
+- **Smoke multi-tema de Julian**: recorrido completo del menu publico rotando temas + prueba del camaleon (serif premium vs naranja: los iconos se sienten nativos de cada uno) + flujo real de comensal desde el celular. Veredicto: "mejoro mucho".
+- **Verificado**: tsc limpio, tests verdes. 11 archivos (+90/-52).
+- **Commit**: 21747f3.
+
 ### UI-ADMIN ✅ Sistema visual profesional del admin: iconos, botones, tokens, disciplina naranja — CLOSED
 - **Closed**: 2026-07-13. Motivacion de Julian: el admin se veia amateur — emojis/glifos como iconografia, botones sin jerarquia, cuatro colores compitiendo (naranja, azul, negro, rojo).
 - **Sistema de iconos**: lucide-react via puente src/components/ui/Icono.tsx ("cambiar libreria o trazo SOLO aqui"). Reemplazo TOTAL de emojis/glifos en las 6 superficies admin + onboarding: chevrons de reordenar (area tactil 44px + aria-labels), X, camara, checks, candados, target. Colores via currentColor — cero hex nuevos.
