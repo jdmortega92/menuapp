@@ -1,7 +1,7 @@
 'use client'
 
 import { memo, useState } from 'react'
-import { ChevronUp, ChevronDown, MoreHorizontal, X, Check } from 'lucide-react'
+import { ChevronUp, ChevronDown, MoreHorizontal, X, Check, Folder } from 'lucide-react'
 import Icono, { estiloBotonIcono } from '@/components/ui/Icono'
 import Boton from '@/components/ui/Boton'
 import { createClient } from '@/lib/supabase-browser'
@@ -204,8 +204,9 @@ function CategoriaSection({
                 <Icono icono={ChevronDown} size={16} />
               </button>
             </div>
+            <Icono icono={Folder} size={16} />
             <span style={{ fontSize: '14px', fontWeight: 500 }}>{cat.nombre}</span>
-            <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', background: 'var(--bg-tertiary)', padding: '2px 6px', borderRadius: '4px' }}>{cat.platos.length}</span>
+            <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', background: 'var(--bg-tertiary)', padding: '2px 8px', borderRadius: 'var(--radius-full)' }}>{cat.platos.length}</span>
             {cat.hora_inicio && cat.hora_fin && (
               <span style={{ fontSize: '10px', color: 'var(--color-warning)', background: 'var(--color-warning-light)', padding: '2px 6px', borderRadius: '4px' }}>
                 {formato12h(cat.hora_inicio)}–{formato12h(cat.hora_fin)}
@@ -213,7 +214,9 @@ function CategoriaSection({
             )}
           </div>
           <div style={{ display: 'flex', gap: '12px' }}>
-            <Boton variante="terciario" tono="neutro" tamano="sm" onClick={() => onToggleFormPlato(cat.id)}
+            {/* Excepcion consciente al gris-en-reposo: ES la accion de
+                crecimiento del menu — terciario tono marca (naranja). */}
+            <Boton variante="terciario" tamano="sm" onClick={() => onToggleFormPlato(cat.id)}
               style={{ padding: '0 8px' }}>+ Plato</Boton>
             <button type="button" aria-label="Opciones de categoría" className="tap-control tap-target-44 accion-icono"
               onClick={() => onToggleMenuCategoria(cat.id)}
@@ -256,9 +259,11 @@ function CategoriaSection({
         />
       )}
 
-      {/* Platos */}
+      {/* Platos. El atenuado de agotado vive DENTRO de PlatoCard (foto/nombre/
+          precio): el badge "Agotado" y las acciones quedan a peso completo, y el
+          panel de edicion (hermano) ya no hereda el 0.5 al editar un agotado. */}
       {cat.platos.map((plato, pIdx) => (
-        <div key={plato.id} className="card" style={{ marginBottom: '8px', opacity: plato.disponible ? 1 : 0.5, overflow: 'hidden' }}>
+        <div key={plato.id} className="card" style={{ marginBottom: '8px', overflow: 'hidden' }}>
           <PlatoCard
             plato={plato}
             categoriaId={cat.id}

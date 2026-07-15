@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
-import { Search, Lock, X } from 'lucide-react'
+import { Search, Lock, X, ExternalLink, Utensils, Tag, Sparkles, BadgePercent, ConciergeBell, Trophy } from 'lucide-react'
 import Icono, { estiloBotonIcono } from '@/components/ui/Icono'
 import Boton from '@/components/ui/Boton'
 import { useRouter } from 'next/navigation'
@@ -844,27 +844,34 @@ export default function MiMenuPage() {
         <div style={{ padding: '16px 20px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ fontSize: '18px', fontWeight: 500 }}>Mi menú</div>
           {rest?.slug && (
-            <Boton variante="secundario" tamano="sm" onClick={() => window.open('/' + rest.slug, '_blank', 'noopener')}>
+            <Boton tamano="sm" onClick={() => window.open('/' + rest.slug, '_blank', 'noopener')}>
               Ver mi menú
+              <Icono icono={ExternalLink} size={16} />
             </Boton>
           )}
         </div>
 
-        {/* Tabs */}
+        {/* Tabs — icono 18px por tab (hereda el color activo/inactivo vía
+            currentColor). La fuente vive en .tab-menu-admin (13px, 12px en
+            angosto — ver globals.css); overflow-x queda como red de seguridad. */}
         <div style={{ padding: '12px 20px 0', display: 'flex', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-          {['platos', 'combos', 'sorprendeme'].map((tab) => (
-            <div key={tab} onClick={() => {
-              if (tab === 'sorprendeme') { setTabActiva('sorprendeme' as any) }
-              else { setTabActiva(tab as 'platos' | 'combos') }
-            }}
+          {([
+            { id: 'platos', label: 'Platos', icono: Utensils },
+            { id: 'combos', label: 'Combos / Promos', icono: Tag },
+            { id: 'sorprendeme', label: 'Sorpréndeme', icono: Sparkles },
+          ] as const).map((tab) => (
+            <div key={tab.id} onClick={() => setTabActiva(tab.id)}
+              className="tab-menu-admin"
               style={{
-                flex: 1, padding: '10px', textAlign: 'center', fontSize: '13px', cursor: 'pointer',
-                fontWeight: tabActiva === tab ? 500 : 400,
-                color: tabActiva === tab ? 'var(--color-accent)' : 'var(--text-tertiary)',
-                borderBottom: `2px solid ${tabActiva === tab ? 'var(--color-accent)' : 'var(--border-light)'}`,
+                flex: 1, padding: '10px', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                fontWeight: tabActiva === tab.id ? 500 : 400,
+                color: tabActiva === tab.id ? 'var(--color-accent)' : 'var(--text-tertiary)',
+                borderBottom: `2px solid ${tabActiva === tab.id ? 'var(--color-accent)' : 'var(--border-light)'}`,
                 whiteSpace: 'nowrap', minWidth: 'fit-content',
               }}>
-              {tab === 'platos' ? 'Platos' : tab === 'combos' ? 'Combos / Promos' : 'Sorpréndeme'}
+              <Icono icono={tab.icono} size={18} />
+              {tab.label}
             </div>
           ))}
         </div>
@@ -968,16 +975,27 @@ export default function MiMenuPage() {
               </div>
             ) : (
             <>
-            {/* Sub-tabs — Boton (variante por seleccion); flexWrap evita
-                desborde en 320px ahora que los labels no parten linea */}
-            <div style={{ padding: '12px 20px 0', display: 'flex', gap: '6px', justifyContent: 'center', flexWrap: 'wrap' }}>
-              {['combos', 'promos', 'plato-dia', 'plato-ganador'].map((sub) => (
-                <Boton key={sub}
-                  variante={subTab === sub ? 'primario' : 'secundario'}
+            {/* Sub-tabs — Boton (variante por seleccion). Con icono 16px los
+                cuatro pills no caben en 360px: tira horizontal con scroll
+                (scrollbar oculta via .scroll-oculto); el pill activo se centra
+                al seleccionar. flexShrink 0: un pill nunca se comprime. */}
+            <div className="scroll-oculto" style={{ padding: '12px 20px 0', display: 'flex', gap: '6px' }}>
+              {([
+                { id: 'combos', label: 'Combos', icono: Tag },
+                { id: 'promos', label: 'Promos', icono: BadgePercent },
+                { id: 'plato-dia', label: 'Plato del día', icono: ConciergeBell },
+                { id: 'plato-ganador', label: 'Ganador', icono: Trophy },
+              ] as const).map((sub) => (
+                <Boton key={sub.id}
+                  variante={subTab === sub.id ? 'primario' : 'secundario'}
                   tamano="sm"
-                  onClick={() => setSubTab(sub as typeof subTab)}
-                  style={{ padding: '0 12px' }}>
-                  {sub === 'combos' ? 'Combos' : sub === 'promos' ? 'Promos' : sub === 'plato-dia' ? 'Plato del día' : 'Ganador'}
+                  onClick={(e) => {
+                    setSubTab(sub.id)
+                    e.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
+                  }}
+                  style={{ padding: '0 12px', flexShrink: 0 }}>
+                  <Icono icono={sub.icono} size={16} />
+                  {sub.label}
                 </Boton>
               ))}
             </div>

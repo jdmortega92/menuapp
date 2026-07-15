@@ -8,9 +8,11 @@ import type { ButtonHTMLAttributes, CSSProperties } from 'react'
 // secundario = accion de apoyo (outline neutro; sucesor de .btn-outline)
 // terciario  = accion de texto inline (links de accion; naranja de marca).
 //              tono='neutro' (solo terciario): gris en reposo, naranja al hover —
-//              para acciones repetidas por fila (Agotar, + Plato) que no deben
-//              gritar; los links sueltos (Limpiar, PNG/SVG, Desbloquear) quedan
-//              naranja en reposo porque en movil no existe hover.
+//              para acciones repetidas por fila que no deben gritar. Nota
+//              2026-07 (polish de /menu): Agotar y + Plato volvieron a tono
+//              marca como excepcion consciente (accion de estado / de
+//              crecimiento del menu); hoy no queda consumidor de neutro, el
+//              mecanismo se conserva para futuras acciones por fila.
 // peligro    = destructivo IRREVERSIBLE (relleno danger; "Si, eliminar")
 // oscuro     = accion seria pero REVERSIBLE (relleno neutro oscuro; "Desactivar...")
 // Tokens en globals.css (:root): --radio-boton, --altura-boton(-sm),

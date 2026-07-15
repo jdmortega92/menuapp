@@ -49,11 +49,14 @@ function PlatoCard({
       onClick={() => onToggleExpand(plato.id)}
       style={{ padding: '12px', display: 'flex', gap: '12px', cursor: 'pointer' }}
     >
+      {/* Agotado atenua foto/nombre/precio AQUI (no el wrapper .card): el badge
+          rojo y las acciones conservan peso completo — paridad visual con el
+          badge verde "Disponible" de las filas activas. */}
       <div style={{
         width: '52px', height: '52px', borderRadius: 'var(--radius-sm)', background: 'var(--bg-tertiary)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontSize: '18px', fontWeight: 500, color: 'var(--text-tertiary)', flexShrink: 0,
-        overflow: 'hidden',
+        overflow: 'hidden', opacity: plato.disponible ? 1 : 0.5,
       }}>
         {plato.foto_url ? (
           <img src={plato.foto_url} alt={plato.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -61,7 +64,7 @@ function PlatoCard({
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
-          <div style={{ fontSize: '13px', fontWeight: 500 }}>{plato.nombre}</div>
+          <div style={{ fontSize: '13px', fontWeight: 500, opacity: plato.disponible ? 1 : 0.5 }}>{plato.nombre}</div>
           <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
             {/* Flechas mover plato */}
             <button type="button" aria-label="Subir plato" className="tap-target-44 accion-icono"
@@ -74,7 +77,9 @@ function PlatoCard({
               style={{ ...estiloBotonIcono, cursor: pIdx < totalPlatos - 1 ? 'pointer' : 'default', color: pIdx < totalPlatos - 1 ? undefined : 'var(--border-light)' }}>
               <Icono icono={ChevronDown} size={16} />
             </button>
-            <Boton variante="terciario" tono="neutro" tamano="sm"
+            {/* Excepcion consciente al gris-en-reposo: la accion de estado por
+                fila gana presencia — terciario tono marca (naranja). */}
+            <Boton variante="terciario" tamano="sm"
               onClick={(e) => { e.stopPropagation(); onToggleDisponible(categoriaId, plato.id) }}
               style={{ padding: '0 8px', marginLeft: '4px' }}>
               {plato.disponible ? 'Agotar' : 'Activar'}
@@ -89,7 +94,7 @@ function PlatoCard({
             </button>
           </div>
         </div>
-        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px', opacity: plato.disponible ? 1 : 0.5 }}>
           {plato.variantes && plato.variantes.length > 0 ? 'desde ' : ''}${formatoPrecio(plato.precio)}
           {plato.descripcion && <span style={{ marginLeft: '6px', color: 'var(--text-tertiary)' }}>· {plato.descripcion.length > 30 ? plato.descripcion.slice(0, 30) + '...' : plato.descripcion}</span>}
         </div>

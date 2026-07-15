@@ -306,6 +306,30 @@ p { font-size: 0.9375rem; line-height: 1.6; color: var(--text-secondary); }
   inset: -9px;
 }
 
+/* Tabs principales de /menu (admin): con icono 18px por tab, los tres labels
+   a 13px desbordan ~29px en 360px; bajar 1px la fuente en angosto recupera
+   ~17px. NUNCA trunca: el contenedor conserva overflow-x como red de
+   seguridad (nowrap + fit-content en cada tab). */
+.tab-menu-admin {
+  font-size: 13px;
+}
+@media (max-width: 400px) {
+  .tab-menu-admin {
+    font-size: 12px;
+  }
+}
+
+/* Tira horizontal sin scrollbar visible (sub-pills de /menu). El scroll
+   sigue activo (touch/rueda); solo se oculta la barra (webkit + estandar). */
+.scroll-oculto {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.scroll-oculto::-webkit-scrollbar {
+  display: none;
+}
+
 /* Foco de teclado visible (antes: ningun anillo definido en toda la app).
    Solo :focus-visible — el foco por click/tap no pinta anillo. */
 :focus-visible {
