@@ -498,6 +498,14 @@ Decision 2026-07-03: Julian mantiene $15k/$29k mensual ($150k/$290k anual, ~2 me
 
 ## Items
 
+### UI-POLISH-MOCKUPS ✅ Polish del /menu desde mockups del fundador — CLOSED
+- **Closed**: 2026-07-15. Julian diseno mockups propios (iPhone, alta fidelidad) marcando en rojo lo deseado; se implemento SOLO lo marcado.
+- **Cambios**: iconos en tabs principales (Utensils/Tag/Sparkles 18px heredando color de tab) y en sub-pildoras (Tag/BadgePercent/ConciergeBell/Trophy 16px) dentro de scroll horizontal sin barra con active-into-view (4 pildoras icono+label desbordan 360px). Ver mi menu promovido a primario + ExternalLink (primario de region header, sin conflicto con + Categoria de region contenido). Fix de jerarquia (observacion original de Julian): + Plato = naranja-texto constructivo (excepcion consciente al gris-en-reposo: ES la accion de crecimiento del menu); Agotar con presencia naranja-texto; badge de estado Agotado igualado en peso visual a Disponible. Header de categoria: Folder 16px + contador en pildora suave.
+- **DESCARTADO CON VETO EXPLICITO DEL FUNDADOR (no resucitar como "mejoras obvias"; si alguna vuelve, es feature de producto con su propio item)**: busqueda en header, campana de notificaciones (sistema inexistente — icono mentiroso), Ordenar, toggle lista/grid, FAB central de QR (jerarquia incorrecta: QR se genera una vez), menu hamburguesa/drawer, card Resumen rapido (feature con datos, no polish).
+- **Nota de proceso**: durante la investigacion CC intento abrir Claude-in-Chrome para verificar tipografia en vivo — DENEGADO. Regla nueva: CC no abre superficies no pedidas por el prompt (navegador, red, credenciales); si cree necesitarlas, reporta y se decide. La medicion de wrap se hizo por aritmetica de strings con supuestos declarados.
+- **Verificado**: tsc limpio, tests verdes, smoke en telefono vertical (360px).
+- **Commit**: [Julian: hash del push].
+
 ### UI-PUBLICO ✅ Fase B: menu publico profesional con iconos que heredan del tema — CLOSED
 - **Closed**: 2026-07-14. Cierra el arco de UI iniciado en UI-ADMIN: admin y publico hablan ahora un solo idioma de diseno.
 - **REGLA ESTRUCTURAL**: los iconos del publico heredan del TEMA ACTIVO via currentColor y variables CSS de tema — NUNCA el naranja de marca. La identidad visual que el restaurante eligio es la duena de la superficie publica; MenuApp no compite con ella.
