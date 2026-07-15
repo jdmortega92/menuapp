@@ -14,8 +14,8 @@ import { useConfigRestaurante } from '@/hooks/data/useConfigRestaurante'
 import { usePlatoGanador } from '@/hooks/data/usePlatoGanador'
 import { createClient } from '@/lib/supabase-browser'
 import CropModal from '@/components/ui/CropModal'
-import Modal from '@/components/ui/Modal'
 import BottomNav from '@/components/BottomNav'
+import ConfirmarEliminar from '@/components/menu-admin/ConfirmarEliminar'
 import { construirTextoVinculaciones } from '@/components/menu-admin/VarianteEditor'
 import CategoriaForm from '@/components/menu-admin/CategoriaForm'
 import CategoriaSection from '@/components/menu-admin/CategoriaSection'
@@ -113,6 +113,11 @@ export default function MiMenuPage() {
     esGanadorActual: boolean;
     onConfirm: () => void;
   } | null>(null)
+  // Confirmacion de borrado de combo/promo (CONFIRM-BEFORE-DELETE): antes la X
+  // borraba directo. Solo id + nombre; el borrado real sigue en eliminarCombo/
+  // eliminarPromo. Desactivar (toggle activo) NO confirma — es reversible.
+  const [comboDeleteWarning, setComboDeleteWarning] = useState<{ id: string; nombre: string } | null>(null)
+  const [promoDeleteWarning, setPromoDeleteWarning] = useState<{ id: string; nombre: string } | null>(null)
   const [subiendoFoto, setSubiendoFoto] = useState(false)
   // Puntero del modal de recorte — crop/zoom/croppedAreaPixels viven en
   // components/ui/CropModal (fresh-mount por apertura).
@@ -1073,7 +1078,7 @@ export default function MiMenuPage() {
   </svg>
 </span>
                         <button type="button" aria-label="Eliminar combo" className="tap-target-44 accion-icono-peligro"
-                          onClick={() => eliminarCombo(combo.id)}
+                          onClick={() => setComboDeleteWarning({ id: combo.id, nombre: combo.nombre })}
                           style={{ ...estiloBotonIcono, cursor: 'pointer' }}>
                           <Icono icono={X} size={16} />
                         </button>
@@ -1149,7 +1154,7 @@ export default function MiMenuPage() {
   </svg>
 </span>
                         <button type="button" aria-label="Eliminar promo" className="tap-target-44 accion-icono-peligro"
-                          onClick={() => eliminarPromo(promo.id)}
+                          onClick={() => setPromoDeleteWarning({ id: promo.id, nombre: promo.nombre })}
                           style={{ ...estiloBotonIcono, cursor: 'pointer' }}>
                           <Icono icono={X} size={16} />
                         </button>
@@ -1335,16 +1340,15 @@ export default function MiMenuPage() {
             { n: promosCount, sing: 'promo', plur: 'promos' },
           ])
           return (
-            <Modal
-              isOpen={!!platoDeleteWarning}
+            <ConfirmarEliminar
+              titulo="¿Eliminar este plato?"
+              nombre={platoDeleteWarning.nombre}
+              textoPeligro={tieneRefs
+                ? 'Si continuás, el plato y esas vinculaciones se eliminarán automáticamente. Esta acción no se puede deshacer.'
+                : 'Esta acción no se puede deshacer.'}
+              onConfirm={platoDeleteWarning.onConfirm}
               onClose={() => setPlatoDeleteWarning(null)}
-              title="¿Eliminar este plato?"
-              maxWidth={460}
             >
-              <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '12px' }}>
-                {platoDeleteWarning.nombre || '(sin nombre)'}
-              </div>
-
               {textoVinc && (
                 <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '10px' }}>
                   Vinculado a {textoVinc}.
@@ -1361,34 +1365,7 @@ export default function MiMenuPage() {
                   Es tu Plato Ganador actual — el destacado quedará vacío.
                 </div>
               )}
-
-              <div style={{ fontSize: '12px', color: 'var(--color-danger)', marginBottom: '16px' }}>
-                {tieneRefs
-                  ? 'Si continuás, el plato y esas vinculaciones se eliminarán automáticamente. Esta acción no se puede deshacer.'
-                  : 'Esta acción no se puede deshacer.'}
-              </div>
-
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <Boton
-                  variante="peligro"
-                  onClick={() => {
-                    const cb = platoDeleteWarning.onConfirm
-                    setPlatoDeleteWarning(null)
-                    cb()
-                  }}
-                  style={{ flex: 1 }}
-                >
-                  Sí, eliminar
-                </Boton>
-                <Boton
-                  variante="secundario"
-                  onClick={() => setPlatoDeleteWarning(null)}
-                  style={{ flex: 1 }}
-                >
-                  Cancelar
-                </Boton>
-              </div>
-            </Modal>
+            </ConfirmarEliminar>
           )
         })()}
 
@@ -1400,16 +1377,15 @@ export default function MiMenuPage() {
             { n: promosCount, sing: 'promo', plur: 'promos' },
           ])
           return (
-            <Modal
-              isOpen={!!categoriaDeleteWarning}
+            <ConfirmarEliminar
+              titulo="¿Estás seguro de eliminar esta categoría?"
+              nombre={categoriaDeleteWarning.nombre}
+              textoPeligro={tieneRefs
+                ? 'Si continuás, la categoría, sus platos y esas vinculaciones se eliminarán automáticamente. Esta acción no se puede deshacer.'
+                : 'Esta acción no se puede deshacer.'}
+              onConfirm={categoriaDeleteWarning.onConfirm}
               onClose={() => setCategoriaDeleteWarning(null)}
-              title="¿Estás seguro de eliminar esta categoría?"
-              maxWidth={460}
             >
-              <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '12px' }}>
-                {categoriaDeleteWarning.nombre || '(sin nombre)'}
-              </div>
-
               {platosCount > 0 && (
                 <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '10px' }}>
                   Se eliminarán {platosCount} {platosCount === 1 ? 'plato' : 'platos'}.
@@ -1432,36 +1408,29 @@ export default function MiMenuPage() {
                   Es tu Plato Ganador actual — el destacado quedará vacío.
                 </div>
               )}
-
-              <div style={{ fontSize: '12px', color: 'var(--color-danger)', marginBottom: '16px' }}>
-                {tieneRefs
-                  ? 'Si continuás, la categoría, sus platos y esas vinculaciones se eliminarán automáticamente. Esta acción no se puede deshacer.'
-                  : 'Esta acción no se puede deshacer.'}
-              </div>
-
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <Boton
-                  variante="peligro"
-                  onClick={() => {
-                    const cb = categoriaDeleteWarning.onConfirm
-                    setCategoriaDeleteWarning(null)
-                    cb()
-                  }}
-                  style={{ flex: 1 }}
-                >
-                  Sí, eliminar
-                </Boton>
-                <Boton
-                  variante="secundario"
-                  onClick={() => setCategoriaDeleteWarning(null)}
-                  style={{ flex: 1 }}
-                >
-                  Cancelar
-                </Boton>
-              </div>
-            </Modal>
+            </ConfirmarEliminar>
           )
         })()}
+
+        {/* Confirmacion de borrado de COMBO (CONFIRM-BEFORE-DELETE) */}
+        {comboDeleteWarning && (
+          <ConfirmarEliminar
+            titulo="¿Eliminar este combo?"
+            nombre={comboDeleteWarning.nombre}
+            onConfirm={() => eliminarCombo(comboDeleteWarning.id)}
+            onClose={() => setComboDeleteWarning(null)}
+          />
+        )}
+
+        {/* Confirmacion de borrado de PROMO (CONFIRM-BEFORE-DELETE) */}
+        {promoDeleteWarning && (
+          <ConfirmarEliminar
+            titulo="¿Eliminar esta promo?"
+            nombre={promoDeleteWarning.nombre}
+            onConfirm={() => eliminarPromo(promoDeleteWarning.id)}
+            onClose={() => setPromoDeleteWarning(null)}
+          />
+        )}
 
         {/* Modal recorte de imagen */}
         {cropModal && (
