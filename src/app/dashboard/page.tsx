@@ -1,7 +1,8 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Lock, ChevronDown } from 'lucide-react'
+import { Lock, ChevronDown, Eye, Utensils, MessageCircle, Star, Filter, BarChart2, CalendarDays, TrendingUp, TrendingDown, EyeOff, Download } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import Icono from '@/components/ui/Icono'
 import Boton from '@/components/ui/Boton'
 import { useRouter } from 'next/navigation'
@@ -38,6 +39,63 @@ function etiquetaAntiguedad(diasCreado: number): string {
   if (diasCreado < 30) return `hace ${diasCreado} días`
   if (diasCreado < 60) return 'hace 1 mes'
   return `hace ${Math.floor(diasCreado / 30)} meses`
+}
+
+// ── Piezas visuales del restyle (DASHBOARD-VISUAL, mockups del fundador) ──
+// EncabezadoSeccion: patron uniforme de encabezado de widget — icono en burbuja
+// naranja suave (--color-accent-light; neutra en cards bloqueadas), titulo +
+// subtitulo, y slot derecho: pill neutra de contexto (periodo, top N, dia x
+// hora) o un nodo custom (candado, badge Pro). Solo presentacion — cero datos.
+function EncabezadoSeccion({ icono, titulo, subtitulo, pill, derecha, neutro, style }: {
+  icono: LucideIcon
+  titulo: string
+  subtitulo?: string
+  pill?: string
+  derecha?: React.ReactNode
+  neutro?: boolean
+  style?: React.CSSProperties
+}) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px', ...style }}>
+      <div style={{
+        width: '30px', height: '30px', borderRadius: 'var(--radius-sm)', flexShrink: 0,
+        background: neutro ? 'var(--bg-tertiary)' : 'var(--color-accent-light)',
+        color: neutro ? 'var(--text-tertiary)' : 'var(--color-accent)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        <Icono icono={icono} size={16} />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: '13px', fontWeight: 500 }}>{titulo}</div>
+        {subtitulo && <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '1px', lineHeight: 1.4 }}>{subtitulo}</div>}
+      </div>
+      {pill && (
+        <span style={{ fontSize: '10px', color: 'var(--text-secondary)', background: 'var(--bg-tertiary)', padding: '2px 8px', borderRadius: 'var(--radius-full)', whiteSpace: 'nowrap', flexShrink: 0 }}>
+          {pill}
+        </span>
+      )}
+      {derecha}
+    </div>
+  )
+}
+
+// Sparkline minimalista (linea naranja fina, sin ejes): tendencia con los dias
+// PASADOS del periodo. Devuelve null con menos de 2 puntos (periodo 'hoy').
+// Solo la tarjeta de Visitas tiene serie por dia en los hooks (visitasDia);
+// platos vistos y pedidos quedan sin sparkline hasta ampliar el fetch (BL.35).
+function Sparkline({ valores }: { valores: number[] }) {
+  if (valores.length < 2) return null
+  const max = Math.max(...valores, 1)
+  const puntos = valores
+    .map((v, i) => `${(i / (valores.length - 1)) * 100},${22 - (v / max) * 18}`)
+    .join(' ')
+  return (
+    <svg viewBox="0 0 100 24" preserveAspectRatio="none" aria-hidden="true"
+      style={{ width: '100%', height: '24px', display: 'block', marginTop: '8px' }}>
+      <polyline points={puntos} fill="none" stroke="var(--color-accent)" strokeWidth="1.5"
+        vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
 }
 
 export default function DashboardPage() {
@@ -1440,28 +1498,38 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Números grandes */}
+        {/* Números grandes — restyle DASHBOARD-VISUAL: burbuja de icono +
+            badge de variacion + numero grande + sparkline (solo Visitas:
+            unica serie por dia disponible en los hooks; ver Sparkline). */}
         <div style={{ padding: '0 20px', marginBottom: '14px' }}>
           <div style={{ display: 'flex', gap: '10px' }}>
             <div className="card" style={{ flex: 1, padding: '14px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '6px' }}>
-                <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Visitas al menú</div>
+                <div style={{ width: '28px', height: '28px', borderRadius: 'var(--radius-sm)', background: 'var(--color-accent-light)', color: 'var(--color-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Icono icono={Eye} size={15} />
+                </div>
                 <BadgeVariacion variacion={varEscaneos} />
               </div>
-              <div style={{ fontSize: '26px', fontWeight: 500, marginTop: '4px' }}>{stats.escaneos}</div>
+              <div style={{ fontSize: '26px', fontWeight: 500, marginTop: '8px' }}>{stats.escaneos}</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Visitas al menú</div>
               <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '2px' }}>
                 vs {statsAnterior.escaneos} {labelAnterior}
               </div>
+              <Sparkline valores={escaneosPorDia.filter((d: any) => !d.esFuturo).map((d: any) => d.actual)} />
             </div>
             <div className="card" style={{ flex: 1, padding: '14px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '6px' }}>
-                <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Platos vistos</div>
+                <div style={{ width: '28px', height: '28px', borderRadius: 'var(--radius-sm)', background: 'var(--color-accent-light)', color: 'var(--color-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Icono icono={Utensils} size={15} />
+                </div>
                 <BadgeVariacion variacion={varVisitas} />
               </div>
-              <div style={{ fontSize: '26px', fontWeight: 500, marginTop: '4px' }}>{stats.visitas}</div>
+              <div style={{ fontSize: '26px', fontWeight: 500, marginTop: '8px' }}>{stats.visitas}</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Platos vistos</div>
               <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '2px' }}>
                 vs {statsAnterior.visitas} {labelAnterior}
               </div>
+              {/* Sparkline diferido a BL.35: vistas_platos (#5) no trae fecha. */}
             </div>
           </div>
         </div>
@@ -1481,20 +1549,27 @@ export default function DashboardPage() {
             <div style={{ display: 'flex', gap: '10px' }}>
               <div className="card" style={{ flex: 1, padding: '14px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '6px' }}>
-                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Pedidos WhatsApp</div>
+                  <div style={{ width: '28px', height: '28px', borderRadius: 'var(--radius-sm)', background: 'var(--color-accent-light)', color: 'var(--color-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Icono icono={MessageCircle} size={15} />
+                  </div>
                   <BadgeVariacion variacion={varPedidos} />
                 </div>
-                <div style={{ fontSize: '26px', fontWeight: 500, marginTop: '4px' }}>{stats.pedidosWhatsapp}</div>
+                <div style={{ fontSize: '26px', fontWeight: 500, marginTop: '8px' }}>{stats.pedidosWhatsapp}</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Pedidos WhatsApp</div>
                 <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '2px' }}>
                   vs {statsAnterior.pedidosWhatsapp} {labelAnterior}
                 </div>
+                {/* Sparkline diferido a BL.35: pedidos_whatsapp (#2) es head-count sin filas. */}
               </div>
               <div className="card" style={{ flex: 1, padding: '14px' }}>
-                <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Calificación promedio</div>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px', marginTop: '4px' }}>
+                <div style={{ width: '28px', height: '28px', borderRadius: 'var(--radius-sm)', background: 'var(--color-accent-light)', color: 'var(--color-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Icono icono={Star} size={15} />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px', marginTop: '8px' }}>
                   <div style={{ fontSize: '26px', fontWeight: 500 }}>{stats.calificacion}</div>
                   <div style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>/5</div>
                 </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Calificación promedio</div>
                 <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '2px' }}>histórico · {stats.totalResenas} reseñas</div>
               </div>
             </div>
@@ -1502,14 +1577,18 @@ export default function DashboardPage() {
         ) : (
           <div style={{ padding: '0 20px', marginBottom: '10px' }}>
             <div style={{ display: 'flex', gap: '10px' }}>
-              <div className="card" style={{ flex: 1, padding: '16px', textAlign: 'center', opacity: 0.5 }}>
-                <div style={{ marginBottom: '4px', color: 'var(--text-tertiary)' }}><Icono icono={Lock} size={20} /></div>
-                <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Pedidos WhatsApp</div>
+              <div className="card" style={{ flex: 1, padding: '14px', opacity: 0.5 }}>
+                <div style={{ width: '28px', height: '28px', borderRadius: 'var(--radius-sm)', background: 'var(--bg-tertiary)', color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Icono icono={Lock} size={15} />
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '8px' }}>Pedidos WhatsApp</div>
                 <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '2px' }}>Plan Pro</div>
               </div>
-              <div className="card" style={{ flex: 1, padding: '16px', textAlign: 'center', opacity: 0.5 }}>
-                <div style={{ marginBottom: '4px', color: 'var(--text-tertiary)' }}><Icono icono={Lock} size={20} /></div>
-                <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Calificación promedio</div>
+              <div className="card" style={{ flex: 1, padding: '14px', opacity: 0.5 }}>
+                <div style={{ width: '28px', height: '28px', borderRadius: 'var(--radius-sm)', background: 'var(--bg-tertiary)', color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Icono icono={Lock} size={15} />
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '8px' }}>Calificación promedio</div>
                 <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '2px' }}>Plan Pro</div>
               </div>
             </div>
@@ -1520,17 +1599,12 @@ export default function DashboardPage() {
         {esPro ? (
           <div style={{ padding: '0 20px', marginBottom: '14px' }}>
             <div className="card" style={{ padding: '16px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '4px' }}>
-                <div style={{ fontSize: '13px', fontWeight: 500 }}>Embudo de conversión</div>
-                {embudoData.visitasMenu > 0 && (
-                  <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
-                    {embudoData.conversionFinal}% final
-                  </div>
-                )}
-              </div>
-              <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginBottom: '16px', lineHeight: 1.4 }}>
-                Cuenta sesiones únicas (una visita = una sesión), no pedidos totales
-              </div>
+              <EncabezadoSeccion
+                icono={Filter}
+                titulo="Embudo de conversión"
+                subtitulo="Cuenta sesiones únicas (una visita = una sesión), no pedidos totales"
+                pill={embudoData.visitasMenu > 0 ? `${embudoData.conversionFinal}% final` : undefined}
+              />
 
               {/* Etapa 1: Abrieron el menú (sesiones) */}
               <div style={{ marginBottom: '8px' }}>
@@ -1538,7 +1612,9 @@ export default function DashboardPage() {
                   <span style={{ fontSize: '13px' }}>Sesiones que abrieron el menú</span>
                   <span style={{ fontSize: '13px', fontWeight: 500 }}>{embudoData.visitasMenu}</span>
                 </div>
-                <div style={{ height: '6px', background: 'var(--color-info)', borderRadius: '3px' }} />
+                <div style={{ height: '6px', background: 'var(--bg-tertiary)', borderRadius: '3px', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: '100%', background: 'var(--color-accent)', borderRadius: '3px' }} />
+                </div>
               </div>
 
               {/* Paso menú → pedido */}
@@ -1558,7 +1634,7 @@ export default function DashboardPage() {
                   <span style={{ fontSize: '13px', fontWeight: 500 }}>{embudoData.pidieron}</span>
                 </div>
                 <div style={{ height: '6px', background: 'var(--bg-tertiary)', borderRadius: '3px', overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${embudoData.conversionFinal}%`, background: 'var(--color-green)', borderRadius: '3px', transition: 'width 0.4s' }} />
+                  <div style={{ height: '100%', width: `${embudoData.conversionFinal}%`, background: 'var(--color-accent)', borderRadius: '3px', transition: 'width 0.4s' }} />
                 </div>
               </div>
 
@@ -1589,7 +1665,7 @@ export default function DashboardPage() {
               {embudoData.diagnostico.tipo !== 'sin_datos' && (
                 <div style={{
                   background: embudoData.diagnostico.tipo === 'excelente' ? 'var(--color-success-light)'
-                    : embudoData.diagnostico.tipo === 'bueno' ? 'var(--color-info-light)'
+                    : embudoData.diagnostico.tipo === 'bueno' ? 'var(--color-success-light)'
                     : embudoData.diagnostico.tipo === 'regular' ? 'var(--color-warning-light)'
                     : 'var(--color-danger-light)',
                   borderRadius: 'var(--radius-md)',
@@ -1601,7 +1677,7 @@ export default function DashboardPage() {
                     fontWeight: 500,
                     marginBottom: '3px',
                     color: embudoData.diagnostico.tipo === 'excelente' ? 'var(--color-success)'
-                      : embudoData.diagnostico.tipo === 'bueno' ? 'var(--color-info)'
+                      : embudoData.diagnostico.tipo === 'bueno' ? 'var(--color-success)'
                       : embudoData.diagnostico.tipo === 'regular' ? 'var(--color-warning)'
                       : 'var(--color-danger)',
                   }}>
@@ -1614,7 +1690,7 @@ export default function DashboardPage() {
                     fontSize: '11px',
                     lineHeight: 1.4,
                     color: embudoData.diagnostico.tipo === 'excelente' ? 'var(--color-success)'
-                      : embudoData.diagnostico.tipo === 'bueno' ? 'var(--color-info)'
+                      : embudoData.diagnostico.tipo === 'bueno' ? 'var(--color-success)'
                       : embudoData.diagnostico.tipo === 'regular' ? 'var(--color-warning)'
                       : 'var(--color-danger)',
                     opacity: 0.85,
@@ -1658,10 +1734,15 @@ export default function DashboardPage() {
           </div>
         ) : !esBasico ? (
           <div style={{ padding: '0 20px', marginBottom: '10px' }}>
-            <div className="card" style={{ padding: '20px', textAlign: 'center', opacity: 0.5 }}>
-              <div style={{ marginBottom: '6px', color: 'var(--text-tertiary)' }}><Icono icono={Lock} size={30} /></div>
-              <div style={{ fontSize: '13px', fontWeight: 500 }}>Embudo de conversión</div>
-              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>Disponible en Plan Pro</div>
+            <div className="card" style={{ padding: '16px', opacity: 0.5 }}>
+              <EncabezadoSeccion
+                icono={Filter}
+                titulo="Embudo de conversión"
+                subtitulo="Disponible en Plan Pro"
+                neutro
+                derecha={<span style={{ color: 'var(--text-tertiary)', lineHeight: 0 }}><Icono icono={Lock} size={18} /></span>}
+                style={{ marginBottom: 0 }}
+              />
             </div>
           </div>
         ) : null}
@@ -1686,14 +1767,14 @@ export default function DashboardPage() {
           return (
             <div style={{ padding: '0 20px', marginBottom: '14px' }}>
               <div className="card" style={{ padding: '16px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '4px' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 500 }}>Actividad por día</div>
-                </div>
-                <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginBottom: '14px' }}>
-                  {esMesChart
+                <EncabezadoSeccion
+                  icono={BarChart2}
+                  titulo="Actividad por día"
+                  subtitulo={esMesChart
                     ? `${contextoTemporal.rango} · días 1–${escaneosPorDia[escaneosPorDia.length - 1]?.numero ?? ''}`
                     : contextoTemporal.rango}
-                </div>
+                  pill={esMesChart ? 'Este mes' : 'Esta semana'}
+                />
 
                 {/* Gráfica */}
                 <div style={{ display: 'flex', alignItems: 'end', gap: gapChart, height: '90px', marginBottom: '6px', position: 'relative' }}>
@@ -1718,16 +1799,16 @@ export default function DashboardPage() {
                       : esMejor
                       ? 'var(--color-green)'
                       : d.esHoy
-                      ? 'var(--color-info)'
+                      ? 'var(--color-accent)'
                       : d.actual > 0
-                      ? 'var(--color-info)'
+                      ? 'var(--color-accent)'
                       : 'var(--bg-tertiary)'
 
                     return (
                       <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', position: 'relative', zIndex: 2 }}>
                         <span style={{
                           fontSize: '10px',
-                          color: esMejor ? 'var(--color-green)' : d.esFuturo ? 'var(--text-tertiary)' : d.actual > 0 ? 'var(--color-info)' : 'var(--text-tertiary)',
+                          color: esMejor ? 'var(--color-green)' : d.esFuturo ? 'var(--text-tertiary)' : d.actual > 0 ? 'var(--color-accent)' : 'var(--text-tertiary)',
                           fontWeight: esMejor ? 500 : 400,
                           opacity: d.esFuturo ? 0.4 : 1,
                         }}>
@@ -1760,7 +1841,7 @@ export default function DashboardPage() {
                         flex: 1,
                         minWidth: 0,
                         textAlign: 'center',
-                        color: d.esHoy ? 'var(--color-info)' : d.esFuturo ? 'var(--text-tertiary)' : 'var(--text-secondary)',
+                        color: d.esHoy ? 'var(--color-accent)' : d.esFuturo ? 'var(--text-tertiary)' : 'var(--text-secondary)',
                         fontWeight: d.esHoy ? 500 : 400,
                         opacity: d.esFuturo ? 0.5 : 1,
                         lineHeight: 1.3,
@@ -1804,12 +1885,12 @@ export default function DashboardPage() {
                 {/* Estado vacío */}
                 {totalVisitasSemana === 0 && (
                   <div style={{
-                    background: 'var(--color-info-light)',
+                    background: 'var(--bg-tertiary)',
                     borderRadius: 'var(--radius-md)',
                     padding: '10px 12px',
                     marginTop: '14px',
                     fontSize: '11px',
-                    color: 'var(--color-info)',
+                    color: 'var(--text-secondary)',
                   }}>
                     Sin visitas esta semana. Comparte tu QR para empezar a recibir tráfico.
                   </div>
@@ -1855,13 +1936,13 @@ export default function DashboardPage() {
           return (
             <div style={{ padding: '0 20px', marginBottom: '14px' }}>
               <div className="card" style={{ padding: '16px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '4px' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 500 }}>Patrón de visitas</div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>día × hora</div>
-                </div>
-                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '3px' }}>
-                  Número de visitas recibidas en cada franja horaria
-                </div>
+                <EncabezadoSeccion
+                  icono={CalendarDays}
+                  titulo="Patrón de visitas"
+                  subtitulo="Número de visitas recibidas en cada franja horaria"
+                  pill="día × hora"
+                  style={{ marginBottom: '4px' }}
+                />
                 <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginBottom: '14px' }}>
                   {contextoTemporal.rango}
                 </div>
@@ -1878,7 +1959,7 @@ export default function DashboardPage() {
                   {diasLabels.map((d: string, i: number) => (
                     <div key={i} style={{
                       textAlign: 'center',
-                      color: i === diaMatrizHoy ? 'var(--color-info)' : 'var(--text-secondary)',
+                      color: i === diaMatrizHoy ? 'var(--color-accent)' : 'var(--text-secondary)',
                       fontWeight: i === diaMatrizHoy ? 500 : 400,
                       paddingBottom: '4px',
                     }}>
@@ -1912,9 +1993,9 @@ export default function DashboardPage() {
                               aspectRatio: '1',
                               background: color.bg,
                               opacity: color.opacity,
-                              borderRadius: '3px',
+                              borderRadius: '6px',
                               position: 'relative',
-                              border: esPicoCelda ? '1.5px solid var(--color-accent, #E85D24)' : 'none',
+                              border: esPicoCelda ? '1.5px solid var(--color-accent)' : 'none',
                               boxShadow: esPicoCelda ? '0 0 0 1px white' : 'none',
                               display: 'flex',
                               alignItems: 'center',
@@ -1942,12 +2023,12 @@ export default function DashboardPage() {
                   fontSize: '9px',
                   color: 'var(--text-tertiary)',
                 }}>
-                  <span>menos</span>
-                  <div style={{ width: '14px', height: '10px', background: '#FBF7F0', border: '0.5px solid var(--border-light)', borderRadius: '1px' }} />
+                  <span>Menos visitas</span>
+                  <div style={{ width: '14px', height: '10px', background: '#FBF7F0', border: '0.5px solid var(--border-light)', borderRadius: '2px' }} />
                   {[...NIVELES_HEATMAP].reverse().map((nivel) => (
-                    <div key={nivel.bg} style={{ width: '14px', height: '10px', background: nivel.bg, borderRadius: '1px' }} />
+                    <div key={nivel.bg} style={{ width: '14px', height: '10px', background: nivel.bg, borderRadius: '2px' }} />
                   ))}
-                  <span>más</span>
+                  <span>Más visitas</span>
                 </div>
 
                 {/* Cómo leer el heatmap */}
@@ -2022,7 +2103,12 @@ export default function DashboardPage() {
         {esPro && filtroTiempo !== 'hoy' && heatmapData && !heatmapData.hayDatosSuficientes && (
           <div style={{ padding: '0 20px', marginBottom: '14px' }}>
             <div className="card" style={{ padding: '16px' }}>
-              <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '6px' }}>Patrón de visitas</div>
+              <EncabezadoSeccion
+                icono={CalendarDays}
+                titulo="Patrón de visitas"
+                pill="día × hora"
+                style={{ marginBottom: '6px' }}
+              />
               <div style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
                 Necesitas al menos 20 visitas en el periodo para ver el mapa de calor día × hora.
                 Llevas {heatmapData.totalVisitas}. Comparte más tu QR para desbloquearlo.
@@ -2035,22 +2121,25 @@ export default function DashboardPage() {
         {esBasico && !esPro && filtroTiempo !== 'hoy' && (
           <div style={{ padding: '0 20px', marginBottom: '14px' }}>
             <div className="card" style={{ padding: '16px', position: 'relative', overflow: 'hidden' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '4px' }}>
-                <div style={{ fontSize: '13px', fontWeight: 500 }}>Patrón de visitas</div>
-                <div style={{
-                  fontSize: '10px',
-                  fontWeight: 500,
-                  padding: '2px 8px',
-                  borderRadius: '4px',
-                  background: 'var(--color-warning-light)',
-                  color: 'var(--color-warning)',
-                }}>
-                  Plan Pro
-                </div>
-              </div>
-              <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginBottom: '14px' }}>
-                Descubre tus días y horas de mayor tráfico
-              </div>
+              <EncabezadoSeccion
+                icono={CalendarDays}
+                titulo="Patrón de visitas"
+                subtitulo="Descubre tus días y horas de mayor tráfico"
+                neutro
+                derecha={
+                  <div style={{
+                    fontSize: '10px',
+                    fontWeight: 500,
+                    padding: '2px 8px',
+                    borderRadius: 'var(--radius-full)',
+                    background: 'var(--color-warning-light)',
+                    color: 'var(--color-warning)',
+                    flexShrink: 0,
+                  }}>
+                    Plan Pro
+                  </div>
+                }
+              />
 
               {/* Mini-preview del heatmap con datos de ejemplo (blureado) */}
               <div style={{
@@ -2089,7 +2178,7 @@ export default function DashboardPage() {
                           aspectRatio: '1',
                           background: bg,
                           opacity: v === 0 ? 0.3 : 1,
-                          borderRadius: '3px',
+                          borderRadius: '6px',
                         }} />
                       )
                     })}
@@ -2132,20 +2221,17 @@ export default function DashboardPage() {
           platosMasVistos.length > 0 ? (
             <div style={{ padding: '0 20px', marginBottom: '14px' }}>
               <div className="card" style={{ padding: '16px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '4px' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 500 }}>Platos más vistos</div>
-                  <div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>
-                    top {platosMasVistos.length}
-                  </div>
-                </div>
-                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '14px' }}>
-                  Los que están generando más interés en tu menú
-                </div>
+                <EncabezadoSeccion
+                  icono={TrendingUp}
+                  titulo="Platos más vistos"
+                  subtitulo="Los que están generando más interés en tu menú"
+                  pill={`top ${platosMasVistos.length}`}
+                />
                 {platosMasVistos.map((p: any, i: number) => (
                   <div key={i} style={{ marginBottom: i < platosMasVistos.length - 1 ? '10px' : 0 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', marginBottom: '4px' }}>
                       <span style={{ fontWeight: i === 0 ? 500 : 400 }}>{p.nombre}</span>
-                      <span style={{ color: 'var(--color-info)', fontSize: '11px' }}>
+                      <span style={{ color: 'var(--color-accent)', fontSize: '11px' }}>
                         {p.vistas} {p.vistas === 1 ? 'vista' : 'vistas'}
                       </span>
                     </div>
@@ -2153,7 +2239,7 @@ export default function DashboardPage() {
                       <div style={{
                         height: '100%',
                         width: `${(p.vistas / platosMasVistos[0].vistas) * 100}%`,
-                        background: 'var(--color-info)',
+                        background: 'var(--color-accent)',
                         borderRadius: '3px',
                         opacity: 1 - i * 0.15,
                         transition: 'width 0.3s',
@@ -2165,7 +2251,12 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div style={{ padding: '0 20px', marginBottom: '14px' }}>
-              <div className="card" style={{ padding: '20px', textAlign: 'center' }}>
+              <div className="card" style={{ padding: '16px' }}>
+                <EncabezadoSeccion
+                  icono={TrendingUp}
+                  titulo="Platos más vistos"
+                  style={{ marginBottom: '10px' }}
+                />
                 <div style={{ fontSize: '13px', color: 'var(--text-tertiary)' }}>
                   Aún no hay vistas a platos en este periodo
                 </div>
@@ -2177,10 +2268,15 @@ export default function DashboardPage() {
           )
         ) : (
           <div style={{ padding: '0 20px', marginBottom: '10px' }}>
-            <div className="card" style={{ padding: '20px', textAlign: 'center', opacity: 0.5 }}>
-              <div style={{ marginBottom: '6px', color: 'var(--text-tertiary)' }}><Icono icono={Lock} size={30} /></div>
-              <div style={{ fontSize: '13px', fontWeight: 500 }}>Platos más vistos</div>
-              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>Disponible en Plan Básico</div>
+            <div className="card" style={{ padding: '16px', opacity: 0.5 }}>
+              <EncabezadoSeccion
+                icono={TrendingUp}
+                titulo="Platos más vistos"
+                subtitulo="Disponible en Plan Básico"
+                neutro
+                derecha={<span style={{ color: 'var(--text-tertiary)', lineHeight: 0 }}><Icono icono={Lock} size={18} /></span>}
+                style={{ marginBottom: 0 }}
+              />
             </div>
           </div>
         )}
@@ -2189,15 +2285,12 @@ export default function DashboardPage() {
         {esBasico && platosInteresBajo.length > 0 && (
           <div style={{ padding: '0 20px', marginBottom: '14px' }}>
             <div className="card" style={{ padding: '16px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '4px' }}>
-                <div style={{ fontSize: '13px', fontWeight: 500 }}>Con interés bajo</div>
-                <div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>
-                  últimos del ranking
-                </div>
-              </div>
-              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '14px', lineHeight: 1.5 }}>
-                Reciben visitas pero pocos los exploran. Revisa foto, descripción o precio.
-              </div>
+              <EncabezadoSeccion
+                icono={TrendingDown}
+                titulo="Con interés bajo"
+                subtitulo="Reciben visitas pero pocos los exploran. Revisa foto, descripción o precio."
+                pill="últimos del ranking"
+              />
               {platosInteresBajo.map((p: any, i: number) => (
                 <div key={i} style={{ marginBottom: i < platosInteresBajo.length - 1 ? '10px' : 0 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', marginBottom: '4px' }}>
@@ -2226,17 +2319,12 @@ export default function DashboardPage() {
         {esBasico && platosSinVistas.length > 0 && (
           <div style={{ padding: '0 20px', marginBottom: '14px' }}>
             <div className="card" style={{ padding: '16px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '4px' }}>
-                <div style={{ fontSize: '13px', fontWeight: 500 }}>
-                  Sin vistas {filtroTiempo === 'hoy' ? 'hoy' : filtroTiempo === 'semana' ? 'esta semana' : 'este mes'}
-                </div>
-                <div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>
-                  {platosSinVistas.length} {platosSinVistas.length === 1 ? 'plato' : 'platos'}
-                </div>
-              </div>
-              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '14px', lineHeight: 1.5 }}>
-                Estos platos no recibieron vistas en el periodo. Revisa si están activos y considera promocionarlos.
-              </div>
+              <EncabezadoSeccion
+                icono={EyeOff}
+                titulo={`Sin vistas ${filtroTiempo === 'hoy' ? 'hoy' : filtroTiempo === 'semana' ? 'esta semana' : 'este mes'}`}
+                subtitulo="Estos platos no recibieron vistas en el periodo. Revisa si están activos y considera promocionarlos."
+                pill={`${platosSinVistas.length} ${platosSinVistas.length === 1 ? 'plato' : 'platos'}`}
+              />
               {platosSinVistas.map((p: any, i: number) => (
                 <div key={i} style={{
                   padding: '10px 12px',
@@ -2263,8 +2351,12 @@ export default function DashboardPage() {
         {esPro && resenas.length > 0 && (
           <div style={{ padding: '0 20px', marginBottom: '14px' }}>
             <div className="card" style={{ padding: '14px' }}>
-              <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '2px' }}>Últimas reseñas</div>
-              <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginBottom: '12px' }}>de todo el historial</div>
+              <EncabezadoSeccion
+                icono={Star}
+                titulo="Últimas reseñas"
+                subtitulo="de todo el historial"
+                style={{ marginBottom: '12px' }}
+              />
               {resenas.map((r: any, i: number) => (
                 <div key={i} style={{ padding: '10px 0', borderBottom: i < resenas.length - 1 ? '1px solid var(--border-light)' : 'none' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
@@ -2291,7 +2383,7 @@ export default function DashboardPage() {
                 <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--bg-secondary)' }}>Descargar reporte</div>
                 <div style={{ fontSize: '11px', color: 'var(--bg-secondary)', opacity: 0.6, marginTop: '2px' }}>PDF · {filtroTiempo === 'hoy' ? 'Hoy' : filtroTiempo === 'semana' ? 'Esta semana' : 'Este mes'}</div>
               </div>
-              <span style={{ fontSize: '16px', color: 'var(--bg-secondary)' }}>↓</span>
+              <span style={{ color: 'var(--bg-secondary)', lineHeight: 0 }}><Icono icono={Download} size={18} /></span>
             </div>
           </div>
         )}
