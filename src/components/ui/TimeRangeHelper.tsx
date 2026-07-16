@@ -1,5 +1,7 @@
 'use client'
 
+import { TriangleAlert } from 'lucide-react'
+import Icono from '@/components/ui/Icono'
 import { formato12h } from '@/lib/time'
 
 interface TimeRangeHelperProps {
@@ -23,7 +25,7 @@ export default function TimeRangeHelper({ start, end, verb = 'Visible' }: TimeRa
   if (s === e) {
     return (
       <div style={{ ...baseStyle, color: 'var(--color-warning)' }}>
-        ⚠️ La hora de inicio y fin son iguales — esta franja no será visible
+        <Icono icono={TriangleAlert} size={12} style={{ verticalAlign: '-2px' }} /> La hora de inicio y fin son iguales — esta franja no será visible
       </div>
     )
   }

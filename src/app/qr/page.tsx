@@ -1,6 +1,10 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+// lucide no trae iconos de marca (Instagram/Facebook): Camera y ThumbsUp son
+// las metaforas mas cercanas; el label textual debajo desambigua.
+import { Check, MessageCircle, Camera, ThumbsUp, ExternalLink } from 'lucide-react'
+import Icono from '@/components/ui/Icono'
 import Boton from '@/components/ui/Boton'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks'
@@ -179,7 +183,7 @@ export default function MiQRPage() {
                 fontSize: '13px', fontWeight: 500, transition: 'all 0.2s',
               }}
             >
-              {copiado ? '✓ Enlace copiado' : 'Copiar enlace'}
+              {copiado ? <><Icono icono={Check} size={14} /> Enlace copiado</> : 'Copiar enlace'}
             </div>
           </div>
         </div>
@@ -332,15 +336,15 @@ export default function MiQRPage() {
             <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '10px' }}>Compartir por</div>
             <div style={{ display: 'flex', gap: '10px', marginBottom: '14px' }}>
               {[
-                { icon: '💬', label: 'WhatsApp' },
-                { icon: '📷', label: 'Instagram' },
-                { icon: '📘', label: 'Facebook' },
-                { icon: '↗', label: 'Otro' },
+                { icono: MessageCircle, label: 'WhatsApp' },
+                { icono: Camera, label: 'Instagram' },
+                { icono: ThumbsUp, label: 'Facebook' },
+                { icono: ExternalLink, label: 'Otro' },
               ].map((red, i) => (
                 <div key={i} onClick={() => compartirEnlace(red.label)} className="card" style={{
                   flex: 1, padding: '14px', textAlign: 'center', cursor: 'pointer',
                 }}>
-                  <div style={{ fontSize: '20px', marginBottom: '4px' }}>{red.icon}</div>
+                  <div style={{ marginBottom: '4px', color: 'var(--text-secondary)' }}><Icono icono={red.icono} size={24} /></div>
                   <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{red.label}</div>
                 </div>
               ))}

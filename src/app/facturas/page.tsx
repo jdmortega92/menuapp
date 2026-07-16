@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect } from 'react'
+import { FileText } from 'lucide-react'
+import Icono from '@/components/ui/Icono'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks'
 import { useFacturas } from '@/hooks/data/useFacturas'
@@ -62,7 +64,7 @@ export default function FacturasPage() {
         <div style={{ padding: '0 20px' }}>
           {lista.length === 0 ? (
             <div style={{ padding: '60px 0', textAlign: 'center' }}>
-              <div style={{ fontSize: '32px', marginBottom: '8px' }}>📄</div>
+              <div style={{ marginBottom: '8px', color: 'var(--text-tertiary)' }}><Icono icono={FileText} size={40} /></div>
               <div style={{ fontSize: '14px', fontWeight: 500, marginBottom: '4px' }}>Aún no tienes pagos registrados</div>
               <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
                 Cuando pagues un plan, tus facturas aparecerán aquí.

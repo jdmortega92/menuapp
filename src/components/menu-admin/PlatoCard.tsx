@@ -63,9 +63,11 @@ function PlatoCard({
         ) : plato.nombre.charAt(0)}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
-          <div style={{ fontSize: '13px', fontWeight: 500, opacity: plato.disponible ? 1 : 0.5 }}>{plato.nombre}</div>
-          <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+        {/* Guardas de compresion: las acciones nunca se encogen; el nombre
+            (texto del usuario) trunca con ellipsis. */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: '6px' }}>
+          <div style={{ fontSize: '13px', fontWeight: 500, opacity: plato.disponible ? 1 : 0.5, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{plato.nombre}</div>
+          <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexShrink: 0 }}>
             {/* Flechas mover plato */}
             <button type="button" aria-label="Subir plato" className="tap-target-44 accion-icono"
               onClick={(e) => { e.stopPropagation(); onMoverPlato(categoriaId, plato.id, 'arriba') }}

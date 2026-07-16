@@ -13,6 +13,10 @@ import type { ButtonHTMLAttributes, CSSProperties } from 'react'
 //              marca como excepcion consciente (accion de estado / de
 //              crecimiento del menu); hoy no queda consumidor de neutro, el
 //              mecanismo se conserva para futuras acciones por fila.
+//              tono='tonal' (solo terciario): fondo naranja suave
+//              (--color-accent-light, ningun hex nuevo) + texto naranja —
+//              accion constructiva con presencia sin el peso de un primario
+//              (+ Plato, sweep 2 2026-07). Hover: mismo fondo, brightness.
 // peligro    = destructivo IRREVERSIBLE (relleno danger; "Si, eliminar")
 // oscuro     = accion seria pero REVERSIBLE (relleno neutro oscuro; "Desactivar...")
 // Tokens en globals.css (:root): --radio-boton, --altura-boton(-sm),
@@ -24,7 +28,7 @@ import type { ButtonHTMLAttributes, CSSProperties } from 'react'
 
 type Variante = 'primario' | 'secundario' | 'terciario' | 'peligro' | 'oscuro'
 type Tamano = 'normal' | 'sm'
-type Tono = 'marca' | 'neutro'
+type Tono = 'marca' | 'neutro' | 'tonal'
 
 const base: CSSProperties = {
   display: 'inline-flex',
@@ -92,14 +96,22 @@ export default function Boton({
   const [hover, setHover] = useState(false)
   const [presionado, setPresionado] = useState(false)
   const base_v = porVariante[variante]
-  // tono='neutro' solo altera terciario: gris en reposo, naranja al hover.
+  // tono='neutro'/'tonal' solo alteran terciario: neutro = gris en reposo,
+  // naranja al hover; tonal = fondo naranja suave permanente + texto naranja
+  // (hover oscurece el fondo por filter — cero hex nuevos).
   const esNeutro = variante === 'terciario' && tono === 'neutro'
+  const esTonal = variante === 'terciario' && tono === 'tonal'
   const v = esNeutro
     ? {
         reposo: { ...base_v.reposo, color: 'var(--text-secondary)' },
         hover: { ...base_v.hover, color: 'var(--color-accent)' },
       }
-    : base_v
+    : esTonal
+      ? {
+          reposo: { ...base_v.reposo, background: 'var(--color-accent-light)' },
+          hover: { background: 'var(--color-accent-light)', filter: 'brightness(0.96)' },
+        }
+      : base_v
   return (
     <button
       type="button"

@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { Star, Check, MessageCircle, Copy, ExternalLink, Mail } from 'lucide-react'
+import Icono from '@/components/ui/Icono'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks'
 import { createClient } from '@/lib/supabase-browser'
@@ -103,7 +105,7 @@ export default function ReferidosPage() {
             background: 'var(--text-primary)', borderRadius: 'var(--radius-lg)',
             padding: '24px', textAlign: 'center', color: 'white',
           }}>
-            <div style={{ fontSize: '28px', marginBottom: '8px' }}>⭐</div>
+            <div style={{ marginBottom: '8px' }}><Icono icono={Star} size={28} /></div>
             <div style={{ fontSize: '18px', fontWeight: 500, marginBottom: '6px' }}>Gana meses gratis</div>
             <div style={{ fontSize: '13px', opacity: 0.7, lineHeight: 1.5 }}>
               Invita a un restaurante. Cuando pague su primer mes, ambos reciben 1 mes gratis.
@@ -122,7 +124,7 @@ export default function ReferidosPage() {
               fontSize: '12px', fontWeight: 500, cursor: 'pointer', flexShrink: 0, marginLeft: '10px',
               color: copiado ? 'var(--color-green)' : 'var(--color-accent)',
             }}>
-              {copiado ? '✓ Copiado' : 'Copiar'}
+              {copiado ? <><Icono icono={Check} size={12} style={{ verticalAlign: '-2px' }} /> Copiado</> : 'Copiar'}
             </span>
           </div>
         </div>
@@ -141,15 +143,15 @@ export default function ReferidosPage() {
           <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Compartir por</div>
           <div style={{ display: 'flex', gap: '10px' }}>
             <div onClick={compartirWhatsApp} className="card" style={{ flex: 1, padding: '14px', textAlign: 'center', cursor: 'pointer' }}>
-              <div style={{ fontSize: '20px', marginBottom: '4px' }}>💬</div>
+              <div style={{ marginBottom: '4px', color: 'var(--text-secondary)' }}><Icono icono={MessageCircle} size={24} /></div>
               <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>WhatsApp</div>
             </div>
             <div onClick={copiarEnlace} className="card" style={{ flex: 1, padding: '14px', textAlign: 'center', cursor: 'pointer' }}>
-              <div style={{ fontSize: '20px', marginBottom: '4px' }}>📋</div>
+              <div style={{ marginBottom: '4px', color: 'var(--text-secondary)' }}><Icono icono={Copy} size={24} /></div>
               <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Copiar</div>
             </div>
             <div onClick={compartirGeneral} className="card" style={{ flex: 1, padding: '14px', textAlign: 'center', cursor: 'pointer' }}>
-              <div style={{ fontSize: '20px', marginBottom: '4px' }}>↗</div>
+              <div style={{ marginBottom: '4px', color: 'var(--text-secondary)' }}><Icono icono={ExternalLink} size={24} /></div>
               <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Otro</div>
             </div>
           </div>
@@ -182,7 +184,7 @@ export default function ReferidosPage() {
           <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Tus invitaciones</div>
           {referidos.length === 0 ? (
             <div className="card" style={{ padding: '30px 14px', textAlign: 'center' }}>
-              <div style={{ fontSize: '28px', marginBottom: '8px' }}>📨</div>
+              <div style={{ marginBottom: '8px', color: 'var(--text-tertiary)' }}><Icono icono={Mail} size={28} /></div>
               <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Aún no has invitado a nadie</div>
               <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '4px' }}>Comparte tu enlace y empieza a ganar meses gratis</div>
             </div>

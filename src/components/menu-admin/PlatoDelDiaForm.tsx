@@ -1,7 +1,7 @@
 'use client'
 
 import { memo, useState } from 'react'
-import { Check } from 'lucide-react'
+import { Check, TriangleAlert } from 'lucide-react'
 import Icono from '@/components/ui/Icono'
 import Boton from '@/components/ui/Boton'
 import { createClient } from '@/lib/supabase-browser'
@@ -203,13 +203,13 @@ function PlatoDelDiaForm({
           if (!h) return null
           return (
             <div style={{ fontSize: '11px', color: 'var(--color-warning)', background: 'var(--color-warning-light)', padding: '8px 10px', borderRadius: '6px', marginBottom: '8px' }}>
-              ⚠ Este plato pertenece a una categoría visible solo de {formato12h(h.hora_inicio)} a {formato12h(h.hora_fin)}. El plato del día solo se mostrará en ese horario.
+              <Icono icono={TriangleAlert} size={11} style={{ verticalAlign: '-1px' }} /> Este plato pertenece a una categoría visible solo de {formato12h(h.hora_inicio)} a {formato12h(h.hora_fin)}. El plato del día solo se mostrará en ese horario.
             </div>
           )
         })()}
         {platoDiaTienePromoHoy && (
           <div style={{ fontSize: '11px', color: 'var(--color-warning)', background: 'var(--color-warning-light)', padding: '8px 10px', borderRadius: '6px', marginBottom: '8px' }}>
-            ⚠ Este plato tiene promociones activas hoy. El precio del Plato del día tendrá prioridad mientras esté activo.
+            <Icono icono={TriangleAlert} size={11} style={{ verticalAlign: '-1px' }} /> Este plato tiene promociones activas hoy. El precio del Plato del día tendrá prioridad mientras esté activo.
           </div>
         )}
         {(() => {
@@ -276,7 +276,7 @@ function PlatoDelDiaForm({
                 marginTop: '6px',
                 marginBottom: '8px',
               }}>
-                ⚠️ El precio especial es igual o mayor al precio original (${formatoPrecio(precioReferencia)}). ¿Es correcto?
+                <Icono icono={TriangleAlert} size={11} style={{ verticalAlign: '-1px' }} /> El precio especial es igual o mayor al precio original (${formatoPrecio(precioReferencia)}). ¿Es correcto?
               </div>
             )
           }

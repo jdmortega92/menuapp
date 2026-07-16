@@ -179,7 +179,9 @@ function CategoriaSection({
   return (
     <div style={{ padding: '0 20px', marginBottom: '14px', position: 'relative' }}>
 
-      {/* Header categoría */}
+      {/* Header categoría. Guardas de compresion (nombres largos): iconos,
+          chevrons y pildoras con flexShrink 0; el NOMBRE es quien trunca
+          (ellipsis + minWidth 0 en toda la cadena flex, o no dispara). */}
       {renombrando ? (
         <CategoriaRenameForm
           catId={cat.id}
@@ -188,11 +190,11 @@ function CategoriaSection({
           onClose={onCerrarRename}
         />
       ) : (
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, flex: 1 }}>
             {/* Flechas mover categoría — par horizontal (44px efectivos apilados
                 se solaparían verticalmente; espeja el patrón de PlatoCard) */}
-            <div style={{ display: 'flex', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
               <button type="button" aria-label="Subir categoría" className="tap-target-44 accion-icono"
                 onClick={() => onMoverCategoria(cat.id, 'arriba')}
                 style={{ ...estiloBotonIcono, cursor: catIdx > 0 ? 'pointer' : 'default', color: catIdx > 0 ? undefined : 'var(--border-light)' }}>
@@ -204,20 +206,21 @@ function CategoriaSection({
                 <Icono icono={ChevronDown} size={16} />
               </button>
             </div>
-            <Icono icono={Folder} size={16} />
-            <span style={{ fontSize: '14px', fontWeight: 500 }}>{cat.nombre}</span>
-            <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', background: 'var(--bg-tertiary)', padding: '2px 8px', borderRadius: 'var(--radius-full)' }}>{cat.platos.length}</span>
+            <Icono icono={Folder} size={16} style={{ flexShrink: 0 }} />
+            <span style={{ fontSize: '14px', fontWeight: 500, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cat.nombre}</span>
+            <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', background: 'var(--bg-tertiary)', padding: '2px 8px', borderRadius: 'var(--radius-full)', flexShrink: 0 }}>{cat.platos.length}</span>
             {cat.hora_inicio && cat.hora_fin && (
-              <span style={{ fontSize: '10px', color: 'var(--color-warning)', background: 'var(--color-warning-light)', padding: '2px 6px', borderRadius: '4px' }}>
+              <span style={{ fontSize: '10px', color: 'var(--color-warning)', background: 'var(--color-warning-light)', padding: '2px 6px', borderRadius: '4px', flexShrink: 0, whiteSpace: 'nowrap' }}>
                 {formato12h(cat.hora_inicio)}–{formato12h(cat.hora_fin)}
               </span>
             )}
           </div>
-          <div style={{ display: 'flex', gap: '12px' }}>
+          <div style={{ display: 'flex', gap: '12px', flexShrink: 0 }}>
             {/* Excepcion consciente al gris-en-reposo: ES la accion de
-                crecimiento del menu — terciario tono marca (naranja). */}
-            <Boton variante="terciario" tamano="sm" onClick={() => onToggleFormPlato(cat.id)}
-              style={{ padding: '0 8px' }}>+ Plato</Boton>
+                crecimiento del menu — tonal (fondo naranja suave + texto
+                naranja, tono='tonal' de Boton). */}
+            <Boton variante="terciario" tono="tonal" tamano="sm" onClick={() => onToggleFormPlato(cat.id)}
+              style={{ padding: '0 10px' }}>+ Plato</Boton>
             <button type="button" aria-label="Opciones de categoría" className="tap-control tap-target-44 accion-icono"
               onClick={() => onToggleMenuCategoria(cat.id)}
               style={{ ...estiloBotonIcono, cursor: 'pointer' }}>

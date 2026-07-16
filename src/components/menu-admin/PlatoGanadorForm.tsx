@@ -1,7 +1,7 @@
 'use client'
 
 import { memo, useState } from 'react'
-import { Star, Check } from 'lucide-react'
+import { Star, Check, TriangleAlert } from 'lucide-react'
 import Icono from '@/components/ui/Icono'
 import Boton from '@/components/ui/Boton'
 import { createClient } from '@/lib/supabase-browser'
@@ -188,7 +188,7 @@ function PlatoGanadorForm({
           if (!h) return null
           return (
             <div style={{ fontSize: '11px', color: 'var(--color-warning)', background: 'var(--color-warning-light)', padding: '8px 10px', borderRadius: '6px', marginBottom: '10px' }}>
-              ⚠ Este plato pertenece a una categoría visible solo de {formato12h(h.hora_inicio)} a {formato12h(h.hora_fin)}. El plato ganador solo se mostrará en ese horario.
+              <Icono icono={TriangleAlert} size={11} style={{ verticalAlign: '-1px' }} /> Este plato pertenece a una categoría visible solo de {formato12h(h.hora_inicio)} a {formato12h(h.hora_fin)}. El plato ganador solo se mostrará en ese horario.
             </div>
           )
         })()}

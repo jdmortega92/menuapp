@@ -1,7 +1,7 @@
 'use client'
 
 import { memo, useState } from 'react'
-import { Check } from 'lucide-react'
+import { Check, Clock, TriangleAlert } from 'lucide-react'
 import Icono from '@/components/ui/Icono'
 import Boton from '@/components/ui/Boton'
 import { createClient } from '@/lib/supabase-browser'
@@ -390,11 +390,11 @@ function PromoForm({
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <span style={{ fontSize: '12px' }}>{p.nombre}</span>
-                {(() => { const h = getHorarioPlato(p.id); return h ? <span style={{ fontSize: '9px', color: 'var(--color-warning)', marginLeft: '4px' }}>⏰ {formato12h(h.hora_inicio)}–{formato12h(h.hora_fin)}</span> : null })()}
+                {(() => { const h = getHorarioPlato(p.id); return h ? <span style={{ fontSize: '9px', color: 'var(--color-warning)', marginLeft: '4px' }}><Icono icono={Clock} size={10} style={{ verticalAlign: '-1px' }} /> {formato12h(h.hora_inicio)}–{formato12h(h.hora_fin)}</span> : null })()}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>${formatoPrecio(precioMostrar)}</span>
-                {isSelected && <span style={{ color: 'var(--color-accent)', fontSize: '12px' }}>✓</span>}
+                {isSelected && <span style={{ color: 'var(--color-accent)', lineHeight: 0 }}><Icono icono={Check} size={12} /></span>}
               </div>
             </div>
             {isSelected && tieneVariantes && (
@@ -550,7 +550,7 @@ function PromoForm({
         const horarios = platosConHorario.map(p => `${p.horario!.hora_inicio}–${p.horario!.hora_fin}`)
         return (
           <div style={{ fontSize: '11px', color: 'var(--color-warning)', background: 'var(--color-warning-light)', padding: '8px 10px', borderRadius: '6px', marginBottom: '8px' }}>
-            ⚠ Esta promo incluye platos con horario restringido ({horarios.join(', ')}). La promo solo será visible cuando todos los platos estén activos.
+            <Icono icono={TriangleAlert} size={11} style={{ verticalAlign: '-1px' }} /> Esta promo incluye platos con horario restringido ({horarios.join(', ')}). La promo solo será visible cuando todos los platos estén activos.
           </div>
         )
       })()}

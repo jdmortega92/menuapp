@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Target, ChevronDown, Check, ArrowRight } from 'lucide-react'
+import { Target, ChevronDown, Check, ArrowRight, PartyPopper } from 'lucide-react'
 import Icono from '@/components/ui/Icono'
 import { useRouter } from 'next/navigation'
 import type { OnboardingStatus } from '@/hooks/useOnboardingStatus'
@@ -315,7 +315,7 @@ export default function OnboardingChecklist({ status }: OnboardingChecklistProps
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
                     {status.totalCompletados === status.totalPasos
-                      ? '🎉 ¡Tu menú está listo!'
+                      ? <><Icono icono={PartyPopper} size={12} style={{ verticalAlign: '-2px' }} /> ¡Tu menú está listo!</>
                       : 'Completa los pasos para activar todo el potencial'}
                   </div>
                   <button

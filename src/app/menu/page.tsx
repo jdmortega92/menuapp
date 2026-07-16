@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
-import { Search, Lock, X, ExternalLink, Utensils, Tag, Sparkles, BadgePercent, ConciergeBell, Trophy } from 'lucide-react'
+import { Search, Lock, X, ExternalLink, Utensils, Tag, Sparkles, BadgePercent, ConciergeBell, Trophy, PackageOpen, Clock, Check, TriangleAlert } from 'lucide-react'
 import Icono, { estiloBotonIcono } from '@/components/ui/Icono'
 import Boton from '@/components/ui/Boton'
 import { useRouter } from 'next/navigation'
@@ -528,12 +528,12 @@ export default function MiMenuPage() {
     return todosPlatos.map(p => {
       const h = horariosPorPlato.get(p.id) ?? null
       const precioStr = `$${formatoPrecio(p.precio)}`
-      const scheduleStr = h ? ` (⏰ ${h.hora_inicio}–${h.hora_fin})` : ''
+      const scheduleStr = h ? ` (${h.hora_inicio}–${h.hora_fin})` : ''
       return {
         value: p.id,
         label: (
           <span>
-            {p.nombre} <span style={{ color: 'var(--text-tertiary)' }}>— {precioStr}{scheduleStr}</span>
+            {p.nombre} <span style={{ color: 'var(--text-tertiary)' }}>— {precioStr}{h && <> (<Icono icono={Clock} size={11} style={{ verticalAlign: '-1px' }} /> {h.hora_inicio}–{h.hora_fin})</>}</span>
           </span>
         ),
         searchText: `${p.nombre} ${precioStr}${scheduleStr}`.toLowerCase(),
@@ -1010,7 +1010,7 @@ export default function MiMenuPage() {
               <div style={{ padding: '14px 20px' }}>
                 {combosSwr !== undefined && combos.length === 0 && !mostrarFormCombo ? (
                   <div style={{ textAlign: 'center', padding: '30px 0' }}>
-                    <div style={{ fontSize: '32px', marginBottom: '8px' }}>🍱</div>
+                    <div style={{ marginBottom: '8px', color: 'var(--text-tertiary)' }}><Icono icono={PackageOpen} size={40} /></div>
                     <div style={{ fontSize: '14px', fontWeight: 500, marginBottom: '4px' }}>Sin combos</div>
                     <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '16px' }}>Crea paquetes de platos con descuento</div>
                     <Boton tamano="sm" onClick={() => { setEditandoComboId(null); setMostrarFormCombo(true) }}>+ Crear combo</Boton>
@@ -1036,9 +1036,11 @@ export default function MiMenuPage() {
 
                 {combos.map((combo) => (
                   <div key={combo.id} className="card" style={{ padding: '14px', marginBottom: '8px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
-                      <div>
-                        <div style={{ fontSize: '14px', fontWeight: 500 }}>{combo.nombre}</div>
+                    {/* Guardas de compresion: el cluster de acciones nunca se encoge;
+                        el nombre (texto del usuario) trunca con ellipsis. */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: '8px' }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: '14px', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{combo.nombre}</div>
                         <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>{combo.platos.join(' + ')}</div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
                           <span style={{ fontSize: '14px', fontWeight: 500 }}>${formatoPrecio(combo.precio)}</span>
@@ -1057,7 +1059,7 @@ export default function MiMenuPage() {
                           </div>
                         )}
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
                         <div onClick={() => toggleCombo(combo.id)} style={{
                           width: '36px', height: '20px', borderRadius: '10px',
                           background: combo.activo ? 'var(--color-accent)' : 'var(--border-light)',
@@ -1094,7 +1096,7 @@ export default function MiMenuPage() {
               <div style={{ padding: '14px 20px' }}>
                 {promosSwr !== undefined && promos.length === 0 && !mostrarFormPromo ? (
                   <div style={{ textAlign: 'center', padding: '30px 0' }}>
-                    <div style={{ fontSize: '32px', marginBottom: '8px' }}>🏷️</div>
+                    <div style={{ marginBottom: '8px', color: 'var(--text-tertiary)' }}><Icono icono={BadgePercent} size={40} /></div>
                     <div style={{ fontSize: '14px', fontWeight: 500, marginBottom: '4px' }}>Sin promociones</div>
                     <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '16px' }}>Crea ofertas para atraer más clientes</div>
                     <Boton tamano="sm" onClick={() => { setEditandoPromoId(null); setMostrarFormPromo(true) }}>+ Crear promo</Boton>
@@ -1121,9 +1123,10 @@ export default function MiMenuPage() {
 
                 {promos.map((promo: any) => (
                   <div key={promo.id} className="card" style={{ padding: '14px', marginBottom: '8px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
-                      <div>
-                        <div style={{ fontSize: '14px', fontWeight: 500 }}>{promo.nombre}</div>
+                    {/* Guardas de compresion: espejo de la card de combo. */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: '8px' }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: '14px', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{promo.nombre}</div>
                         {promo.descripcion && <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px', overflowWrap: 'break-word' }}>{promo.descripcion}</div>}
                         {promo.platos && promo.platos.length > 0 && (
                           <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '4px' }}>Aplica en: {promo.platos.join(', ')}</div>
@@ -1133,7 +1136,7 @@ export default function MiMenuPage() {
                           <span className="badge badge-neutral">{promo.dias.join(', ')}</span>
                         </div>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
                         <div onClick={() => togglePromo(promo.id)} style={{
                           width: '36px', height: '20px', borderRadius: '10px',
                           background: promo.activo ? 'var(--color-accent)' : 'var(--border-light)',
@@ -1245,11 +1248,11 @@ export default function MiMenuPage() {
                           <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
                             {cat.platos.length} platos
                             {cat.hora_inicio && cat.hora_fin && (
-                              <span style={{ color: 'var(--color-warning)', marginLeft: '6px' }}>⏰ {cat.hora_inicio}–{cat.hora_fin}</span>
+                              <span style={{ color: 'var(--color-warning)', marginLeft: '6px' }}><Icono icono={Clock} size={11} style={{ verticalAlign: '-1px' }} /> {cat.hora_inicio}–{cat.hora_fin}</span>
                             )}
                           </div>
                         </div>
-                        {seleccionada && <span style={{ color: 'var(--color-accent)', fontSize: '16px' }}>✓</span>}
+                        {seleccionada && <span style={{ color: 'var(--color-accent)', lineHeight: 0 }}><Icono icono={Check} size={16} /></span>}
                       </div>
                     )
                   })}
@@ -1259,13 +1262,13 @@ export default function MiMenuPage() {
                     return (
                       <>
                         <div style={{ background: 'var(--color-green-light)', borderRadius: '8px', padding: '12px', marginTop: '8px' }}>
-                          <div style={{ fontSize: '12px', color: 'var(--color-green)', fontWeight: 500 }}>✓ Configuración lista</div>
+                          <div style={{ fontSize: '12px', color: 'var(--color-green)', fontWeight: 500 }}><Icono icono={Check} size={12} style={{ verticalAlign: '-2px' }} /> Configuración lista</div>
                           <div style={{ fontSize: '11px', color: 'var(--color-green)', marginTop: '2px' }}>El Sorpréndeme mostrará un plato de cada categoría seleccionada</div>
                         </div>
                         {catsConHorario.length > 0 && (
                           <div style={{ background: 'var(--color-warning-light)', borderRadius: '8px', padding: '10px', marginTop: '8px' }}>
                             <div style={{ fontSize: '11px', color: 'var(--color-warning)' }}>
-                              ⚠ {catsConHorario.length === 1 ? `La categoría "${catsConHorario[0]?.nombre}" tiene horario (${catsConHorario[0]?.hora_inicio}–${catsConHorario[0]?.hora_fin}).` : 'Ambas categorías tienen horario.'} El Sorpréndeme solo funcionará cuando {catsConHorario.length === 1 ? 'esta categoría esté' : 'ambas estén'} activa{catsConHorario.length === 1 ? '' : 's'}.
+                              <Icono icono={TriangleAlert} size={12} style={{ verticalAlign: '-2px' }} /> {catsConHorario.length === 1 ? `La categoría "${catsConHorario[0]?.nombre}" tiene horario (${catsConHorario[0]?.hora_inicio}–${catsConHorario[0]?.hora_fin}).` : 'Ambas categorías tienen horario.'} El Sorpréndeme solo funcionará cuando {catsConHorario.length === 1 ? 'esta categoría esté' : 'ambas estén'} activa{catsConHorario.length === 1 ? '' : 's'}.
                             </div>
                           </div>
                         )}

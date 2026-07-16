@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { Check, X } from 'lucide-react'
+import Icono from '@/components/ui/Icono'
 import Boton from '@/components/ui/Boton'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks'
@@ -169,7 +171,7 @@ export default function SuscripcionPage() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', marginBottom: plan.noFeatures.length > 0 ? '8px' : '0' }}>
                   {plan.features.map((f, i) => (
                     <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                      <span style={{ color: 'var(--color-green)', fontSize: '11px' }}>✓</span> {f}
+                      <span style={{ color: 'var(--color-green)', lineHeight: 0 }}><Icono icono={Check} size={12} /></span> {f}
                     </div>
                   ))}
                 </div>
@@ -177,7 +179,7 @@ export default function SuscripcionPage() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', marginBottom: '14px' }}>
                     {plan.noFeatures.map((f, i) => (
                       <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#BBB' }}>
-                        <span style={{ color: '#CCC' }}>✕</span> {f}
+                        <span style={{ color: '#CCC', lineHeight: 0 }}><Icono icono={X} size={12} /></span> {f}
                       </div>
                     ))}
                   </div>
