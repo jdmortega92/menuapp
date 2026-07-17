@@ -498,13 +498,26 @@ Decision 2026-07-03: Julian mantiene $15k/$29k mensual ($150k/$290k anual, ~2 me
 
 ## Items
 
+### DASHBOARD-VISUAL ✅ Restyle del dashboard desde mockups del fundador, paleta de la casa — CLOSED
+- **Closed**: 2026-07-16. Capa 1 de los mockups de Julian: SOLO presentacion de datos existentes, cero features nuevas. Headers uniformes (burbuja naranja-suave + titulo + subtitulo + pildora neutra), stat cards con badge de comparacion + sparklines naranjas (la serie por dia YA viajaba en los hooks — gratis), embudo en barras horizontales, actividad con franja de insight, heatmap con leyenda de intensidad + pico, Descargar reporte como card oscuro prominente. Azul/violeta de los mockups traducidos a la paleta de la casa (veto documentado en UI-ADMIN). BL.13 y derivados intactos.
+- **DIFERIDO POR EL FUNDADOR (Capa 2 — features de producto, no polish; items propios post-lanzamiento)**: PLATOS-SIN-VISTAS (lista de platos sin trafico con antiguedad), MOTOR-INSIGHTS (alertas tipo "rendimiento bajo" con umbrales), GATE-HEATMAP (desbloqueo progresivo a las 20 visitas), selector mensual del heatmap (toca computeDashboardWindow).
+- **Commit**: [Julian: hash].
+
+### UI-SWEEP-2 ✅ Emojis en ramas condicionales, guard flex-shrink, +Plato tonal — CLOSED
+- **Closed**: 2026-07-15. Grep por PATRON (no listas de sospechosos) cazo los emojis supervivientes en ramas condicionales: empty states de Combos/Promos y demas hallados -> iconos lucide grandes en gris; grilla de compartir de /qr -> MessageCircle/Instagram/Facebook/ExternalLink. Bug de Julian: titulos largos de categoria comprimian el Folder -> flexShrink:0 en iconos/chevrons/pildoras + minWidth:0+ellipsis en texto de usuario, guard aplicado donde iconos conviven con texto de usuario. Jerarquia (decision de Julian, patron tonal canonico): +Plato con cuerpo naranja de baja opacidad, Agotar texto plano — construir vs disponible, ya no pesan igual.
+- **Commit**: 6f3b316.
+
+### CONFIRM-DELETE ✅ Confirmacion antes de toda destruccion real — CLOSED
+- **Closed**: 2026-07-15. Julian detecto usando la app que combos y promos se eliminaban SIN confirmacion (un toque accidental en una X de 20px destruia un combo configurado). El sheet de confirmacion de platos extraido como componente compartido ConfirmarEliminar y enrutado por TODA eliminacion real hallada en el barrido; copy por tipo, confirmar peligro + cancelar secundario. Desactivaciones reversibles deliberadamente SIN confirmacion.
+- **Commit**: [Julian: hash del commit de confirm-delete].
+
 ### UI-POLISH-MOCKUPS ✅ Polish del /menu desde mockups del fundador — CLOSED
 - **Closed**: 2026-07-15. Julian diseno mockups propios (iPhone, alta fidelidad) marcando en rojo lo deseado; se implemento SOLO lo marcado.
 - **Cambios**: iconos en tabs principales (Utensils/Tag/Sparkles 18px heredando color de tab) y en sub-pildoras (Tag/BadgePercent/ConciergeBell/Trophy 16px) dentro de scroll horizontal sin barra con active-into-view (4 pildoras icono+label desbordan 360px). Ver mi menu promovido a primario + ExternalLink (primario de region header, sin conflicto con + Categoria de region contenido). Fix de jerarquia (observacion original de Julian): + Plato = naranja-texto constructivo (excepcion consciente al gris-en-reposo: ES la accion de crecimiento del menu); Agotar con presencia naranja-texto; badge de estado Agotado igualado en peso visual a Disponible. Header de categoria: Folder 16px + contador en pildora suave.
 - **DESCARTADO CON VETO EXPLICITO DEL FUNDADOR (no resucitar como "mejoras obvias"; si alguna vuelve, es feature de producto con su propio item)**: busqueda en header, campana de notificaciones (sistema inexistente — icono mentiroso), Ordenar, toggle lista/grid, FAB central de QR (jerarquia incorrecta: QR se genera una vez), menu hamburguesa/drawer, card Resumen rapido (feature con datos, no polish).
 - **Nota de proceso**: durante la investigacion CC intento abrir Claude-in-Chrome para verificar tipografia en vivo — DENEGADO. Regla nueva: CC no abre superficies no pedidas por el prompt (navegador, red, credenciales); si cree necesitarlas, reporta y se decide. La medicion de wrap se hizo por aritmetica de strings con supuestos declarados.
 - **Verificado**: tsc limpio, tests verdes, smoke en telefono vertical (360px).
-- **Commit**: [Julian: hash del push].
+- **Commit**: 96a25f2.
 
 ### UI-PUBLICO ✅ Fase B: menu publico profesional con iconos que heredan del tema — CLOSED
 - **Closed**: 2026-07-14. Cierra el arco de UI iniciado en UI-ADMIN: admin y publico hablan ahora un solo idioma de diseno.

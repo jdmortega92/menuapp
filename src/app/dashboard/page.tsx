@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Lock, ChevronDown, Eye, Utensils, MessageCircle, Star, Filter, BarChart2, CalendarDays, TrendingUp, TrendingDown, EyeOff, Download } from 'lucide-react'
+import { Lock, ChevronDown, Eye, Utensils, MessageCircle, Star, Filter, BarChart2, CalendarDays, TrendingUp, TrendingDown, EyeOff, Download, ExternalLink, Crown, FileText, UserPlus, LogOut, ChevronRight, Lightbulb, TriangleAlert } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import Icono from '@/components/ui/Icono'
 import Boton from '@/components/ui/Boton'
@@ -1324,34 +1324,38 @@ export default function DashboardPage() {
               borderRadius: 'var(--radius-md)', overflow: 'hidden', width: '260px',
               boxShadow: 'var(--shadow-lg)', animation: 'scaleIn 0.2s ease',
             }}>
-              <div style={{ padding: '14px', display: 'flex', alignItems: 'center', gap: '12px', borderBottom: '1px solid var(--border-light)' }}>
-                <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'var(--color-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '15px', fontWeight: 500, color: 'white', overflow: 'hidden' }}>
+              {/* Bloque de cuenta con tratamiento de card (restyle DASHBOARD-VISUAL 2) */}
+              <div style={{ margin: '10px 10px 6px', padding: '12px', display: 'flex', alignItems: 'center', gap: '12px', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-sm)' }}>
+                <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'var(--color-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '15px', fontWeight: 500, color: 'white', overflow: 'hidden', flexShrink: 0 }}>
                   {rest?.logo_url ? (
                     <img src={rest.logo_url} alt={restaurante.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   ) : restaurante.iniciales}
                 </div>
-                <div>
-                  <div style={{ fontSize: '13px', fontWeight: 500 }}>{restaurante.nombre}</div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{usuario?.email || ''}</div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: '13px', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{restaurante.nombre}</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{usuario?.email || ''}</div>
                 </div>
               </div>
               {[
-                ...(rest?.slug ? [{ label: 'Ver mi menú', sub: 'Abrir en pestaña nueva', href: '/' + rest.slug, external: true }] : []),
-                { label: 'Mi suscripción', sub: esPro ? 'Plan Pro' : esBasico ? 'Plan Básico' : 'Plan Gratis', href: '/suscripcion' },
-                { label: 'Mis facturas', sub: 'Descargar y compartir', href: '/facturas' },
-                { label: 'Invitar restaurantes', sub: 'Gana meses gratis', href: '/referidos' },
+                ...(rest?.slug ? [{ icono: ExternalLink, label: 'Ver mi menú', sub: 'Abrir en pestaña nueva', href: '/' + rest.slug, external: true }] : []),
+                { icono: Crown, label: 'Mi suscripción', sub: esPro ? 'Plan Pro' : esBasico ? 'Plan Básico' : 'Plan Gratis', href: '/suscripcion' },
+                { icono: FileText, label: 'Mis facturas', sub: 'Descargar y compartir', href: '/facturas' },
+                { icono: UserPlus, label: 'Invitar restaurantes', sub: 'Gana meses gratis', href: '/referidos' },
                 // Oculto hasta implementar i18n real (hoy solo existe español).
                 // { label: 'Idioma', sub: 'Español', href: '#' },
               ].map((item: any, i: number) => (
                 <div key={i} onClick={() => { setMostrarPerfil(false); if (item.external) { window.open(item.href, '_blank', 'noopener') } else { router.push(item.href) } }} style={{
-                  padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  padding: '10px 14px', display: 'flex', alignItems: 'center', gap: '10px',
                   borderBottom: '1px solid var(--border-light)', cursor: 'pointer',
                 }}>
-                  <div>
+                  <div style={{ width: '28px', height: '28px', borderRadius: 'var(--radius-sm)', background: 'var(--color-accent-light)', color: 'var(--color-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Icono icono={item.icono} size={15} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: '13px' }}>{item.label}</div>
                     <div style={{ fontSize: '11px', color: item.label === 'Invitar restaurantes' ? 'var(--color-green)' : 'var(--text-tertiary)' }}>{item.sub}</div>
                   </div>
-                  <span style={{ color: 'var(--text-tertiary)' }}>→</span>
+                  <span style={{ color: 'var(--text-tertiary)', lineHeight: 0, flexShrink: 0 }}><Icono icono={ChevronRight} size={16} /></span>
                 </div>
               ))}
               <div onClick={async () => {
@@ -1359,8 +1363,11 @@ export default function DashboardPage() {
                 const { cerrarSesion } = await import('@/lib/auth')
                 await cerrarSesion()
                 router.push('/login')
-              }} style={{ padding: '10px 14px', fontSize: '13px', color: 'var(--color-danger)', cursor: 'pointer' }}>
-                Cerrar sesión
+              }} style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
+                <div style={{ width: '28px', height: '28px', borderRadius: 'var(--radius-sm)', background: 'var(--color-danger-light)', color: 'var(--color-danger)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <Icono icono={LogOut} size={15} />
+                </div>
+                <span style={{ fontSize: '13px', color: 'var(--color-danger)' }}>Cerrar sesión</span>
               </div>
             </div>
           </>
@@ -1661,58 +1668,64 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              {/* Diagnóstico principal */}
-              {embudoData.diagnostico.tipo !== 'sin_datos' && (
-                <div style={{
-                  background: embudoData.diagnostico.tipo === 'excelente' ? 'var(--color-success-light)'
-                    : embudoData.diagnostico.tipo === 'bueno' ? 'var(--color-success-light)'
-                    : embudoData.diagnostico.tipo === 'regular' ? 'var(--color-warning-light)'
-                    : 'var(--color-danger-light)',
-                  borderRadius: 'var(--radius-md)',
-                  padding: '10px 12px',
-                  marginBottom: embudoData.recomendacion ? '8px' : 0,
-                }}>
+              {/* Diagnóstico principal — restyle DASHBOARD-VISUAL 2: icono en
+                  burbuja por severidad. Copy, umbrales y diagnostico.mensaje
+                  (consumido por el PDF) NO cambian; 'sin_datos' nunca llega
+                  aquí (lo cubre el estado vacío de abajo). */}
+              {embudoData.diagnostico.tipo !== 'sin_datos' && (() => {
+                const porTipo = {
+                  excelente: { icono: TrendingUp, color: 'var(--color-success)', bg: 'var(--color-success-light)', titulo: 'Rendimiento excelente' },
+                  bueno: { icono: TrendingUp, color: 'var(--color-success)', bg: 'var(--color-success-light)', titulo: 'Rendimiento bueno' },
+                  regular: { icono: TriangleAlert, color: 'var(--color-warning)', bg: 'var(--color-warning-light)', titulo: 'Rendimiento regular' },
+                  mejorable: { icono: TrendingDown, color: 'var(--color-danger)', bg: 'var(--color-danger-light)', titulo: 'Rendimiento bajo' },
+                } as const
+                const dg = porTipo[embudoData.diagnostico.tipo as keyof typeof porTipo]
+                return (
                   <div style={{
-                    fontSize: '11px',
-                    fontWeight: 500,
-                    marginBottom: '3px',
-                    color: embudoData.diagnostico.tipo === 'excelente' ? 'var(--color-success)'
-                      : embudoData.diagnostico.tipo === 'bueno' ? 'var(--color-success)'
-                      : embudoData.diagnostico.tipo === 'regular' ? 'var(--color-warning)'
-                      : 'var(--color-danger)',
+                    background: dg.bg,
+                    borderRadius: 'var(--radius-md)',
+                    padding: '12px',
+                    marginBottom: embudoData.recomendacion ? '8px' : 0,
+                    display: 'flex',
+                    gap: '10px',
+                    alignItems: 'flex-start',
                   }}>
-                    {embudoData.diagnostico.tipo === 'excelente' ? 'Rendimiento excelente'
-                      : embudoData.diagnostico.tipo === 'bueno' ? 'Rendimiento bueno'
-                      : embudoData.diagnostico.tipo === 'regular' ? 'Rendimiento regular'
-                      : 'Rendimiento bajo'}
+                    <div style={{ width: '28px', height: '28px', borderRadius: 'var(--radius-sm)', background: 'var(--bg-secondary)', color: dg.color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <Icono icono={dg.icono} size={15} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: '11px', fontWeight: 500, marginBottom: '3px', color: dg.color }}>
+                        {dg.titulo}
+                      </div>
+                      <div style={{ fontSize: '11px', lineHeight: 1.4, color: dg.color, opacity: 0.85 }}>
+                        {embudoData.diagnostico.mensaje}
+                      </div>
+                    </div>
                   </div>
-                  <div style={{
-                    fontSize: '11px',
-                    lineHeight: 1.4,
-                    color: embudoData.diagnostico.tipo === 'excelente' ? 'var(--color-success)'
-                      : embudoData.diagnostico.tipo === 'bueno' ? 'var(--color-success)'
-                      : embudoData.diagnostico.tipo === 'regular' ? 'var(--color-warning)'
-                      : 'var(--color-danger)',
-                    opacity: 0.85,
-                  }}>
-                    {embudoData.diagnostico.mensaje}
-                  </div>
-                </div>
-              )}
+                )
+              })()}
 
               {/* Recomendación accionable */}
               {embudoData.recomendacion && (
                 <div style={{
                   background: 'var(--bg-tertiary)',
                   borderRadius: 'var(--radius-md)',
-                  padding: '10px 12px',
+                  padding: '12px',
                   borderLeft: '2px solid var(--color-warning)',
+                  display: 'flex',
+                  gap: '10px',
+                  alignItems: 'flex-start',
                 }}>
-                  <div style={{ fontSize: '11px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '3px' }}>
-                    Recomendación
+                  <div style={{ width: '28px', height: '28px', borderRadius: 'var(--radius-sm)', background: 'var(--color-warning-light)', color: 'var(--color-warning)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Icono icono={Lightbulb} size={15} />
                   </div>
-                  <div style={{ fontSize: '11px', lineHeight: 1.4, color: 'var(--text-secondary)' }}>
-                    {embudoData.recomendacion}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '11px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '3px' }}>
+                      Recomendación
+                    </div>
+                    <div style={{ fontSize: '11px', lineHeight: 1.4, color: 'var(--text-secondary)' }}>
+                      {embudoData.recomendacion}
+                    </div>
                   </div>
                 </div>
               )}
