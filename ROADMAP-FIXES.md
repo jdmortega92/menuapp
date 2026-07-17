@@ -498,18 +498,22 @@ Decision 2026-07-03: Julian mantiene $15k/$29k mensual ($150k/$290k anual, ~2 me
 
 ## Items
 
+### DASHBOARD-VISUAL-2 ✅ Dropdown de cuenta + cajas de diagnostico con restyle — CLOSED
+- **Closed**: 2026-07-17. Del segundo lote de mockups de Julian. Dropdown del avatar: burbujas de icono naranja-suave uniformes (ExternalLink/Crown/FileText/UserPlus via Icono.tsx), items de dos lineas, chevrons, excepciones semanticas (beneficio verde, logout rojo), handlers identicos. Cajas del diagnostico BL.32 — CORRECCION al analisis previo: "Rendimiento bajo"/"Recomendacion" NO eran Capa 2 diferida, YA EXISTIAN sin restyle (lo detecto Julian con screenshots de produccion); TODOS los tipos del diagnostico (no solo los 2 visibles) reciben burbuja por severidad + tokens de card, copy y logica intactos (el PDF consume diagnostico.mensaje).
+- **Commit**: [HASH-NUEVO].
+
 ### DASHBOARD-VISUAL ✅ Restyle del dashboard desde mockups del fundador, paleta de la casa — CLOSED
-- **Closed**: 2026-07-16. Capa 1 de los mockups de Julian: SOLO presentacion de datos existentes, cero features nuevas. Headers uniformes (burbuja naranja-suave + titulo + subtitulo + pildora neutra), stat cards con badge de comparacion + sparklines naranjas (la serie por dia YA viajaba en los hooks — gratis), embudo en barras horizontales, actividad con franja de insight, heatmap con leyenda de intensidad + pico, Descargar reporte como card oscuro prominente. Azul/violeta de los mockups traducidos a la paleta de la casa (veto documentado en UI-ADMIN). BL.13 y derivados intactos.
-- **DIFERIDO POR EL FUNDADOR (Capa 2 — features de producto, no polish; items propios post-lanzamiento)**: PLATOS-SIN-VISTAS (lista de platos sin trafico con antiguedad), MOTOR-INSIGHTS (alertas tipo "rendimiento bajo" con umbrales), GATE-HEATMAP (desbloqueo progresivo a las 20 visitas), selector mensual del heatmap (toca computeDashboardWindow).
-- **Commit**: [Julian: hash].
+- **Closed**: 2026-07-16. Capa 1: SOLO presentacion de datos existentes. Headers uniformes (burbuja + titulo + subtitulo + pildora), stat cards con badge de comparacion + sparklines naranjas (la serie por dia YA viajaba en los hooks), embudo en barras horizontales, actividad con franja de insight, heatmap con leyenda + pico, Descargar reporte como card oscuro. Azul/violeta de mockups traducidos a paleta de la casa (veto documentado). BL.13 y derivados intactos.
+- **DIFERIDO POR EL FUNDADOR (Capa 2, items propios post-lanzamiento)**: PLATOS-SIN-VISTAS, MOTOR-INSIGHTS-UMBRALES (alertas nuevas con umbrales — distinto del diagnostico BL.32 existente), GATE-HEATMAP (desbloqueo a 20 visitas), selector mensual (toca computeDashboardWindow).
+- **Commit**: d4e3d19.
 
 ### UI-SWEEP-2 ✅ Emojis en ramas condicionales, guard flex-shrink, +Plato tonal — CLOSED
-- **Closed**: 2026-07-15. Grep por PATRON (no listas de sospechosos) cazo los emojis supervivientes en ramas condicionales: empty states de Combos/Promos y demas hallados -> iconos lucide grandes en gris; grilla de compartir de /qr -> MessageCircle/Instagram/Facebook/ExternalLink. Bug de Julian: titulos largos de categoria comprimian el Folder -> flexShrink:0 en iconos/chevrons/pildoras + minWidth:0+ellipsis en texto de usuario, guard aplicado donde iconos conviven con texto de usuario. Jerarquia (decision de Julian, patron tonal canonico): +Plato con cuerpo naranja de baja opacidad, Agotar texto plano — construir vs disponible, ya no pesan igual.
+- **Closed**: 2026-07-15. Grep por PATRON cazo emojis en ramas condicionales: empty states -> lucide grandes gris; /qr compartir -> MessageCircle/Instagram/Facebook/ExternalLink. Bug de Julian: titulos largos comprimian el Folder -> flexShrink:0 en iconos/chevrons/pildoras + minWidth:0+ellipsis en texto de usuario, guard donde iconos conviven con texto de usuario. Jerarquia (Julian, patron tonal canonico): +Plato tonal naranja, Agotar texto plano.
 - **Commit**: 6f3b316.
 
 ### CONFIRM-DELETE ✅ Confirmacion antes de toda destruccion real — CLOSED
-- **Closed**: 2026-07-15. Julian detecto usando la app que combos y promos se eliminaban SIN confirmacion (un toque accidental en una X de 20px destruia un combo configurado). El sheet de confirmacion de platos extraido como componente compartido ConfirmarEliminar y enrutado por TODA eliminacion real hallada en el barrido; copy por tipo, confirmar peligro + cancelar secundario. Desactivaciones reversibles deliberadamente SIN confirmacion.
-- **Commit**: [Julian: hash del commit de confirm-delete].
+- **Closed**: 2026-07-15. Julian detecto usando la app que combos y promos eliminaban SIN confirmacion. Sheet de platos extraido como ConfirmarEliminar compartido, enrutado por toda eliminacion real del barrido; copy por tipo, peligro + secundario. Desactivaciones reversibles deliberadamente sin confirmacion.
+- **Commit**: [HASH-CONFIRM-DELETE].
 
 ### UI-POLISH-MOCKUPS ✅ Polish del /menu desde mockups del fundador — CLOSED
 - **Closed**: 2026-07-15. Julian diseno mockups propios (iPhone, alta fidelidad) marcando en rojo lo deseado; se implemento SOLO lo marcado.
