@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { ChevronDown, Lock, ImagePlus, ArrowRight, Check } from 'lucide-react'
 import Icono from '@/components/ui/Icono'
 import Boton from '@/components/ui/Boton'
@@ -17,6 +17,26 @@ import PasswordInput from '@/components/ui/PasswordInput'
 import { isPasswordValid, getPasswordError } from '@/lib/passwordValidation'
 import PhoneInput from '@/components/ui/PhoneInput'
 import BottomNav from '@/components/BottomNav'
+
+// ── Helpers del selector de color (COLOR-PICKER restyle) ──
+// Luminancia percibida aproximada (sRGB ponderado) para decidir el color del
+// check sobre un swatch: fondo claro -> check oscuro, fondo oscuro -> blanco.
+function esColorClaro(hex: string): boolean {
+  const h = hex.replace('#', '')
+  if (h.length !== 6) return false
+  const r = parseInt(h.slice(0, 2), 16)
+  const g = parseInt(h.slice(2, 4), 16)
+  const b = parseInt(h.slice(4, 6), 16)
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6
+}
+
+// Valida #RRGGBB (el # inicial es opcional al teclear) y normaliza a
+// '#RRGGBB' mayusculas — el formato que persiste restaurantes.color_principal.
+const HEX_6 = /^#?([0-9a-fA-F]{6})$/
+function normalizarHex(v: string): string | null {
+  const m = v.trim().match(HEX_6)
+  return m ? `#${m[1].toUpperCase()}` : null
+}
 
 export default function ConfigPage() {
   const router = useRouter()
@@ -43,6 +63,14 @@ export default function ConfigPage() {
   const [direccion, setDireccion] = useState('')
   const [descripcion, setDescripcion] = useState('')
   const [colorPrincipal, setColorPrincipal] = useState('#E85D24')
+  // Borrador del campo hex (COLOR-PICKER restyle): null = espejo de
+  // colorPrincipal; string = lo que el usuario esta tecleando. Se propaga a
+  // colorPrincipal SOLO cuando valida (#RRGGBB) y se descarta al salir del
+  // campo — sin efectos de sincronizacion.
+  const [hexDraft, setHexDraft] = useState<string | null>(null)
+  // El picker nativo sobrevive OCULTO como fallback ("más colores..."): el
+  // camino primario es la paleta curada + el campo hex.
+  const inputColorNativoRef = useRef<HTMLInputElement>(null)
   const [tema, setTema] = useState('claro')
   const [toggles, setToggles] = useState({
     whatsapp_activo: true,
@@ -151,14 +179,26 @@ export default function ConfigPage() {
   const [guardando, setGuardando] = useState(false)
   const [guardado, setGuardado] = useState(false)
 
+  // Paleta curada (esto es DATA de producto, no tokens de UI: unicos hex
+  // permitidos fuera de globals.css). 17 colores aptos para restaurante y
+  // seguros en contraste sobre fondos claros — sin cian/magenta/lima puros.
   const coloresPreset = [
     { color: '#E85D24', nombre: 'Naranja' },
+    { color: '#B85C38', nombre: 'Terracota' },
     { color: '#C0392B', nombre: 'Rojo' },
-    { color: '#1B5E20', nombre: 'Verde' },
-    { color: '#1565C0', nombre: 'Azul' },
-    { color: '#6C63FF', nombre: 'Morado' },
-    { color: '#D4A017', nombre: 'Dorado' },
+    { color: '#722F37', nombre: 'Vino' },
     { color: '#E91E63', nombre: 'Rosa' },
+    { color: '#D4A017', nombre: 'Dorado' },
+    { color: '#A87900', nombre: 'Mostaza' },
+    { color: '#7B4B2A', nombre: 'Marrón' },
+    { color: '#4E342E', nombre: 'Café' },
+    { color: '#1B5E20', nombre: 'Verde' },
+    { color: '#5C6B2F', nombre: 'Oliva' },
+    { color: '#2D5A3D', nombre: 'Bosque' },
+    { color: '#1565C0', nombre: 'Azul' },
+    { color: '#1F3A5F', nombre: 'Azul profundo' },
+    { color: '#6C63FF', nombre: 'Morado' },
+    { color: '#47566A', nombre: 'Pizarra' },
     { color: '#1A1A18', nombre: 'Negro' },
   ]
 
@@ -459,24 +499,64 @@ export default function ConfigPage() {
           {seccionActiva === 'personalizacion' && esBasico && (
             <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-light)', borderTop: 'none', borderRadius: '0 0 12px 12px', padding: '14px', animation: 'fadeInUp 0.2s ease' }}>
 
-              {/* Color principal */}
+              {/* Color principal — paleta curada + campo hex; el picker nativo
+                  queda oculto tras "más colores..." (fallback, no camino primario) */}
               <div style={{ marginBottom: '16px' }}>
                 <label className="label">Color principal</label>
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '6px' }}>
                   {coloresPreset.map(c => (
-                    <div key={c.color} onClick={() => setColorPrincipal(c.color)} style={{
-                      width: '36px', height: '36px', borderRadius: '10px', background: c.color, cursor: 'pointer',
-                      border: colorPrincipal === c.color ? '3px solid var(--text-primary)' : '2px solid transparent',
-                      boxShadow: colorPrincipal === c.color ? '0 0 0 2px var(--bg-primary)' : 'none',
-                      transition: 'all 0.15s ease',
-                    }} title={c.nombre} />
+                    <div key={c.color} onClick={() => { setColorPrincipal(c.color); setHexDraft(null) }} style={{
+                      width: '36px', height: '36px', borderRadius: 'var(--radio-boton)', background: c.color, cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: esColorClaro(c.color) ? 'var(--text-primary)' : 'white',
+                      boxShadow: colorPrincipal === c.color ? `0 0 0 2px var(--bg-primary), 0 0 0 4px ${c.color}` : 'none',
+                      transition: 'box-shadow 0.15s ease',
+                    }} title={c.nombre}>
+                      {colorPrincipal === c.color && <Icono icono={Check} size={16} />}
+                    </div>
                   ))}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px' }}>
-                  <input type="color" value={colorPrincipal} onChange={(e) => setColorPrincipal(e.target.value)}
-                    style={{ width: '32px', height: '32px', border: 'none', padding: 0, cursor: 'pointer', borderRadius: '6px' }} />
-                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>o elige un color personalizado</span>
+                  <div style={{ width: '32px', height: '32px', borderRadius: 'var(--radio-boton)', background: colorPrincipal, border: '1px solid var(--border-light)', flexShrink: 0 }} />
+                  <input
+                    className="input"
+                    value={hexDraft ?? colorPrincipal}
+                    onChange={(e) => {
+                      const v = e.target.value
+                      setHexDraft(v)
+                      const norm = normalizarHex(v)
+                      if (norm) setColorPrincipal(norm)
+                    }}
+                    onBlur={() => setHexDraft(null)}
+                    maxLength={7}
+                    placeholder="#RRGGBB"
+                    spellCheck={false}
+                    aria-label="Color en formato hexadecimal"
+                    style={{
+                      width: '110px',
+                      borderColor: hexDraft !== null && normalizarHex(hexDraft) === null ? 'var(--color-danger)' : undefined,
+                    }}
+                  />
+                  <Boton variante="terciario" tono="neutro" tamano="sm"
+                    onClick={() => inputColorNativoRef.current?.click()}
+                    style={{ padding: '0 8px' }}>
+                    más colores...
+                  </Boton>
+                  <input
+                    ref={inputColorNativoRef}
+                    type="color"
+                    value={colorPrincipal}
+                    onChange={(e) => { setColorPrincipal(normalizarHex(e.target.value) ?? colorPrincipal); setHexDraft(null) }}
+                    aria-hidden="true"
+                    tabIndex={-1}
+                    style={{ position: 'absolute', width: 0, height: 0, opacity: 0, pointerEvents: 'none' }}
+                  />
                 </div>
+                {hexDraft !== null && normalizarHex(hexDraft) === null && (
+                  <div style={{ fontSize: '11px', color: 'var(--color-danger)', marginTop: '4px' }}>
+                    Formato: #RRGGBB (6 dígitos hexadecimales)
+                  </div>
+                )}
               </div>
 
               {/* Vista previa del color */}
