@@ -498,9 +498,15 @@ Decision 2026-07-03: Julian mantiene $15k/$29k mensual ($150k/$290k anual, ~2 me
 
 ## Items
 
+### COLOR-PICKER ✅ Paleta curada + picker nativo domesticado en /config — CLOSED
+- **Closed**: 2026-07-17. Julian detecto que el <input type=color> nativo (dialogo del sistema, swatches RGB de 1995, cero conciencia de contraste) era la ULTIMA UI no-MenuApp de la app — viviendo justamente en la pantalla de estetica.
+- **Solucion (alcance contenido: NO se construyo un picker completo)**: 17 swatches curados aptos para restaurantes y seguros en contraste sobre fondo claro (terracotas, olivas, azules profundos, vinos, ambares, neutros calidos — la paleta es data, comentada como tal), estado seleccionado con ring + Check con color por luminancia, campo hex validado con Vista previa en vivo, y el input nativo degradado a escape discreto "mas colores..." para casos borde. Ruta de persistencia intacta.
+- **Verificado**: tsc limpio, tests verdes, smoke en telefono (el dialogo nativo fuera del flujo principal — EL check).
+- **Commit**: bda142e.
+
 ### DASHBOARD-VISUAL-2 ✅ Dropdown de cuenta + cajas de diagnostico con restyle — CLOSED
 - **Closed**: 2026-07-17. Del segundo lote de mockups de Julian. Dropdown del avatar: burbujas de icono naranja-suave uniformes (ExternalLink/Crown/FileText/UserPlus via Icono.tsx), items de dos lineas, chevrons, excepciones semanticas (beneficio verde, logout rojo), handlers identicos. Cajas del diagnostico BL.32 — CORRECCION al analisis previo: "Rendimiento bajo"/"Recomendacion" NO eran Capa 2 diferida, YA EXISTIAN sin restyle (lo detecto Julian con screenshots de produccion); TODOS los tipos del diagnostico (no solo los 2 visibles) reciben burbuja por severidad + tokens de card, copy y logica intactos (el PDF consume diagnostico.mensaje).
-- **Commit**: [HASH-NUEVO].
+- **Commit**: 407dc01.
 
 ### DASHBOARD-VISUAL ✅ Restyle del dashboard desde mockups del fundador, paleta de la casa — CLOSED
 - **Closed**: 2026-07-16. Capa 1: SOLO presentacion de datos existentes. Headers uniformes (burbuja + titulo + subtitulo + pildora), stat cards con badge de comparacion + sparklines naranjas (la serie por dia YA viajaba en los hooks), embudo en barras horizontales, actividad con franja de insight, heatmap con leyenda + pico, Descargar reporte como card oscuro. Azul/violeta de mockups traducidos a paleta de la casa (veto documentado). BL.13 y derivados intactos.
@@ -513,7 +519,7 @@ Decision 2026-07-03: Julian mantiene $15k/$29k mensual ($150k/$290k anual, ~2 me
 
 ### CONFIRM-DELETE ✅ Confirmacion antes de toda destruccion real — CLOSED
 - **Closed**: 2026-07-15. Julian detecto usando la app que combos y promos eliminaban SIN confirmacion. Sheet de platos extraido como ConfirmarEliminar compartido, enrutado por toda eliminacion real del barrido; copy por tipo, peligro + secundario. Desactivaciones reversibles deliberadamente sin confirmacion.
-- **Commit**: [HASH-CONFIRM-DELETE].
+- **Commit**: 09c20c3.
 
 ### UI-POLISH-MOCKUPS ✅ Polish del /menu desde mockups del fundador — CLOSED
 - **Closed**: 2026-07-15. Julian diseno mockups propios (iPhone, alta fidelidad) marcando en rojo lo deseado; se implemento SOLO lo marcado.
