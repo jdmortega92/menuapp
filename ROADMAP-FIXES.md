@@ -375,7 +375,7 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
   - Password recovery (currently using Supabase default — replace with branded Resend templates).
   - Transactional notifications (order received, plan upgraded, etc.).
 - **Implementation**:
-  - Resend account + verified domain (probably `menuapp.co`).
+  - Resend account + verified domain (probably `menuapp.com.co`).
   - Templates as React Email components (`react-email` package — pairs naturally with Resend).
   - Server actions or route handlers for sending.
 - **Pair with F4** since payment flows trigger transactional emails.
@@ -397,7 +397,7 @@ Closes H.1.c.2.b. Opens H.1.c.2.c (last migration phase).
   - UX in the dashboard.
 - **Note**: Pure design phase first — don't code until requirements are concrete.
 
-## F6. 🚀 Landing page — `menuapp.co`
+## F6. 🚀 Landing page — `menuapp.com.co`
 - Public-facing marketing site. Separate from the app.
 - Likely a different repo or a subdomain split.
 
@@ -498,6 +498,11 @@ Decision 2026-07-03: Julian mantiene $15k/$29k mensual ($150k/$290k anual, ~2 me
 
 ## Items
 
+### DOMINIO ✅ menuapp.com.co comprado + correo corporativo configurado — CLOSED
+- **Closed**: 2026-07-20. menuapp.co (domain squatter, USD 1.450) y menuapp.app (tomado) NO disponibles — se compro menuapp.com.co en Cloudflare (USD 15/ano, renovacion estable, WHOIS privacy incluido). Correo corporativo: contacto@menuapp.com.co via Zoho Mail (plan Forever Free tras trial de Mail Premium sin tarjeta cargada — cero riesgo de cobro). MX/SPF/DKIM configurados via autenticacion de un clic Zoho-Cloudflare.
+- **SPF actual**: `v=spf1 include:zohomail.com ~all` — NOTA para F3.c/futuro: cuando se verifique menuapp.com.co en Resend, este registro se EDITA (se agrega include:resend ahi mismo), nunca se duplica un segundo SPF.
+- **Pendiente**: flip de PUBLIC_BASE_URL en lib/urls.ts (Fase 5b, cuando se lance desde este dominio en vez de vercel.app); verificar menuapp.com.co en Resend (desbloquea emails reales, hoy sandbox); recordatorio revisar plan Zoho antes/despues del 10 de agosto (esperado: cae solo a Forever Free, sin tarjeta no hay riesgo de cobro).
+
 ### COLOR-PICKER ✅ Paleta curada + picker nativo domesticado en /config — CLOSED
 - **Closed**: 2026-07-17. Julian detecto que el <input type=color> nativo (dialogo del sistema, swatches RGB de 1995, cero conciencia de contraste) era la ULTIMA UI no-MenuApp de la app — viviendo justamente en la pantalla de estetica.
 - **Solucion (alcance contenido: NO se construyo un picker completo)**: 17 swatches curados aptos para restaurantes y seguros en contraste sobre fondo claro (terracotas, olivas, azules profundos, vinos, ambares, neutros calidos — la paleta es data, comentada como tal), estado seleccionado con ring + Check con color por luminancia, campo hex validado con Vista previa en vivo, y el input nativo degradado a escape discreto "mas colores..." para casos borde. Ruta de persistencia intacta.
@@ -578,11 +583,11 @@ Decision 2026-07-03: Julian mantiene $15k/$29k mensual ($150k/$290k anual, ~2 me
 - **Faseo**: F4.a checkout de pago unico + webhook (firma verificada, service role, escribe plan + plan_expira + inserta factura; LANZABLE solo — renovacion manual al vencer). F4.b diferido + cron (plan_programado/fecha_cambio_programado, banner de retencion, ejecutor COT; incluye extraer el envio de email a funcion server sin cookies — bloqueador detectado: api/emails exige sesion y webhook/cron no tienen). F4.c recurrencia (payment source + cobro automatico por cron; DIFERIBLE post-lanzamiento si los pilotos toleran renovar manual). F4.d facturacion DIAN via Alegra (consume las facturas de F4.a; independiente, al final).
 - **Deudas pre-F4.a**: (1) unificar fuente de precios — payments.ts tiene $15k/$29k viejos vs planes hardcodeados en /suscripcion; decidir STRATEGIC.1 ($19k/$39k) al cablear la fuente unica; (2) sincerar plan_expira en types (declarada required, JAMAS escrita ni leida — el select('*') castea null); (3) payments.ts es codigo muerto total (crearPago sin call sites) pero su shape de 4 campos coincide con Checkout Web de Wompi — esqueleto reutilizable.
 - **Infra nueva que F4 introduce**: SUPABASE_SERVICE_ROLE_KEY + lib/supabase-admin.ts (sin precedente en el repo), WOMPI_EVENTS_SECRET / WOMPI_INTEGRITY_SECRET / NEXT_PUBLIC_WOMPI_PUBLIC_KEY, CRON_SECRET, vercel.json con cron "0 5 * * *" UTC (= medianoche COT; Hobby plan: crons diarios, hora imprecisa dentro de la ventana — valido para ejecutor, no para nada time-sensitive).
-- **Tramites paralelos (Julian, sin fecha)**: contador (persona natural vs SAS), dominio menuapp.co (ahora triple rol: email fiscal + Resend/F3.c + F6), cuenta bancaria, cuenta de comercio Wompi AL FINAL. Todo F4-codigo se construye contra sandbox de Wompi sin cuenta.
+- **Tramites paralelos (Julian, sin fecha)**: contador (persona natural vs SAS), dominio menuapp.com.co (ahora triple rol: email fiscal + Resend/F3.c + F6), cuenta bancaria, cuenta de comercio Wompi AL FINAL. Todo F4-codigo se construye contra sandbox de Wompi sin cuenta.
 
 ### F3-MVP ✅ Emails transaccionales via Resend (bienvenida + cambio de plan) — CLOSED
-- **Closed**: 2026-07-02. MVP de F3 con sandbox de Resend (onboarding@resend.dev); el dominio menuapp.co queda como PREREQUISITO DURO de F7 (el sandbox solo entrega al email del dueno de la cuenta — verificado en smoke: cuentas de prueba con otros correos no reciben nada, comportamiento esperado).
-- **Arquitectura**: segundo route handler del repo (src/app/api/emails/route.ts, POST) adoptando lib/supabase-server.ts (antes codigo muerto). Identidad NUNCA del body: 401 sin sesion, destinatario del auth.getUser(), restaurante leido por usuario_id. Modulo src/lib/email/ con EMAIL_FROM como constante unica (flip de una linea a menuapp.co, espejo de PUBLIC_BASE_URL), cliente Resend lazy (no rompe builds sin key), templates HTML inline-CSS en paleta MenuApp con escaparHtml y fallback texto plano. RESEND_API_KEY = primera env var server-only del repo (sin NEXT_PUBLIC_).
+- **Closed**: 2026-07-02. MVP de F3 con sandbox de Resend (onboarding@resend.dev); el dominio menuapp.com.co queda como PREREQUISITO DURO de F7 (el sandbox solo entrega al email del dueno de la cuenta — verificado en smoke: cuentas de prueba con otros correos no reciben nada, comportamiento esperado).
+- **Arquitectura**: segundo route handler del repo (src/app/api/emails/route.ts, POST) adoptando lib/supabase-server.ts (antes codigo muerto). Identidad NUNCA del body: 401 sin sesion, destinatario del auth.getUser(), restaurante leido por usuario_id. Modulo src/lib/email/ con EMAIL_FROM como constante unica (flip de una linea a menuapp.com.co, espejo de PUBLIC_BASE_URL), cliente Resend lazy (no rompe builds sin key), templates HTML inline-CSS en paleta MenuApp con escaparHtml y fallback texto plano. RESEND_API_KEY = primera env var server-only del repo (sin NEXT_PUBLIC_).
 - **Emails**: bienvenida (al crear restaurante; idempotente via columna bienvenida_enviada, migracion manual Supabase, fail-closed si la lectura falla) y cambio_plan (upgrade/downgrade/periodo con copy propio por caso). Triggers fire-and-forget en registro (2 paths), completa-perfil y suscripcion — nunca bloquean la navegacion.
 - **Fix post-smoke (35c5caf)**: el email era ciego al periodo — cambio pro mensual->anual no disparaba nada. Encontrado por Julian en smoke. Ahora el guard dispara por plan O periodo, copy dedicado para cambio solo-facturacion, y el periodo se nombra en subject/heading de planes pagos. Side fix en cambiarPlan: el error del update de restaurantes (antes ignorado) ahora gatea el email.
 - **Diferidos explicitos**: F3.b (email de pedido al dueno) — requiere SUPABASE_SERVICE_ROLE_KEY (el comensal es anonimo; el server debe resolver dueno con privilegios), acoplar a F4 que probablemente trae el service role por webhooks. F3.c (signup confirmation + password reset con marca) — es SMTP custom de Supabase apuntando a Resend, config de dashboard no codigo, requiere dominio verificado: acoplado a la compra del dominio.
@@ -630,7 +635,7 @@ Decision 2026-07-03: Julian mantiene $15k/$29k mensual ($150k/$290k anual, ~2 me
 - **Fix incidental surfaceado**: el diaCodigoColombia viejo usaba .getDay() (local) mientras fechaColombia usaba UTC, así que el código de día viejo era sutilmente dependiente del huso y podía errar un día en un navegador real de Colombia cerca de medianoche. La versión Intl es tz-independiente-correcta: idéntica donde el viejo estaba bien, correcta donde estaba mal. Su único consumidor (nota informativa de PlatoDelDiaForm) no escribe ni bloquea → cero efecto de datos, solo la nota más correcta cerca de medianoche.
 - **Suite 36 → 267** (los asserts de fechas). **Where**: src/lib/fechas.ts, src/lib/fechas.test.ts.
 - **Deuda restante FUERA de este módulo** (mecánicas distintas, no tocadas): heatmap inline offset (dashboard horaColombia/diaColombia), lunesSemana getters locales (dashboardWindow.ts), y el reloj local de visibilidad → ver BL.41.
-- **Estado plan maestro**: 1 fundaciones → 2 [slug] → 3 /menu → UI pass → 4 dashboard → 5a fechas (F5a) ✅ → queda SOLO 5b (dominio a menuapp.co, cerca del lanzamiento).
+- **Estado plan maestro**: 1 fundaciones → 2 [slug] → 3 /menu → UI pass → 4 dashboard → 5a fechas (F5a) ✅ → queda SOLO 5b (dominio a menuapp.com.co, cerca del lanzamiento).
 
 ### REFACTOR-F4 ✅ Refactor Fase 4: migración de /dashboard a SWR (cierra serie H.1) — CLOSED
 - **Closed**: 2026-06-30. Cuarta fase del plan de refactor. /dashboard era la ÚLTIMA lectura cruda (supabase.from en useEffect) de toda la app; ahora lee por SWR como el resto de páginas (/menu, /config, /referidos, /qr, /suscripcion, público [slug]). Cierra H.1.c.3 (el /dashboard "diferido a Fase 4" en la serie H.1) y por tanto la serie H.1 completa.
@@ -643,7 +648,7 @@ Decision 2026-07-03: Julian mantiene $15k/$29k mensual ($150k/$290k anual, ~2 me
 - **BL.35**: subsumido a MEDIAS — el Promise.all dentro de useDashboardStats convierte los ~13 awaits en serie en un batch concurrente (mitad "paralelizar" hecha). La mitad "índices DB" (Supabase) sigue ABIERTA, fuera de alcance de esta migración client-side.
 - **Where**: src/lib/dashboardWindow.ts (+test), src/hooks/data/useDashboardStats.ts, src/hooks/data/useDashboardLifetime.ts, src/hooks/data/useDashboardAlertas.ts, src/app/dashboard/page.tsx.
 - **Commits**: 441d063, ef59308, e52b39d, acdf109.
-- **Estado del plan maestro**: 1 fundaciones (F1) → 2 [slug] (F2) → 3 /menu (F3) → UI pass (REFACTOR-UI) → 4 dashboard (F4) ✅ → queda SOLO Fase 5 (sweeps semánticos: 5a fechas con Intl/America-Bogota tocando solo lib/fechas.ts; 5b dominio a menuapp.co).
+- **Estado del plan maestro**: 1 fundaciones (F1) → 2 [slug] (F2) → 3 /menu (F3) → UI pass (REFACTOR-UI) → 4 dashboard (F4) ✅ → queda SOLO Fase 5 (sweeps semánticos: 5a fechas con Intl/America-Bogota tocando solo lib/fechas.ts; 5b dominio a menuapp.com.co).
 
 ### REFACTOR-UI ✅ Pasada de UI senior: polish de menu-publico + menu-admin (entre Fases 3 y 4) — CLOSED
 - **Closed**: 2026-06-22. El "UI pass" planificado en el plan maestro de refactor entre Fase 3 y Fase 4 (1 fundaciones → 2 [slug] → 3 /menu → UI pass → 4 dashboard → 5 sweeps). La condición era que la UI viviera en piezas chicas y tocables; tras REFACTOR-F2/F3 vivía así.
@@ -696,7 +701,7 @@ Decision 2026-07-03: Julian mantiene $15k/$29k mensual ($150k/$290k anual, ~2 me
 - **Commits**: 8608302 (lib/fechas), 7299adb (lib/precio + lib/dias), 39905da (lib/urls + delete lib/whatsapp muerto), 861e52e (lib/analytics + CampoTexto a components/ui), b932e16 (SWR /qr /referidos /suscripcion).
 - **lib/fechas.ts**: patrón -5h centralizado desde 8 sitios en 3 archivos (fechaColombia, diaCodigoColombia). Behavior-preserving a propósito; el fix semántico con Intl/America-Bogota es Fase 5a y cambia SOLO este archivo. Heatmap helpers del dashboard intactos (mecánica distinta, BL.29).
 - **lib/precio.ts + lib/dias.ts**: formatoPrecio barrido en 49 sitios de precio ([slug] 19, menu 24, facturas 3, suscripcion 3; dashboard diferido a su fase); formatDiasShort/Full unificados en formatDias(dias, style).
-- **lib/urls.ts**: PUBLIC_BASE_URL única fuente del dominio externo (QR funcional + link de referido, output byte-idéntico); la migración a menuapp.co flipea una constante (Fase 5b). String cosmético menuapp.co del QR intacto (copy de marketing). lib/whatsapp.ts borrado (cero imports; la extracción real saldrá del inline de [slug] en Fase 2).
+- **lib/urls.ts**: PUBLIC_BASE_URL única fuente del dominio externo (QR funcional + link de referido, output byte-idéntico); la migración a menuapp.com.co flipea una constante (Fase 5b). String cosmético menuapp.com.co del QR intacto (copy de marketing). lib/whatsapp.ts borrado (cero imports; la extracción real saldrá del inline de [slug] en Fase 2).
 - **lib/analytics.ts**: getSessionId + guard BL.34 (visitaYaLogueada/marcarVisitaLogueada, orden set-before-insert preservado). CampoTexto promovido a components/ui (flush registry queda en /menu; contrato type-level).
 - **SWR (cierra la parte S de H.1.c.2.c)**: /qr no tenía reads que migrar (eran 2 writes de flags de onboarding) → mutateRestaurante tras cada write (checklist refleja sin reload, guards ven flag fresco); /referidos → hook nuevo useReferidos + codegen imperativo con mutate (BONUS: arregla staleness real preexistente — el link se compartía con ?ref= vacío en la primera visita hasta un refocus); /suscripcion → await mutateRestaurante antes de navegar (el dashboard monta con el plan nuevo en cache). Queda SOLO /dashboard (Fase 4).
 - **Verificado**: smoke test en producción (fechas/precios/días idénticos, QR decodifica bien, link referido byte-idéntico, plan sin reload, tipeo fluido).
@@ -724,14 +729,14 @@ Decision 2026-07-03: Julian mantiene $15k/$29k mensual ($150k/$290k anual, ~2 me
 
 ### BL.38 ✅ Acceso directo "Ver mi menú" en el admin — RESUELTO
 - **Found**: 2026-06-09 (pedido de Julian: abrir el menú público en un clic desde el admin, sin pasar por la sección del QR).
-- **Resuelto**: 2026-06-09 (commit 6bb3f02). Dos ubicaciones: (1) header de /menu — anchor btn-outline en el slot derecho vacío del flex, "estoy editando → verlo en vivo"; (2) primera fila del dropdown de perfil del dashboard, con branch external en el handler (window.open '_blank' noopener; las otras filas siguen en router.push, byte-identical). URL RELATIVA '/' + slug (sin dominio hardcodeado): funciona hoy en menuapp-iota.vercel.app y sobrevive la migración futura a menuapp.co sin cambios — a diferencia de /qr y /referidos que hardcodean el dominio (ver BL.37). Render solo cuando rest?.slug existe (sin slug placeholder; mejor ausente que roto).
+- **Resuelto**: 2026-06-09 (commit 6bb3f02). Dos ubicaciones: (1) header de /menu — anchor btn-outline en el slot derecho vacío del flex, "estoy editando → verlo en vivo"; (2) primera fila del dropdown de perfil del dashboard, con branch external en el handler (window.open '_blank' noopener; las otras filas siguen en router.push, byte-identical). URL RELATIVA '/' + slug (sin dominio hardcodeado): funciona hoy en menuapp-iota.vercel.app y sobrevive la migración futura a menuapp.com.co sin cambios — a diferencia de /qr y /referidos que hardcodean el dominio (ver BL.37). Render solo cuando rest?.slug existe (sin slug placeholder; mejor ausente que roto).
 - **Where**: src/app/menu/page.tsx (header ~L1824), src/app/dashboard/page.tsx (dropdown items array + handler ~L1430-1438).
 - **Priority**: 🟢 (comodidad de uso del admin).
 
 ### BL.37 ✅ Selector de idioma decorativo oculto (+ hallazgo: dominios hardcodeados) — RESUELTO
 - **Found**: 2026-06-09. La fila "Idioma" del dropdown de perfil del dashboard era puramente decorativa: href '#', sin estado, sin contexto, sin librería i18n en el repo. Solo existe español.
 - **Resuelto**: 2026-06-09 (commit 6bb3f02). Comentada in place (no eliminada) con nota, para reactivarla cuando llegue i18n real. El campo Restaurante.idioma de la DB y sus writes en registro/completa-perfil quedaron intactos (independientes de la fila).
-- **Hallazgo lateral (PENDIENTE, sin BL propio aún)**: la investigación reveló que /qr usa DOS dominios hardcodeados — menuapp.co (cosmético, hoy daría 404) y menuapp-iota.vercel.app (el funcional: QR canvas, clipboard, WhatsApp/Facebook share). /referidos también hardcodea vercel.app. Cuando se migre a menuapp.co (F6/F7), hay que barrer estos puntos; considerar centralizar en una constante o usar window.location.origin.
+- **Hallazgo lateral (PENDIENTE, sin BL propio aún)**: la investigación reveló que /qr usa DOS dominios hardcodeados — menuapp.com.co (cosmético, hoy daría 404) y menuapp-iota.vercel.app (el funcional: QR canvas, clipboard, WhatsApp/Facebook share). /referidos también hardcodea vercel.app. Cuando se migre a menuapp.com.co (F6/F7), hay que barrer estos puntos; considerar centralizar en una constante o usar window.location.origin.
 - **Where**: src/app/dashboard/page.tsx (~L1434).
 - **Priority**: 🟢 (limpieza UI).
 
