@@ -1,9 +1,9 @@
 import { Resend } from 'resend'
 
-// Remitente de todos los correos transaccionales. Sandbox de Resend:
-// solo llegan correos a la cuenta dueña del API key. Cambiar SOLO aquí
-// al verificar menuapp.co (mismo patrón que PUBLIC_BASE_URL en lib/urls.ts).
-export const EMAIL_FROM = 'MenuApp <onboarding@resend.dev>'
+// Remitente de todos los correos transaccionales. Dominio menuapp.com.co
+// verificado en Resend (2026-07-26): ya entrega a cualquier destinatario.
+// Cambiar SOLO aqui (mismo patron que PUBLIC_BASE_URL en lib/urls.ts).
+export const EMAIL_FROM = 'MenuApp <no-reply@menuapp.com.co>'
 
 interface EnviarEmailParams {
   to: string
