@@ -498,6 +498,12 @@ Decision 2026-07-03: Julian mantiene $15k/$29k mensual ($150k/$290k anual, ~2 me
 
 ## Items
 
+### EMAIL-DOMINIO ✅ Flip de EMAIL_FROM al dominio verificado — CLOSED
+- **Closed**: 2026-07-26. menuapp.com.co verificado en Resend (subdominio de envio send.menuapp.com.co via SES sa-east-1, SPF/DKIM propios sin tocar el SPF raiz de Zoho). EMAIL_FROM: sandbox onboarding@resend.dev -> 'MenuApp <no-reply@menuapp.com.co>'. Los emails transaccionales (bienvenida, cambio de plan) por PRIMERA VEZ llegan a CUALQUIER destinatario, no solo al dueno del API key. Un solo punto de cambio (sender.ts) como prometio el diseno F3-MVP; comentario sandbox obsoleto corregido en el mismo edit. no-reply es send-only (Resend envia desde cualquier direccion del dominio verificado, no requiere buzon en Zoho).
+- **Cierra el bloqueo de F3**: la restriccion de sandbox (solo jdmortega92@gmail.com) era prerequisito para el resto de F3. F3.c (auth emails con marca via SMTP de Supabase) sigue pendiente pero ya no bloqueado por dominio.
+- **Verificado**: tsc limpio, 281 tests, smoke real de Julian a direccion no-duena.
+- **Commit**: [Julian: hash del push].
+
 ### DOMINIO ✅ menuapp.com.co comprado + correo corporativo configurado — CLOSED
 - **Closed**: 2026-07-20. menuapp.co (domain squatter, USD 1.450) y menuapp.app (tomado) NO disponibles — se compro menuapp.com.co en Cloudflare (USD 15/ano, renovacion estable, WHOIS privacy incluido). Correo corporativo: contacto@menuapp.com.co via Zoho Mail (plan Forever Free tras trial de Mail Premium sin tarjeta cargada — cero riesgo de cobro). MX/SPF/DKIM configurados via autenticacion de un clic Zoho-Cloudflare.
 - **SPF actual**: `v=spf1 include:zohomail.com ~all` — NOTA para F3.c/futuro: cuando se verifique menuapp.com.co en Resend, este registro se EDITA (se agrega include:resend ahi mismo), nunca se duplica un segundo SPF.
