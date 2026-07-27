@@ -498,6 +498,21 @@ Decision 2026-07-03: Julian mantiene $15k/$29k mensual ($150k/$290k anual, ~2 me
 
 ## Items
 
+### BL.43 🔴 eliminarCuenta no borra de verdad — cuenta fantasma revive — ABIERTO
+- **Found**: 2026-07-26 (investigacion previa a idea de email de borrado). src/app/config/page.tsx:294-333 eliminarCuenta() borra 15 tablas del restaurante con el cliente del navegador pero NO borra el registro de auth.users (requiere admin.deleteUser con service role, inexistente hoy). Resultado: tras "eliminar la cuenta" el email SIGUE registrado y puede volver a loguearse, cayendo en una cuenta sin restaurante.
+- **Gaps adicionales**: (a) cero manejo de error — ninguno de los 15 delete() se inspecciona; un fallo a mitad deja datos huerfanos, sin rollback y sin aviso al usuario; (b) Supabase Storage intacto — logos y fotos subidas quedan huerfanas ocupando espacio.
+- **Acoplado a F4.a-2**: el arreglo correcto necesita lib/supabase-admin.ts (service role), que F4.a-2 introduce. Parchear antes seria trabajo tirado. ARREGLAR JUNTO A F4.a-2.
+- **Priority**: 🔴 (datos/seguridad: la eliminacion de cuenta no cumple lo que promete).
+
+### BL.44 🟡 Email de confirmacion al eliminar cuenta — BLOQUEADO por BL.43
+- **Found**: 2026-07-26. Idea de Julian. eliminarCuenta() hoy es silencioso (cero llamadas a /api/emails). Un email "tu cuenta fue eliminada" seria MENTIR mientras BL.43 este abierto (el borrado no borra). Implementar SOLO despues de BL.43.
+- **Priority**: 🟡.
+
+### BL.45 🟡 Aviso por email al cambiar contrasena — es F3.c, no feature suelta
+- **Found**: 2026-07-26. Idea de Julian (buena practica de seguridad estandar). Investigacion confirma: TODOS los emails de auth (reset de password, confirmacion de registro, cambio de password) los maneja Supabase Auth con plantillas y remitente genericos de Supabase — ninguno pasa por src/lib/email/. No hay config SMTP en el repo; vive en el dashboard de Supabase (Auth > Emails / SMTP).
+- **Ya no bloqueado por dominio**: menuapp.com.co verificado en Resend (ver EMAIL-DOMINIO). F3.c es ahora posible: apuntar el SMTP de Supabase a Resend + plantillas con marca. El aviso de cambio de contrasena entra como parte de ese frente, no como email suelto.
+- **Priority**: 🟡 (completitud; ningun piloto lo echara de menos en las primeras semanas).
+
 ### EMAIL-DOMINIO ✅ Flip de EMAIL_FROM al dominio verificado — CLOSED
 - **Closed**: 2026-07-26. menuapp.com.co verificado en Resend (subdominio de envio send.menuapp.com.co via SES sa-east-1, SPF/DKIM propios sin tocar el SPF raiz de Zoho). EMAIL_FROM: sandbox onboarding@resend.dev -> 'MenuApp <no-reply@menuapp.com.co>'. Los emails transaccionales (bienvenida, cambio de plan) por PRIMERA VEZ llegan a CUALQUIER destinatario, no solo al dueno del API key. Un solo punto de cambio (sender.ts) como prometio el diseno F3-MVP; comentario sandbox obsoleto corregido en el mismo edit. no-reply es send-only (Resend envia desde cualquier direccion del dominio verificado, no requiere buzon en Zoho).
 - **Cierra el bloqueo de F3**: la restriccion de sandbox (solo jdmortega92@gmail.com) era prerequisito para el resto de F3. F3.c (auth emails con marca via SMTP de Supabase) sigue pendiente pero ya no bloqueado por dominio.
