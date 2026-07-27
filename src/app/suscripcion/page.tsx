@@ -67,6 +67,29 @@ export default function SuscripcionPage() {
     if (pagoProcesando && planPagoActivo) setPagoProcesando(false)
   }, [pagoProcesando, planPagoActivo])
 
+  // Regreso con el boton ATRAS del navegador desde el checkout de Wompi. La
+  // pagina vuelve del bfcache SIN remontar, con el estado congelado: sin esto
+  // el boton se queda en "Cambiando..." para siempre. persisted=true es
+  // exactamente esa restauracion (en una carga normal el componente monta de
+  // cero y planEnProceso ya nace en null). NO se usa visibilitychange: tambien
+  // dispara al cambiar de pestana, y limpiaria el estado con el POST del
+  // checkout todavia en vuelo. Solo se toca planEnProceso: el banner de
+  // ?estado=procesando lo gobierna su propio efecto, intacto.
+  //
+  // Este patron aplica a CUALQUIER pagina que navegue fuera en la misma pestana
+  // teniendo estado de carga vivo. Hoy esta es la unica: el resto usa
+  // window.open (pestana nueva, no congela) y el boton de Google de /registro
+  // (handleGoogle -> signInWithOAuth, redirect en la misma pestana) se salva
+  // solo porque NO marca ningun flag de carga. Si algun dia se le agrega uno,
+  // necesita este mismo pageshow o heredara el bug.
+  useEffect(() => {
+    const alRestaurar = (e: PageTransitionEvent) => {
+      if (e.persisted) setPlanEnProceso(null)
+    }
+    window.addEventListener('pageshow', alRestaurar)
+    return () => window.removeEventListener('pageshow', alRestaurar)
+  }, [])
+
   // Ruteo del boton: bajar a gratis es cambio directo; subir a un plan pago
   // pasa por Wompi (F4.a-2) y NO escribe el plan aqui (lo confirma el webhook).
   async function cambiarPlan(nuevoPlan: Plan) {

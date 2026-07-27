@@ -37,6 +37,12 @@ function RegistroContent() {
     { valor: 'otro', label: 'Otro' },
   ]
 
+  // OJO si algun dia se agrega un flag de carga aqui (p. ej. setCargando(true)):
+  // signInWithOAuth navega FUERA en la misma pestana, y al volver con el boton
+  // atras la pagina se restaura del bfcache con el estado congelado -> el boton
+  // se quedaria en "Cargando..." para siempre. Hoy no pasa solo porque este
+  // handler no marca ningun flag. El antidoto es el listener de 'pageshow' con
+  // event.persisted que vive en /suscripcion (mismo caso, con Wompi).
   async function handleGoogle() {
     setError('')
     const { error } = await loginConGoogle()
