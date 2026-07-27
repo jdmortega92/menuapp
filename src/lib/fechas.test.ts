@@ -4,7 +4,7 @@
 process.env.TZ = 'UTC'
 
 import { describe, it, expect } from 'vitest'
-import { fechaColombia, diaCodigoColombia } from './fechas'
+import { fechaColombia, diaCodigoColombia, fechaLargaColombia } from './fechas'
 
 // Oráculo legacy: la expresión -5h EXACTA que vive hoy en fechas.ts. El swap de
 // Commit 2 debe reproducir esto byte a byte para toda hora → este archivo lo congela.
@@ -84,6 +84,55 @@ describe('fechaColombia', () => {
       }
     }
   })
+})
+
+describe('fechaLargaColombia', () => {
+  // ── 1) El caso de producción: plan_expira leído de Postgres ──
+  // La columna devuelve el timestamptz de la fecha que escribió el webhook. El
+  // formato debe conservar el DÍA CALENDARIO (27), no convertir el instante a COT
+  // (que daría 26, porque medianoche UTC son las 19:00 del día anterior en Bogotá).
+  it('ISO con offset +00:00 → conserva el día calendario', () => {
+    expect(fechaLargaColombia('2026-08-27T00:00:00+00:00')).toBe('27 de agosto de 2026')
+  })
+  it('ISO con Z → conserva el día calendario (mismo no-off-by-one)', () => {
+    expect(fechaLargaColombia('2026-08-27T00:00:00Z')).toBe('27 de agosto de 2026')
+  })
+  it('YYYY-MM-DD pelado (lo que escribe calcularPlanExpira)', () => {
+    expect(fechaLargaColombia('2026-08-27')).toBe('27 de agosto de 2026')
+  })
+
+  // ── 2) Bordes de día y de mes ──
+  it('día 1 sin cero a la izquierda', () => {
+    expect(fechaLargaColombia('2026-01-01')).toBe('1 de enero de 2026')
+  })
+  it('día 31 en diciembre', () => {
+    expect(fechaLargaColombia('2026-12-31')).toBe('31 de diciembre de 2026')
+  })
+  it('29 de febrero de un año bisiesto', () => {
+    expect(fechaLargaColombia('2024-02-29')).toBe('29 de febrero de 2024')
+  })
+  it('cubre los 12 meses', () => {
+    for (let m = 1; m <= 12; m++) {
+      const mm = String(m).padStart(2, '0')
+      expect(fechaLargaColombia(`2026-${mm}-15`)).toMatch(/^15 de \S+ de 2026$/)
+    }
+  })
+
+  // ── 3) Un Date sí se resuelve por zona horaria (America/Bogota) ──
+  it('Date 04:59Z → día COT anterior', () => {
+    expect(fechaLargaColombia(new Date('2026-08-27T04:59:00Z'))).toBe('26 de agosto de 2026')
+  })
+  it('Date 05:00Z → mismo día COT', () => {
+    expect(fechaLargaColombia(new Date('2026-08-27T05:00:00Z'))).toBe('27 de agosto de 2026')
+  })
+
+  // ── 4) Entrada inválida → '' (la UI cae a su texto de respaldo) ──
+  it.each(['', 'no-es-fecha', '2026-13-01', '2026-00-10', '2026-08-00', '27/08/2026'])(
+    '%o → cadena vacía',
+    (entrada) => {
+      expect(fechaLargaColombia(entrada)).toBe('')
+    }
+  )
 })
 
 describe('diaCodigoColombia', () => {

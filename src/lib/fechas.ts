@@ -32,6 +32,29 @@ export function fechaColombia(d: Date = new Date()): string {
   return ymdColombia(d)
 }
 
+// Meses en español para el formato humano. Array literal a propósito: la misma razón
+// que arriba (toLocaleDateString con locale string varía entre versiones de ICU, y
+// aquí además cambiaría de mayúscula/abreviatura según la plataforma).
+const MESES_ES = [
+  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+]
+
+// Fecha humana en español ('27 de agosto de 2026') a partir de una fecha CALENDARIO.
+// Para strings se toma el prefijo 'YYYY-MM-DD' TAL CUAL, sin reinterpretarlo como
+// instante: plan_expira se escribe como '2026-08-27' (lib/wompi calcularPlanExpira,
+// ya en COT) y Postgres lo devuelve como '2026-08-27T00:00:00+00:00'; convertir ese
+// instante a America/Bogota daría el 26 (medianoche UTC = 19:00 COT del día anterior).
+// Un Date sí se resuelve por zona horaria, vía ymdColombia. Devuelve '' si no calza.
+export function fechaLargaColombia(valor: string | Date): string {
+  const ymd = typeof valor === 'string' ? valor.slice(0, 10) : ymdColombia(valor)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return ''
+  const [ano, mes, dia] = ymd.split('-').map(Number)
+  const nombreMes = MESES_ES[mes - 1]
+  if (!nombreMes || dia < 1 || dia > 31) return ''
+  return `${dia} de ${nombreMes} de ${ano}`
+}
+
 // Código de día ('dom'…'sab') de "hoy" en Colombia. Derivado de la MISMA fecha COT que
 // fechaColombia: el día de la semana de esa fecha calendario (getUTCDay sobre su
 // medianoche UTC → índice 0=dom..6=sab). `d` es inyectable (default new Date()) para

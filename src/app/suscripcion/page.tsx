@@ -8,16 +8,26 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks'
 import { createClient } from '@/lib/supabase-browser'
 import { formatoPrecio } from '@/lib/precio'
-import { LISTA_PLANES, PLANES, ahorroAnual } from '@/lib/planes'
+import { LISTA_PLANES, PLANES, ahorroAnual, precioDe, type Periodo } from '@/lib/planes'
+import { fechaColombia, fechaLargaColombia } from '@/lib/fechas'
+import type { Plan } from '@/types'
 
 export default function SuscripcionPage() {
   const router = useRouter()
   const { usuario, restaurante: rest, cargando, mutateRestaurante } = useAuth()
-  const [periodo, setPeriodo] = useState<'mensual' | 'anual'>('mensual')
+  const [periodo, setPeriodo] = useState<Periodo>('mensual')
   const [cambiando, setCambiando] = useState(false)
   const [pagoProcesando, setPagoProcesando] = useState(false)
-  const planActual = (rest?.plan || 'gratis') as string
-  const periodoActual = (rest?.periodo_plan || 'mensual') as string
+  const planActual: Plan = rest?.plan || 'gratis'
+  // periodo_plan es texto libre en DB: se estrecha a Periodo aquí (todo lo que no
+  // sea 'anual' cuenta como mensual) para poder compararlo y tarifarlo sin casts.
+  const periodoActual: Periodo = rest?.periodo_plan === 'anual' ? 'anual' : 'mensual'
+  // Un plan pago con fecha de renovación vigente (comparación de fechas CALENDARIO
+  // en COT, ambas 'YYYY-MM-DD'). Sin plan_expira se asume activo: el plan pago ya
+  // está escrito y la fecha es opcional en filas anteriores al webhook.
+  const planPagoActivo =
+    planActual !== 'gratis' &&
+    (!rest?.plan_expira || rest.plan_expira.slice(0, 10) >= fechaColombia())
 
   useEffect(() => {
     if (!cargando && !usuario) {
@@ -28,11 +38,20 @@ export default function SuscripcionPage() {
   // Retorno desde el Checkout de Wompi (redirect-url ?estado=procesando). El
   // plan se activa async por el webhook; aqui solo mostramos "procesando".
   // Se lee de window (no useSearchParams) para no exigir un boundary Suspense.
+  // El webhook suele ganarle al redirect, asi que se revalida la fila una vez:
+  // el efecto de abajo baja el banner en cuanto llega el plan ya activo.
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get('estado') === 'procesando') {
       setPagoProcesando(true)
+      mutateRestaurante()
     }
-  }, [])
+  }, [mutateRestaurante])
+
+  // El banner es transitorio, no permanente: si la fila revalidada ya muestra un
+  // plan pago vigente, el webhook confirmo y no hay nada que "estar confirmando".
+  useEffect(() => {
+    if (pagoProcesando && planPagoActivo) setPagoProcesando(false)
+  }, [pagoProcesando, planPagoActivo])
 
   // Ruteo del boton: bajar a gratis es cambio directo; subir a un plan pago
   // pasa por Wompi (F4.a-2) y NO escribe el plan aqui (lo confirma el webhook).
@@ -113,6 +132,10 @@ export default function SuscripcionPage() {
   // Precios y features: SIEMPRE desde lib/planes (fuente única, F4.a-1).
   const planes = LISTA_PLANES
   const descuentoAnual = Math.round((ahorroAnual('basico') / (PLANES.basico.precioMensual * 12)) * 100)
+  // plan_expira llega de Postgres como timestamptz ('2026-08-27T00:00:00+00:00');
+  // fechaLargaColombia lo formatea por fecha calendario y devuelve '' si no calza.
+  const renovacion = rest?.plan_expira ? fechaLargaColombia(rest.plan_expira) : ''
+  const renovacionTexto = renovacion ? `Renueva el ${renovacion}` : ''
 
   return (
     <div style={{ background: 'var(--bg-primary)', minHeight: '100vh' }}>
@@ -154,14 +177,16 @@ export default function SuscripcionPage() {
               <div style={{ fontSize: '12px', color: 'var(--color-accent-dark)', opacity: 0.7, marginTop: '2px' }}>
                 {planActual === 'gratis'
                   ? 'Sin fecha de renovación'
-                  : rest?.plan_expira
-                    ? `Renueva el ${rest.plan_expira}`
-                    : 'Suscripción activa'}
+                  : renovacionTexto || 'Suscripción activa'}
               </div>
             </div>
+            {/* Precio del periodo REALMENTE contratado (periodo_plan), no el mensual
+                fijo: quien pagó el anual ve $290.000/año, no $29.000/mes. */}
             <div style={{ fontSize: '20px', fontWeight: 500, color: 'var(--color-accent-dark)' }}>
-              ${formatoPrecio(planes.find(p => p.id === planActual)?.precioMensual)}
-              <span style={{ fontSize: '11px', fontWeight: 400 }}>/mes</span>
+              ${formatoPrecio(precioDe(planActual, periodoActual))}
+              <span style={{ fontSize: '11px', fontWeight: 400 }}>
+                {planActual !== 'gratis' && periodoActual === 'anual' ? '/año' : '/mes'}
+              </span>
             </div>
           </div>
         </div>
@@ -192,7 +217,9 @@ export default function SuscripcionPage() {
 
         {/* Planes */}
         {planes.map((plan) => {
-          const esActual = plan.id === planActual
+          // "Actual" exige plan Y periodo: con el toggle en anual, un pro mensual
+          // NO es el plan actual (y por eso debe poder contratarse).
+          const esActual = plan.id === planActual && periodo === periodoActual
           const precio = periodo === 'mensual' ? plan.precioMensual : Math.round(plan.precioAnual / 12)
           const precioTotal = periodo === 'anual' ? plan.precioAnual : null
 
@@ -203,7 +230,7 @@ export default function SuscripcionPage() {
                 border: esActual ? '2px solid var(--color-accent)' : '1px solid var(--border-light)',
                 borderRadius: 'var(--radius-md)', padding: '16px', position: 'relative',
               }}>
-                {esActual && periodo === periodoActual && (
+                {esActual && (
                   <div style={{
                     position: 'absolute', top: '-1px', right: '16px',
                     background: 'var(--color-accent)', color: 'white',
@@ -246,7 +273,7 @@ export default function SuscripcionPage() {
                 )}
 
                 {/* Botón */}
-                {!(esActual && periodo === (rest?.periodo_plan || 'mensual')) && (
+                {!esActual && (
                   <Boton variante={plan.id === 'gratis' ? 'secundario' : 'primario'}
                     onClick={() => cambiarPlan(plan.id)}
                     style={{ width: '100%', marginTop: '10px' }}

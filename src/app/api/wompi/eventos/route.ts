@@ -88,13 +88,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ recibido: true, idempotente: true }, { status: 200 })
     }
 
-    // Plan anterior (para el copy del email) antes de sobreescribir.
+    // Plan anterior (para el copy del email) y DUENO de la cuenta, antes de
+    // sobreescribir. usuario_id es la unica fuente valida del destinatario.
     const { data: restPrev } = await admin
       .from('restaurantes')
-      .select('plan')
+      .select('plan, usuario_id')
       .eq('id', restauranteId)
       .maybeSingle()
     const planAnterior = (restPrev?.plan as string | undefined) ?? 'gratis'
+    const usuarioId = restPrev?.usuario_id as string | undefined
 
     const planExpira = calcularPlanExpira(periodo)
     const { error: updErr } = await admin
@@ -123,10 +125,25 @@ export async function POST(request: Request) {
     }
 
     // Email (server-callable, sin sesion). No romper el webhook si falla.
-    const email = transaction.customer_email
-    if (typeof email === 'string' && email) {
+    // El destinatario sale SIEMPRE de NUESTROS datos: restaurante -> usuario_id ->
+    // auth.users (via service role). JAMAS de transaction.customer_email: quien
+    // paga en el formulario de Wompi puede ser un contador o socio, no el dueno de
+    // la cuenta. Misma regla de identidad que /api/emails (nunca desde el body).
+    // Si no se resuelve el correo, no se envia nada (fail-closed).
+    let emailDueno: string | undefined
+    if (usuarioId) {
+      const { data: authData, error: authErr } = await admin.auth.admin.getUserById(usuarioId)
+      if (authErr) console.error('[wompi/eventos] lookup del dueno fallo:', authErr.message)
+      emailDueno = authData?.user?.email ?? undefined
+    }
+    // Se loguea el RESULTADO, nunca el valor: un no-envio debe ser diagnosticable.
+    console.info(
+      `[wompi/eventos] destinatario resuelto=${Boolean(emailDueno)} restaurante=${restauranteId}` +
+        (usuarioId ? '' : ' (sin usuario_id)')
+    )
+    if (emailDueno) {
       try {
-        await notificarPlanActivo({ to: email, plan, periodo, planAnterior })
+        await notificarPlanActivo({ to: emailDueno, plan, periodo, planAnterior })
       } catch {
         console.error('[wompi/eventos] envio de email fallo (plan ya activo)')
       }
