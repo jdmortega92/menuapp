@@ -16,8 +16,13 @@ export default function SuscripcionPage() {
   const router = useRouter()
   const { usuario, restaurante: rest, cargando, mutateRestaurante } = useAuth()
   const [periodo, setPeriodo] = useState<Periodo>('mensual')
-  const [cambiando, setCambiando] = useState(false)
+  // QUE plan esta en vuelo, no un booleano global: con un solo flag compartido
+  // los tres botones mostraban el label de carga a la vez. null = nada en vuelo.
+  const [planEnProceso, setPlanEnProceso] = useState<Plan | null>(null)
   const [pagoProcesando, setPagoProcesando] = useState(false)
+  // Mientras algo esta en vuelo se deshabilitan TODOS los botones (evita dobles
+  // cobros), pero solo el del plan en vuelo cambia de label.
+  const cambiando = planEnProceso !== null
   const planActual: Plan = rest?.plan || 'gratis'
   // periodo_plan es texto libre en DB: se estrecha a Periodo aquí (todo lo que no
   // sea 'anual' cuenta como mensual) para poder compararlo y tarifarlo sin casts.
@@ -40,10 +45,19 @@ export default function SuscripcionPage() {
   // Se lee de window (no useSearchParams) para no exigir un boundary Suspense.
   // El webhook suele ganarle al redirect, asi que se revalida la fila una vez:
   // el efecto de abajo baja el banner en cuanto llega el plan ya activo.
+  // Luego se limpia ?estado de la URL con replaceState: reescribe la entrada
+  // ACTUAL del historial (la del aterrizaje), asi un refresh o un forward/back
+  // no revive el banner ni deja el param en lo que el usuario copie. OJO: esto
+  // NO saca a Wompi del historial (esa entrada es anterior y ningun JS puede
+  // borrarla); de eso se encarga el back-arrow propio del header, que empuja
+  // /dashboard en vez de confiar en el historial.
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get('estado') === 'procesando') {
       setPagoProcesando(true)
       mutateRestaurante()
+      const url = new URL(window.location.href)
+      url.searchParams.delete('estado')
+      window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`)
     }
   }, [mutateRestaurante])
 
@@ -55,7 +69,7 @@ export default function SuscripcionPage() {
 
   // Ruteo del boton: bajar a gratis es cambio directo; subir a un plan pago
   // pasa por Wompi (F4.a-2) y NO escribe el plan aqui (lo confirma el webhook).
-  async function cambiarPlan(nuevoPlan: string) {
+  async function cambiarPlan(nuevoPlan: Plan) {
     if (!rest?.id) return
     if (nuevoPlan === 'gratis') return bajarAGratis()
     return iniciarPagoWompi(nuevoPlan)
@@ -63,7 +77,7 @@ export default function SuscripcionPage() {
 
   async function bajarAGratis() {
     if (!rest?.id) return
-    setCambiando(true)
+    setPlanEnProceso('gratis')
     const supabase = createClient()
     // fue_pago es un latch one-way (STRATEGIC.2): bajar a gratis NO lo toca (solo
     // el pago lo activa). De él depende la regla de fotos del plan gratis (lib/fotosGate).
@@ -89,12 +103,12 @@ export default function SuscripcionPage() {
         }),
       }).catch(console.error)
     }
-    setCambiando(false)
+    setPlanEnProceso(null)
     router.push('/dashboard')
   }
 
-  async function iniciarPagoWompi(nuevoPlan: string) {
-    setCambiando(true)
+  async function iniciarPagoWompi(nuevoPlan: Plan) {
+    setPlanEnProceso(nuevoPlan)
     try {
       const res = await fetch('/api/wompi/checkout', {
         method: 'POST',
@@ -104,7 +118,7 @@ export default function SuscripcionPage() {
       const data = await res.json()
       if (!res.ok || !data?.url) {
         console.error('[suscripcion] checkout Wompi fallo:', data?.error)
-        setCambiando(false)
+        setPlanEnProceso(null)
         return
       }
       // Redirige al Checkout de Wompi. El plan NO se escribe optimista: el
@@ -112,7 +126,7 @@ export default function SuscripcionPage() {
       window.location.href = data.url
     } catch (err) {
       console.error('[suscripcion] error iniciando pago:', err)
-      setCambiando(false)
+      setPlanEnProceso(null)
     }
   }
 
@@ -143,7 +157,9 @@ export default function SuscripcionPage() {
 
         {/* Header */}
         <div style={{ padding: '16px 20px 12px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <span onClick={() => router.back()} style={{ fontSize: '18px', color: 'var(--text-secondary)', cursor: 'pointer' }}>←</span>
+          {/* Destino EXPLICITO, nunca router.back(): al volver del checkout de
+              Wompi la entrada anterior del historial es el propio Wompi. */}
+          <span onClick={() => router.push('/dashboard')} style={{ fontSize: '18px', color: 'var(--text-secondary)', cursor: 'pointer' }}>←</span>
           <span style={{ fontSize: '18px', fontWeight: 500 }}>Mi suscripción</span>
         </div>
 
@@ -278,7 +294,9 @@ export default function SuscripcionPage() {
                     onClick={() => cambiarPlan(plan.id)}
                     style={{ width: '100%', marginTop: '10px' }}
                     disabled={cambiando}>
-                    {cambiando ? 'Cambiando...' : plan.id === 'gratis' ? 'Bajar a Gratis' : `Subir a ${plan.nombre}`}
+                    {/* Solo el plan EN VUELO cambia de label; los demas quedan
+                        deshabilitados con su texto normal (Boton los atenua). */}
+                    {planEnProceso === plan.id ? 'Cambiando...' : plan.id === 'gratis' ? 'Bajar a Gratis' : `Subir a ${plan.nombre}`}
                   </Boton>
                 )}
               </div>
@@ -316,7 +334,7 @@ export default function SuscripcionPage() {
         {planActual !== 'gratis' && (
           <div style={{ padding: '0 20px', marginBottom: '16px', textAlign: 'center' }}>
             <span onClick={() => cambiarPlan('gratis')} style={{ fontSize: '12px', color: 'var(--color-danger)', cursor: 'pointer' }}>
-              {cambiando ? 'Cancelando...' : 'Cancelar suscripción'}
+              {planEnProceso === 'gratis' ? 'Cancelando...' : 'Cancelar suscripción'}
             </span>
           </div>
         )}

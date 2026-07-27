@@ -56,7 +56,9 @@ export default function FacturasPage() {
 
         {/* Header */}
         <div style={{ padding: '16px 20px 12px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <span onClick={() => router.back()} style={{ fontSize: '18px', color: 'var(--text-secondary)', cursor: 'pointer' }}>←</span>
+          {/* Destino explicito (como /referidos): /facturas se abre desde el
+              dashboard, y router.back() saca de la app en un deep link. */}
+          <span onClick={() => router.push('/dashboard')} style={{ fontSize: '18px', color: 'var(--text-secondary)', cursor: 'pointer' }}>←</span>
           <span style={{ fontSize: '18px', fontWeight: 500 }}>Mis facturas</span>
         </div>
 
