@@ -15,6 +15,7 @@ export default function SuscripcionPage() {
   const { usuario, restaurante: rest, cargando, mutateRestaurante } = useAuth()
   const [periodo, setPeriodo] = useState<'mensual' | 'anual'>('mensual')
   const [cambiando, setCambiando] = useState(false)
+  const [pagoProcesando, setPagoProcesando] = useState(false)
   const planActual = (rest?.plan || 'gratis') as string
   const periodoActual = (rest?.periodo_plan || 'mensual') as string
 
@@ -24,20 +25,37 @@ export default function SuscripcionPage() {
     }
   }, [cargando, usuario, router])
 
+  // Retorno desde el Checkout de Wompi (redirect-url ?estado=procesando). El
+  // plan se activa async por el webhook; aqui solo mostramos "procesando".
+  // Se lee de window (no useSearchParams) para no exigir un boundary Suspense.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('estado') === 'procesando') {
+      setPagoProcesando(true)
+    }
+  }, [])
+
+  // Ruteo del boton: bajar a gratis es cambio directo; subir a un plan pago
+  // pasa por Wompi (F4.a-2) y NO escribe el plan aqui (lo confirma el webhook).
   async function cambiarPlan(nuevoPlan: string) {
+    if (!rest?.id) return
+    if (nuevoPlan === 'gratis') return bajarAGratis()
+    return iniciarPagoWompi(nuevoPlan)
+  }
+
+  async function bajarAGratis() {
     if (!rest?.id) return
     setCambiando(true)
     const supabase = createClient()
-    // fue_pago es un latch one-way (STRATEGIC.2): subir a un plan pago marca la
-    // cuenta para siempre; bajar a gratis NO lo toca. De él depende la regla de
-    // fotos del plan gratis (lib/fotosGate).
-    const cambios: { plan: string; periodo_plan: string; fue_pago?: boolean } = { plan: nuevoPlan, periodo_plan: periodo }
-    if (nuevoPlan !== 'gratis') cambios.fue_pago = true
-    const { error } = await supabase.from('restaurantes').update(cambios).eq('id', rest.id)
+    // fue_pago es un latch one-way (STRATEGIC.2): bajar a gratis NO lo toca (solo
+    // el pago lo activa). De él depende la regla de fotos del plan gratis (lib/fotosGate).
+    const { error } = await supabase
+      .from('restaurantes')
+      .update({ plan: 'gratis', periodo_plan: periodo })
+      .eq('id', rest.id)
     // Refresca la fila cacheada (useAuth/useRestauranteByUserId) para que el plan
     // nuevo se refleje en todo el admin sin reload (patrón mutate de H.1.c.2.b).
     await mutateRestaurante()
-    if (!error && (nuevoPlan !== planActual || periodo !== periodoActual)) {
+    if (!error && ('gratis' !== planActual || periodo !== periodoActual)) {
       // Correo de cambio de plan (F3): fire-and-forget, nunca bloquea el flujo.
       // Dispara también cuando solo cambia el periodo (p. ej. pro mensual -> anual).
       fetch('/api/emails', {
@@ -45,7 +63,7 @@ export default function SuscripcionPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tipo: 'cambio_plan',
-          plan_nuevo: nuevoPlan,
+          plan_nuevo: 'gratis',
           plan_anterior: planActual,
           periodo_nuevo: periodo,
           periodo_anterior: periodoActual,
@@ -54,6 +72,29 @@ export default function SuscripcionPage() {
     }
     setCambiando(false)
     router.push('/dashboard')
+  }
+
+  async function iniciarPagoWompi(nuevoPlan: string) {
+    setCambiando(true)
+    try {
+      const res = await fetch('/api/wompi/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan: nuevoPlan, periodo }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data?.url) {
+        console.error('[suscripcion] checkout Wompi fallo:', data?.error)
+        setCambiando(false)
+        return
+      }
+      // Redirige al Checkout de Wompi. El plan NO se escribe optimista: el
+      // webhook /api/wompi/eventos lo activa cuando la transaccion es APPROVED.
+      window.location.href = data.url
+    } catch (err) {
+      console.error('[suscripcion] error iniciando pago:', err)
+      setCambiando(false)
+    }
   }
 
   if (cargando) {
@@ -83,6 +124,21 @@ export default function SuscripcionPage() {
           <span style={{ fontSize: '18px', fontWeight: 500 }}>Mi suscripción</span>
         </div>
 
+        {/* Pago en proceso (retorno desde Wompi) */}
+        {pagoProcesando && (
+          <div style={{ padding: '0 20px', marginBottom: '12px' }}>
+            <div style={{
+              background: 'var(--color-accent-light)', border: '1px solid var(--color-accent)',
+              borderRadius: 'var(--radius-md)', padding: '12px 14px',
+            }}>
+              <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--color-accent-dark)' }}>Estamos confirmando tu pago</div>
+              <div style={{ fontSize: '12px', color: 'var(--color-accent-dark)', opacity: 0.8, marginTop: '2px' }}>
+                Wompi está procesando la transacción. Tu plan se activa en unos segundos; puedes refrescar esta página.
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Plan actual */}
         <div style={{ padding: '0 20px', marginBottom: '16px' }}>
           <div style={{
@@ -96,7 +152,11 @@ export default function SuscripcionPage() {
                 Plan {planes.find(p => p.id === planActual)?.nombre}
               </div>
               <div style={{ fontSize: '12px', color: 'var(--color-accent-dark)', opacity: 0.7, marginTop: '2px' }}>
-                {planActual === 'gratis' ? 'Sin fecha de renovación' : 'Pago pendiente — Wompi próximamente'}
+                {planActual === 'gratis'
+                  ? 'Sin fecha de renovación'
+                  : rest?.plan_expira
+                    ? `Renueva el ${rest.plan_expira}`
+                    : 'Suscripción activa'}
               </div>
             </div>
             <div style={{ fontSize: '20px', fontWeight: 500, color: 'var(--color-accent-dark)' }}>
@@ -204,7 +264,7 @@ export default function SuscripcionPage() {
           <div style={{ padding: '0 20px', marginBottom: '10px', marginTop: '6px' }}>
             <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Método de pago</div>
             <div className="card" style={{ padding: '16px', textAlign: 'center' }}>
-              <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Pagos con Wompi próximamente</div>
+              <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Pagos seguros con Wompi</div>
               <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '4px' }}>Nequi, Bancolombia, tarjeta de crédito/débito</div>
             </div>
           </div>
