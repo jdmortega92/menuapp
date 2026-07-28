@@ -9,6 +9,19 @@ import { createClient } from '@/lib/supabase-browser'
 import { urlRegistroRef } from '@/lib/urls'
 import { useReferidos } from '@/hooks/data/useReferidos'
 
+// ── PAGINA SIN ENLACES desde 2026-07-27 (BL.46) ──
+// La ruta sigue viva y funcional, pero NINGUNA pantalla enlaza aqui: el sistema
+// de referidos promete "1 mes gratis" y no puede cumplirlo. Lo que existe hoy es
+// solo la mitad de arriba: se genera el codigo, se comparte el enlace y se lee la
+// tabla. Lo que NO existe: /registro nunca lee el ?ref= del enlace (solo mira
+// 'google' y 'paso'), NADIE inserta filas en la tabla referidos (el unico otro
+// uso es el delete de borrado de cuenta), y ningun codigo otorga un mes gratis a
+// nadie — el unico escritor de plan_expira es el webhook de Wompi. Por eso la
+// lista de invitados siempre sale vacia. Esta pagina NO esta rota: esta huerfana
+// a proposito.
+// Para reactivarla hay que descomentar sus dos entradas — la fila del dropdown de
+// perfil (app/dashboard/page.tsx) y la tarjeta verde de /suscripcion — pero solo
+// DESPUES de implementar la mecanica que describe BL.46 en ROADMAP-FIXES.md.
 export default function ReferidosPage() {
   const router = useRouter()
   const { usuario, restaurante: rest, cargando: cargandoAuth, mutateRestaurante } = useAuth()

@@ -1340,7 +1340,12 @@ export default function DashboardPage() {
                 ...(rest?.slug ? [{ icono: ExternalLink, label: 'Ver mi menú', sub: 'Abrir en pestaña nueva', href: '/' + rest.slug, external: true }] : []),
                 { icono: Crown, label: 'Mi suscripción', sub: esPro ? 'Plan Pro' : esBasico ? 'Plan Básico' : 'Plan Gratis', href: '/suscripcion' },
                 { icono: FileText, label: 'Mis facturas', sub: 'Descargar y compartir', href: '/facturas' },
-                { icono: UserPlus, label: 'Invitar restaurantes', sub: 'Gana meses gratis', href: '/referidos' },
+                // Oculto 2026-07-27 (BL.46): el sistema de referidos NO otorga nada
+                // — /registro ignora el ?ref= del enlace, nadie escribe en la tabla
+                // referidos y ningun codigo regala un mes. Prometia una recompensa
+                // inexistente. Reactivar (un solo descomentar) cuando BL.46 se
+                // implemente; el import de UserPlus se deja a proposito para eso.
+                // { icono: UserPlus, label: 'Invitar restaurantes', sub: 'Gana meses gratis', href: '/referidos' },
                 // Oculto hasta implementar i18n real (hoy solo existe español).
                 // { label: 'Idioma', sub: 'Español', href: '#' },
               ].map((item: any, i: number) => (
@@ -1353,6 +1358,9 @@ export default function DashboardPage() {
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: '13px' }}>{item.label}</div>
+                    {/* La rama verde pertenece a la fila de referidos, oculta arriba
+                        (BL.46). Hoy ningun item tiene esa etiqueta: queda inerte a
+                        proposito para que restaurarla sea un solo descomentar. */}
                     <div style={{ fontSize: '11px', color: item.label === 'Invitar restaurantes' ? 'var(--color-green)' : 'var(--text-tertiary)' }}>{item.sub}</div>
                   </div>
                   <span style={{ color: 'var(--text-tertiary)', lineHeight: 0, flexShrink: 0 }}><Icono icono={ChevronRight} size={16} /></span>

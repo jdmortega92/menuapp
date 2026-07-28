@@ -338,7 +338,13 @@ export default function SuscripcionPage() {
           </div>
         )}
 
-        {/* Crédito referidos */}
+        {/* Credito referidos — OCULTO 2026-07-27 (BL.46). Prometia "gana meses
+            gratis" en la pantalla donde el usuario decide si paga, pero el sistema
+            de referidos no otorga nada: /registro ignora el ?ref=, nadie escribe en
+            la tabla referidos y ningun codigo regala un mes. La pagina /referidos
+            sigue existiendo (sin enlaces); reactivar este bloque y la fila del
+            dropdown del dashboard cuando BL.46 se implemente. */}
+        {/*
         <div style={{ padding: '0 20px', marginBottom: '16px' }}>
           <div onClick={() => router.push('/referidos')} style={{
             background: 'var(--color-green-light)', border: '1px solid var(--color-green)',
@@ -352,6 +358,7 @@ export default function SuscripcionPage() {
             <span style={{ fontSize: '12px', color: 'var(--color-green)', fontWeight: 500 }}>Ver →</span>
           </div>
         </div>
+        */}
 
         {/* Cancelar */}
         {planActual !== 'gratis' && (
