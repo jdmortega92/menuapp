@@ -1,5 +1,7 @@
 import { enviarEmail } from './sender'
 import { cambioPlan } from './templates/cambioPlan'
+import { planVencido } from './templates/planVencido'
+import { cambioAplicado } from './templates/cambioAplicado'
 import type { Plan } from '@/types'
 import type { Periodo } from '@/lib/planes'
 
@@ -19,4 +21,21 @@ export async function notificarPlanActivo(p: {
     periodo_nuevo: p.periodo,
   })
   return enviarEmail({ to: p.to, ...contenido })
+}
+
+// F4.b-2: los dos avisos del cron de suscripciones. Mismo contrato que arriba
+// (sin cookies, solo RESEND_API_KEY): el cron tampoco tiene sesion.
+export async function notificarPlanVencido(p: { to: string; planAnterior: string }) {
+  return enviarEmail({ to: p.to, ...planVencido(p.planAnterior) })
+}
+
+export async function notificarCambioAplicado(p: {
+  to: string
+  planAnterior: string
+  planNuevo: string
+}) {
+  return enviarEmail({
+    to: p.to,
+    ...cambioAplicado({ planAnterior: p.planAnterior, planNuevo: p.planNuevo }),
+  })
 }

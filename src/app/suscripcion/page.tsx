@@ -215,12 +215,19 @@ export default function SuscripcionPage() {
   // plan_expira llega de Postgres como timestamptz ('2026-08-27T00:00:00+00:00');
   // fechaLargaColombia lo formatea por fecha calendario y devuelve '' si no calza.
   const renovacion = rest?.plan_expira ? fechaLargaColombia(rest.plan_expira) : ''
-  // Con una bajada agendada la fecha ya no es de renovación: es de finalización.
+  // NADIE renueva ni cobra automáticamente todavía (F4.c diferido) y nada baja el
+  // plan al vencer (F4.b-2 pendiente). Decir "Renueva el X" prometía un cobro
+  // recurrente inexistente: el copy dice lo que de verdad pasa con esa fecha.
+  // Con una bajada agendada la fecha es de finalización y el bloque de retención
+  // de arriba ya la explica; ahí no se repite el aviso de pago.
   const renovacionTexto = renovacion
     ? hayCambioProgramado
       ? `Activo hasta el ${renovacion}`
-      : `Renueva el ${renovacion}`
+      : expiraVigente
+        ? `Tu plan vence el ${renovacion}`
+        : `Tu plan venció el ${renovacion}`
     : ''
+  const mostrarAvisoPago = planActual !== 'gratis' && renovacion !== '' && !hayCambioProgramado
   const fechaProgramadaLarga = fechaProgramada ? fechaLargaColombia(fechaProgramada) : ''
   const nombrePlanActual = planes.find(p => p.id === planActual)?.nombre ?? planActual
   const nombrePlanProgramado =
@@ -291,9 +298,14 @@ export default function SuscripcionPage() {
               </div>
               <div style={{ fontSize: '12px', color: 'var(--color-accent-dark)', opacity: 0.7, marginTop: '2px' }}>
                 {planActual === 'gratis'
-                  ? 'Sin fecha de renovación'
+                  ? 'Sin fecha de vencimiento'
                   : renovacionTexto || 'Suscripción activa'}
               </div>
+              {mostrarAvisoPago && (
+                <div style={{ fontSize: '11px', color: 'var(--color-accent-dark)', opacity: 0.7, marginTop: '4px', maxWidth: '230px', lineHeight: 1.4 }}>
+                  No se renueva automáticamente: para continuar, vuelve a pagarlo.
+                </div>
+              )}
             </div>
             {/* Precio del periodo REALMENTE contratado (periodo_plan), no el mensual
                 fijo: quien pagó el anual ve $290.000/año, no $29.000/mes. */}
