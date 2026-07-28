@@ -33,6 +33,13 @@ export interface Restaurante {
   /** Fin del ciclo pagado. Hoy NADIE la escribe (null en toda fila existente);
    *  el webhook de Wompi (F4.a-2) será su primer escritor. */
   plan_expira: string | null
+  /** Cambio de plan DIFERIDO al fin del ciclo pagado (F4.b-1). Cancelar un plan
+   *  pago con tiempo restante NO baja el plan: agenda el cambio aquí y deja
+   *  plan/periodo_plan intactos hasta la fecha. Las escribe /suscripcion; el pago
+   *  aprobado (webhook de Wompi) las LIMPIA — quien paga no se está bajando.
+   *  Opcionales: columnas nuevas, las filas viejas llegan sin ellas. */
+  plan_programado?: string | null
+  fecha_cambio_programado?: string | null
   idioma: string
   color_principal: string
   tema: 'claro' | 'oscuro' | 'natural' | 'premium'

@@ -22,7 +22,7 @@ export async function POST(request: Request) {
   }
 
   // Validación manual del body (sin zod, deps mínimas).
-  const { tipo, plan_nuevo, plan_anterior, periodo_nuevo, periodo_anterior } =
+  const { tipo, plan_nuevo, plan_anterior, periodo_nuevo, periodo_anterior, fecha_cambio } =
     (body ?? {}) as Record<string, unknown>
 
   if (tipo !== 'bienvenida' && tipo !== 'cambio_plan') {
@@ -43,6 +43,12 @@ export async function POST(request: Request) {
       if (periodo !== undefined && (typeof periodo !== 'string' || !PERIODOS_VALIDOS.includes(periodo))) {
         return NextResponse.json({ error: 'Periodos inválidos' }, { status: 400 })
       }
+    }
+    // fecha_cambio (F4.b-1): solo para bajadas DIFERIDAS. Es un dato de copy, no
+    // de identidad, pero igual se valida la forma 'YYYY-MM-DD' para no inyectar
+    // basura en el asunto del correo.
+    if (fecha_cambio !== undefined && (typeof fecha_cambio !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(fecha_cambio))) {
+      return NextResponse.json({ error: 'Fecha de cambio inválida' }, { status: 400 })
     }
     // Sin cambio real (mismo plan y mismo periodo o sin periodos) no hay correo.
     const cambioPeriodo =
@@ -106,6 +112,7 @@ export async function POST(request: Request) {
       plan_anterior: plan_anterior as string,
       periodo_nuevo: periodo_nuevo as string | undefined,
       periodo_anterior: periodo_anterior as string | undefined,
+      fecha_cambio: fecha_cambio as string | undefined,
     }),
   })
   if (sendError) {

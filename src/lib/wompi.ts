@@ -77,12 +77,50 @@ export function construirUrlCheckout(p: {
   return `https://checkout.wompi.co/p/?${qs}`
 }
 
+// ── Renovacion vs cambio de plan (F4.b-1) ────────────────────────────────
+// RENOVACION = se compra EXACTAMENTE lo mismo que ya tiene la fila (mismo plan
+// y mismo periodo). Solo en ese caso el tiempo pagado se acumula: pagar dos
+// veces el mismo servicio jamas puede costarle dias al usuario.
+// UPGRADE (otro plan) o CAMBIO DE PERIODO (mismo plan, otro periodo) = ciclo
+// NUEVO desde hoy, sin prorrateo ni arrastre (decision F4, ROADMAP-FIXES.md:636).
+export function esRenovacion(p: {
+  plan: Plan
+  periodo: Periodo
+  planActual?: string | null
+  periodoActual?: string | null
+}): boolean {
+  return p.plan === p.planActual && p.periodo === p.periodoActual
+}
+
+// Sirve como base solo una fecha BIEN FORMADA y aun vigente. La forma sola no
+// basta: '2026-13-01' pasa el regex y, sumandole un mes, rodaria a 2027. Se
+// validan tambien los rangos de mes y dia (comparacion lexicografica contra hoy
+// = comparacion cronologica, porque ambas son 'YYYY-MM-DD').
+function fechaBaseValida(valor: string | null | undefined, hoy: string): boolean {
+  const ymd = (valor ?? '').slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return false
+  const [, mes, dia] = ymd.split('-').map(Number)
+  if (mes < 1 || mes > 12 || dia < 1 || dia > 31) return false
+  return ymd >= hoy
+}
+
 // ── plan_expira en COT (America/Bogota) ──────────────────────────────────
-// El webhook es el PRIMER escritor de plan_expira. Se calcula sobre la fecha
-// calendario COT de hoy (via lib/fechas): +1 mes o +1 anio segun periodo,
-// con clamp del dia al ultimo del mes destino (31 ene + 1 mes -> 28/29 feb).
-export function calcularPlanExpira(periodo: Periodo, desde: Date = new Date()): string {
-  const [y, m, d] = fechaColombia(desde).split('-').map(Number)
+// El webhook es el PRIMER escritor de plan_expira. Se calcula sobre una fecha
+// calendario COT (via lib/fechas): +1 mes o +1 anio segun periodo, con clamp
+// del dia al ultimo del mes destino (31 ene + 1 mes -> 28/29 feb).
+// BASE del calculo: hoy, SALVO que llegue `extenderDesde` con un vencimiento
+// aun vigente — ahi se suma sobre ESE dia y no sobre hoy, para no quemar los
+// dias que al usuario le quedaban (F4.b-1, bug B). Quien decide si corresponde
+// extender es el llamador via esRenovacion: este helper solo aplica la fecha que
+// le den. Un valor vencido, ausente o malformado cae a hoy.
+export function calcularPlanExpira(
+  periodo: Periodo,
+  desde: Date = new Date(),
+  extenderDesde?: string | null
+): string {
+  const hoy = fechaColombia(desde)
+  const base = fechaBaseValida(extenderDesde, hoy) ? extenderDesde!.slice(0, 10) : hoy
+  const [y, m, d] = base.split('-').map(Number)
   let ty = y
   let tm = m
   if (periodo === 'anual') {

@@ -6,6 +6,7 @@ import {
   parsearReferencia,
   construirUrlCheckout,
   calcularPlanExpira,
+  esRenovacion,
   calcularChecksumEvento,
   type WompiEvento,
 } from './wompi'
@@ -115,6 +116,88 @@ describe('calcularPlanExpira (COT / America-Bogota)', () => {
 
   it('formato YYYY-MM-DD con zero-padding', () => {
     expect(calcularPlanExpira('mensual', new Date('2026-08-05T17:00:00Z'))).toBe('2026-09-05')
+  })
+})
+
+describe('esRenovacion (renovacion vs upgrade/cambio de periodo)', () => {
+  it('mismo plan y mismo periodo -> renovacion', () => {
+    expect(esRenovacion({ plan: 'pro', periodo: 'mensual', planActual: 'pro', periodoActual: 'mensual' })).toBe(true)
+  })
+
+  it('otro plan -> NO es renovacion (upgrade: ciclo nuevo)', () => {
+    expect(esRenovacion({ plan: 'pro', periodo: 'mensual', planActual: 'basico', periodoActual: 'mensual' })).toBe(false)
+  })
+
+  it('mismo plan con otro periodo -> NO es renovacion (ciclo nuevo)', () => {
+    expect(esRenovacion({ plan: 'pro', periodo: 'anual', planActual: 'pro', periodoActual: 'mensual' })).toBe(false)
+  })
+
+  it('viniendo de gratis -> NO es renovacion', () => {
+    expect(esRenovacion({ plan: 'basico', periodo: 'mensual', planActual: 'gratis', periodoActual: 'mensual' })).toBe(false)
+  })
+
+  it('fila sin plan/periodo (null o undefined) -> NO es renovacion', () => {
+    expect(esRenovacion({ plan: 'pro', periodo: 'mensual', planActual: null, periodoActual: null })).toBe(false)
+    expect(esRenovacion({ plan: 'pro', periodo: 'mensual' })).toBe(false)
+  })
+})
+
+describe('calcularPlanExpira con extenderDesde (F4.b-1: pagar no quema dias)', () => {
+  const hoy = new Date('2026-03-15T17:00:00Z') // 12:00 COT del 2026-03-15
+
+  // ── Rama RENOVACION: el llamador pasa el vencimiento vigente ──
+  it('mensual: extiende desde el vencimiento futuro, no desde hoy', () => {
+    // 20 dias restantes: el ciclo nuevo arranca donde termina el viejo.
+    expect(calcularPlanExpira('mensual', hoy, '2026-04-04')).toBe('2026-05-04')
+  })
+
+  it('anual: extiende desde el vencimiento futuro', () => {
+    expect(calcularPlanExpira('anual', hoy, '2026-04-04')).toBe('2027-04-04')
+  })
+
+  it('acepta el timestamptz completo que devuelve Postgres', () => {
+    expect(calcularPlanExpira('mensual', hoy, '2026-04-04T00:00:00+00:00')).toBe('2026-05-04')
+  })
+
+  it('vencimiento HOY: base hoy (identico a no extender)', () => {
+    expect(calcularPlanExpira('mensual', hoy, '2026-03-15')).toBe('2026-04-15')
+    expect(calcularPlanExpira('mensual', hoy)).toBe('2026-04-15')
+  })
+
+  // ── Rama CICLO NUEVO: sin fecha util, la base es hoy ──
+  it('vencimiento YA PASADO: calcula desde hoy', () => {
+    expect(calcularPlanExpira('mensual', hoy, '2026-01-10')).toBe('2026-04-15')
+  })
+
+  it('sin vencimiento (null/undefined/vacio): calcula desde hoy', () => {
+    expect(calcularPlanExpira('mensual', hoy, null)).toBe('2026-04-15')
+    expect(calcularPlanExpira('mensual', hoy, undefined)).toBe('2026-04-15')
+    expect(calcularPlanExpira('mensual', hoy, '')).toBe('2026-04-15')
+  })
+
+  it('valor malformado: cae a hoy en vez de propagar basura', () => {
+    expect(calcularPlanExpira('mensual', hoy, 'no-es-fecha')).toBe('2026-04-15')
+    expect(calcularPlanExpira('mensual', hoy, '2026-13-01')).toBe('2026-04-15')
+  })
+
+  // ── Clamp de dia bajo AMBAS bases ──
+  it('clamp con base futura: vence 31 ene + 1 mes -> 28 feb', () => {
+    const enero = new Date('2026-01-05T17:00:00Z')
+    expect(calcularPlanExpira('mensual', enero, '2026-01-31')).toBe('2026-02-28')
+  })
+
+  it('clamp con base futura en bisiesto: vence 31 ene 2028 + 1 mes -> 29 feb', () => {
+    const enero = new Date('2028-01-05T17:00:00Z')
+    expect(calcularPlanExpira('mensual', enero, '2028-01-31')).toBe('2028-02-29')
+  })
+
+  it('clamp con base HOY sigue igual (la rama vieja no cambio)', () => {
+    expect(calcularPlanExpira('mensual', new Date('2026-01-31T17:00:00Z'))).toBe('2026-02-28')
+  })
+
+  it('rollover de anio con base futura: vence 10 dic + 1 mes -> 10 ene', () => {
+    const dic = new Date('2026-12-01T17:00:00Z')
+    expect(calcularPlanExpira('mensual', dic, '2026-12-10')).toBe('2027-01-10')
   })
 })
 

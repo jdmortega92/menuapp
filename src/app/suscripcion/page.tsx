@@ -20,6 +20,8 @@ export default function SuscripcionPage() {
   // los tres botones mostraban el label de carga a la vez. null = nada en vuelo.
   const [planEnProceso, setPlanEnProceso] = useState<Plan | null>(null)
   const [pagoProcesando, setPagoProcesando] = useState(false)
+  // Reactivar no es un cambio de plan: flag propio, fuera de planEnProceso.
+  const [reactivando, setReactivando] = useState(false)
   // Mientras algo esta en vuelo se deshabilitan TODOS los botones (evita dobles
   // cobros), pero solo el del plan en vuelo cambia de label.
   const cambiando = planEnProceso !== null
@@ -33,6 +35,17 @@ export default function SuscripcionPage() {
   const planPagoActivo =
     planActual !== 'gratis' &&
     (!rest?.plan_expira || rest.plan_expira.slice(0, 10) >= fechaColombia())
+  // Vencimiento VIGENTE ('' si no hay, si no calza la forma o si ya paso). Es el
+  // tiempo que el usuario YA PAGO y que cancelar no puede quitarle (F4.b-1).
+  const expiraYmd = (rest?.plan_expira ?? '').slice(0, 10)
+  const expiraVigente =
+    /^\d{4}-\d{2}-\d{2}$/.test(expiraYmd) && expiraYmd >= fechaColombia() ? expiraYmd : ''
+  // Cancelar solo se AGENDA si hay plan pago con tiempo restante; sin tiempo
+  // restante se mantiene la bajada inmediata de siempre.
+  const puedeProgramar = planActual !== 'gratis' && expiraVigente !== ''
+  // Bajada ya agendada: la fila conserva plan/periodo hasta la fecha.
+  const fechaProgramada = (rest?.fecha_cambio_programado ?? '').slice(0, 10)
+  const hayCambioProgramado = Boolean(rest?.plan_programado && fechaProgramada)
 
   useEffect(() => {
     if (!cargando && !usuario) {
@@ -98,22 +111,36 @@ export default function SuscripcionPage() {
     return iniciarPagoWompi(nuevoPlan)
   }
 
+  // Cancelar NO es bajar de plan (F4.b-1). Con tiempo pagado por delante el
+  // cambio se AGENDA y el usuario conserva lo que compró hasta el vencimiento
+  // (estándar de la industria: cancelar = no renovar). Solo cuando no queda
+  // tiempo (sin plan_expira o ya vencido) la bajada se aplica en el acto.
   async function bajarAGratis() {
     if (!rest?.id) return
     setPlanEnProceso('gratis')
     const supabase = createClient()
-    // fue_pago es un latch one-way (STRATEGIC.2): bajar a gratis NO lo toca (solo
-    // el pago lo activa). De él depende la regla de fotos del plan gratis (lib/fotosGate).
-    const { error } = await supabase
-      .from('restaurantes')
-      .update({ plan: 'gratis', periodo_plan: periodo })
-      .eq('id', rest.id)
+
+    // fue_pago es un latch one-way (STRATEGIC.2): NINGUNA de las dos ramas lo
+    // toca (solo el pago lo activa). De él depende la regla de fotos del plan
+    // gratis (lib/fotosGate); resetearlo republicaría fotos que estaban ocultas.
+    const { error } = puedeProgramar
+      ? await supabase
+          .from('restaurantes')
+          .update({ plan_programado: 'gratis', fecha_cambio_programado: expiraVigente })
+          .eq('id', rest.id)
+      : await supabase
+          .from('restaurantes')
+          // periodo_plan NO se toca: es el periodo COMPRADO, no el del toggle.
+          .update({ plan: 'gratis' })
+          .eq('id', rest.id)
+
     // Refresca la fila cacheada (useAuth/useRestauranteByUserId) para que el plan
     // nuevo se refleje en todo el admin sin reload (patrón mutate de H.1.c.2.b).
     await mutateRestaurante()
-    if (!error && ('gratis' !== planActual || periodo !== periodoActual)) {
+    if (!error && planActual !== 'gratis') {
       // Correo de cambio de plan (F3): fire-and-forget, nunca bloquea el flujo.
-      // Dispara también cuando solo cambia el periodo (p. ej. pro mensual -> anual).
+      // Con fecha_cambio el copy dice "cambiará el <fecha>" en vez de "ya está
+      // aplicado" — que sería mentira mientras el plan siga vivo.
       fetch('/api/emails', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -121,13 +148,29 @@ export default function SuscripcionPage() {
           tipo: 'cambio_plan',
           plan_nuevo: 'gratis',
           plan_anterior: planActual,
-          periodo_nuevo: periodo,
           periodo_anterior: periodoActual,
+          ...(puedeProgramar ? { fecha_cambio: expiraVigente } : {}),
         }),
       }).catch(console.error)
     }
     setPlanEnProceso(null)
-    router.push('/dashboard')
+    // Agendado: se queda en la página para que el usuario VEA el estado de
+    // retención (sigue teniendo su plan). Inmediato: al dashboard, como siempre.
+    if (!puedeProgramar) router.push('/dashboard')
+  }
+
+  // Deshacer la cancelación (patrón "Restart membership"). Solo limpia las dos
+  // columnas: el plan nunca se bajó, así que no hay nada que restaurar.
+  async function reactivarSuscripcion() {
+    if (!rest?.id) return
+    setReactivando(true)
+    const supabase = createClient()
+    await supabase
+      .from('restaurantes')
+      .update({ plan_programado: null, fecha_cambio_programado: null })
+      .eq('id', rest.id)
+    await mutateRestaurante()
+    setReactivando(false)
   }
 
   async function iniciarPagoWompi(nuevoPlan: Plan) {
@@ -172,7 +215,16 @@ export default function SuscripcionPage() {
   // plan_expira llega de Postgres como timestamptz ('2026-08-27T00:00:00+00:00');
   // fechaLargaColombia lo formatea por fecha calendario y devuelve '' si no calza.
   const renovacion = rest?.plan_expira ? fechaLargaColombia(rest.plan_expira) : ''
-  const renovacionTexto = renovacion ? `Renueva el ${renovacion}` : ''
+  // Con una bajada agendada la fecha ya no es de renovación: es de finalización.
+  const renovacionTexto = renovacion
+    ? hayCambioProgramado
+      ? `Activo hasta el ${renovacion}`
+      : `Renueva el ${renovacion}`
+    : ''
+  const fechaProgramadaLarga = fechaProgramada ? fechaLargaColombia(fechaProgramada) : ''
+  const nombrePlanActual = planes.find(p => p.id === planActual)?.nombre ?? planActual
+  const nombrePlanProgramado =
+    planes.find(p => p.id === rest?.plan_programado)?.nombre ?? rest?.plan_programado ?? ''
 
   return (
     <div style={{ background: 'var(--bg-primary)', minHeight: '100vh' }}>
@@ -197,6 +249,30 @@ export default function SuscripcionPage() {
               <div style={{ fontSize: '12px', color: 'var(--color-accent-dark)', opacity: 0.8, marginTop: '2px' }}>
                 Wompi está procesando la transacción. Tu plan se activa en unos segundos; puedes refrescar esta página.
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Cambio agendado (retención). El plan NO se bajó: sigue vivo hasta la
+            fecha, y desde aquí se puede deshacer la cancelación. */}
+        {hayCambioProgramado && (
+          <div style={{ padding: '0 20px', marginBottom: '12px' }}>
+            <div style={{
+              background: 'var(--color-warning-light)', border: '1px solid var(--color-warning)',
+              borderRadius: 'var(--radius-md)', padding: '12px 14px',
+            }}>
+              <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--color-warning)' }}>
+                Tu plan {nombrePlanActual} sigue activo hasta el {fechaProgramadaLarga}
+              </div>
+              <div style={{ fontSize: '12px', color: 'var(--color-warning)', opacity: 0.85, marginTop: '2px' }}>
+                Después pasarás a {nombrePlanProgramado}. Conservas todo lo que pagaste hasta esa fecha.
+              </div>
+              <Boton variante="secundario" tamano="sm"
+                onClick={reactivarSuscripcion}
+                style={{ marginTop: '10px' }}
+                disabled={reactivando}>
+                {reactivando ? 'Reactivando...' : 'Reactivar suscripción'}
+              </Boton>
             </div>
           </div>
         )}
@@ -311,8 +387,9 @@ export default function SuscripcionPage() {
                   </div>
                 )}
 
-                {/* Botón */}
-                {!esActual && (
+                {/* Botón. Con una bajada ya agendada se oculta el de Gratis:
+                    volvería a agendar lo mismo. Deshacer se hace arriba. */}
+                {!esActual && !(hayCambioProgramado && plan.id === 'gratis') && (
                   <Boton variante={plan.id === 'gratis' ? 'secundario' : 'primario'}
                     onClick={() => cambiarPlan(plan.id)}
                     style={{ width: '100%', marginTop: '10px' }}
@@ -360,8 +437,9 @@ export default function SuscripcionPage() {
         </div>
         */}
 
-        {/* Cancelar */}
-        {planActual !== 'gratis' && (
+        {/* Cancelar. Oculto si ya hay una bajada agendada: no se puede cancelar
+            dos veces, y el bloque de retención de arriba es el estado vigente. */}
+        {planActual !== 'gratis' && !hayCambioProgramado && (
           <div style={{ padding: '0 20px', marginBottom: '16px', textAlign: 'center' }}>
             <span onClick={() => cambiarPlan('gratis')} style={{ fontSize: '12px', color: 'var(--color-danger)', cursor: 'pointer' }}>
               {planEnProceso === 'gratis' ? 'Cancelando...' : 'Cancelar suscripción'}

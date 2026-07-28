@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase-admin'
 import {
   calcularChecksumEvento,
   calcularPlanExpira,
+  esRenovacion,
   parsearReferencia,
   type WompiEvento,
 } from '@/lib/wompi'
@@ -88,20 +89,41 @@ export async function POST(request: Request) {
       return NextResponse.json({ recibido: true, idempotente: true }, { status: 200 })
     }
 
-    // Plan anterior (para el copy del email) y DUENO de la cuenta, antes de
-    // sobreescribir. usuario_id es la unica fuente valida del destinatario.
+    // Estado ANTERIOR de la fila: plan/periodo/vencimiento para decidir si esto
+    // es una renovacion, y usuario_id como unica fuente valida del destinatario.
     const { data: restPrev } = await admin
       .from('restaurantes')
-      .select('plan, usuario_id')
+      .select('plan, periodo_plan, plan_expira, usuario_id')
       .eq('id', restauranteId)
       .maybeSingle()
     const planAnterior = (restPrev?.plan as string | undefined) ?? 'gratis'
     const usuarioId = restPrev?.usuario_id as string | undefined
 
-    const planExpira = calcularPlanExpira(periodo)
+    // F4.b-1 (bug B): renovar lo MISMO acumula sobre el vencimiento vigente (no
+    // se queman los dias que quedaban); upgrade o cambio de periodo arrancan
+    // ciclo nuevo desde hoy (decision F4, sin prorrateo).
+    const renovacion = esRenovacion({
+      plan,
+      periodo,
+      planActual: restPrev?.plan as string | undefined,
+      periodoActual: restPrev?.periodo_plan as string | undefined,
+    })
+    const planExpira = calcularPlanExpira(
+      periodo,
+      new Date(),
+      renovacion ? (restPrev?.plan_expira as string | null | undefined) : null
+    )
+    // Un pago CANCELA cualquier bajada agendada: quien paga no se esta bajando.
     const { error: updErr } = await admin
       .from('restaurantes')
-      .update({ plan, periodo_plan: periodo, fue_pago: true, plan_expira: planExpira })
+      .update({
+        plan,
+        periodo_plan: periodo,
+        fue_pago: true,
+        plan_expira: planExpira,
+        plan_programado: null,
+        fecha_cambio_programado: null,
+      })
       .eq('id', restauranteId)
     if (updErr) {
       console.error('[wompi/eventos] update de restaurante fallo:', updErr.message)
