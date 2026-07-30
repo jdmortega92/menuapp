@@ -498,6 +498,167 @@ Decision 2026-07-03: Julian mantiene $15k/$29k mensual ($150k/$290k anual, ~2 me
 
 ## Items
 
+### F4.c-2 ✅ Spike de sandbox Wompi: los 4 bloqueadores, RESUELTOS — CLOSED
+- **Corrido**: 2026-07-29 contra https://sandbox.wompi.co/v1 con llaves pub_test_/prv_test_ de
+  .env.local. Codigo DESECHABLE fuera de src/ (scratchpad), borrado al terminar. La unica huella
+  en el repo fue un log DIAG temporal en el webhook (commit 51a8bc5), YA REVERTIDO: el archivo
+  volvio byte a byte a su estado previo. Cuenta sandbox activa con CARD, NEQUI, PSE,
+  BANCOLOMBIA_*, DAVIPLATA, SU_PLUS. Artefactos de prueba en sandbox: payment sources
+  357352-357357 y ~7 transacciones.
+
+- **Q1 RESUELTA — POST /v1/payment_sources acepta SOLO la llave PRIVADA.**
+  Sin Authorization -> 401 INVALID_ACCESS_TOKEN "Se esperaba una llave publica o privada pero no
+  se recibio ninguna". Con pub_test_ -> 401 "Solicitud no autorizada". Con prv_test_ -> 201.
+  Token de tarjeta FRESCO en cada intento para no confundir el resultado.
+  La pagina fuentes-de-pago tiene razon; el ejemplo con "Authorization: Bearer pub_test_..." de
+  fuentes-de-pago-3ds-sandbox es un ERROR de la doc. NO confiar en esa pagina.
+  Y GET /v1/payment_sources/{id} tambien exige la privada (pub -> 401, prv -> 200).
+  CONSECUENCIA DE ARQUITECTURA: el enrolamiento es 100% server-side. El navegador no puede crear
+  NI consultar una fuente de pago. Para el challenge 3DS hace falta un endpoint PROPIO que haga
+  de proxy del polling y le entregue three_ds_method_data al navegador. No es opcional.
+  COROLARIO: el Widget de Wompi (que corre con la llave PUBLICA) NO PUEDE completar un
+  enrolamiento, maneje o no el challenge. Su unico aporte posible es entregar el token de tarjeta
+  para que el PAN no pase por nuestro DOM (optimizacion de PCI dentro de F4.c-6), no una
+  alternativa de arquitectura. Q3 queda cerrada por implicacion.
+
+- **Q2 RESUELTA — el webhook SI llega, y el payload SI trae payment_source_id.**
+  POST /v1/transactions con payment_source_id + recurrent:true -> 201 status "PENDING",
+  finalized_at null; a los ~3s "APPROVED". Esa transicion a estado final dispara el evento.
+  VERIFICADO EN PRODUCCION con log DIAG temporal sobre /api/wompi/eventos:
+    event = transaction.updated
+    dataKeys = transaction
+    txKeys = id, created_at, finalized_at, amount_in_cents, reference, customer_email, currency,
+             payment_method_type, payment_method, status, status_message, shipping_address,
+             redirect_url, payment_source_id, payment_link_id, customer_data, billing_data, origin
+    sigProps = ["transaction.id","transaction.status","transaction.amount_in_cents"]
+    payment_source_id = 357352 (el que enviamos)
+  DECISIONES QUE ESTO CIERRA:
+  1. El cron SOLO INICIA el cobro; el webhook ya probado (eventos/route.ts:80-174) otorga el plan.
+     El cron NO interpreta la respuesta de la API ni escribe plan: ahi es donde habria vivido un
+     bug de doble otorgamiento, y queda eliminado por diseno.
+  2. parsearReferencia (lib/wompi.ts:43-53) NO necesita cambios. Se descarta la idea de que la
+     reference tenga que codificar "cobro automatico": el payload trae payment_source_id, que es
+     el discriminador natural. La reference sigue siendo sub_<id>_<plan>_<periodo>_<ts>.
+  3. sigProps son los MISMOS tres paths transaction.* que en un pago manual por Checkout Web:
+     la verificacion de checksum no cambia en nada para cobros recurrentes.
+  OJO — el payload del WEBHOOK no es igual al de GET /v1/transactions/{id}:
+    solo en el webhook: payment_source_id, billing_data, shipping_address, origin
+    solo en el GET:     merchant, taxes, tip_in_cents
+  Confiar en el WEBHOOK como fuente de forma, no en el GET. WompiTransaction (lib/wompi.ts:148-156)
+  declara 7 campos y el payload real trae 18: agregar payment_source_id ahora tiene evidencia.
+  PENDIENTE MENOR: el campo "origin" es nuevo para nosotros y su VALOR no se capturo (el DIAG
+  logueaba solo nombres). Podria ser un segundo discriminador API-vs-Checkout; mirarlo en F4.c-5.
+  HALLAZGO EXTRA: el cobro NO requiere acceptance_token (201 sin el) pero SI requiere signature
+  (422 "Firma de integridad requerida no enviada" al omitirla). El cron hace UNA sola llamada por
+  cobro, sin GET /merchants previo. firmaIntegridad (lib/wompi.ts:15-26) sirve TAL CUAL: la firma
+  que calcula fue aceptada.
+  HALLAZGO EXTRA (muy bueno): Wompi RECHAZA una reference repetida -> 422 INPUT_VALIDATION_ERROR
+  "La referencia ya ha sido usada". Con reference DETERMINISTA por periodo de facturacion, una
+  corrida duplicada del cron recibe 422 en vez de cobrar dos veces: proteccion anti-doble-cobro
+  del lado de Wompi, ADEMAS de la idempotencia por facturas.numero (eventos/route.ts:73-78).
+  LIMITE DEL SANDBOX: el procesador de CARD aqui es CARD_SANDBOX, no RBM. El comportamiento COF
+  de recurrent:true (que la doc ata a RBM) NO es verificable en sandbox: el campo se acepta (201)
+  pero no se refleja en la respuesta.
+
+- **Q3 CERRADA POR IMPLICACION — no se pudo inspeccionar el widget, y ya no hace falta.**
+  checkout.wompi.co y cdn.wompi.co son inalcanzables desde el entorno del spike (ECONNRESET);
+  solo responde el host de API. No se abrio navegador. La pregunta original (maneja el widget el
+  challenge 3DS?) quedo sin respuesta directa, pero la decision que tenia que informar la resolvio
+  Q1: crear y consultar fuentes de pago son operaciones de llave privada, asi que el widget no
+  puede cerrar un enrolamiento. Ver el corolario en Q1. NO bloquea el faseo.
+
+- **Q4 RESUELTA — Nequi funciona de punta a punta, evento incluido.**
+  POST /v1/tokens/nequi {phone_number} -> HTTP 200, status "PENDING". Payload REAL:
+    {"data":{"id":"nequi_test_...","status":"PENDING","phone":"3991111111","phone_number":"3991111111"}}
+  Difiere de la doc: trae phone Y phone_number (duplicados) y NO trae el campo "name".
+  GET /v1/tokens/nequi/{id} -> "APPROVED" a los ~3-4s.
+  POST /v1/payment_sources type NEQUI (privada) -> 201 status "AVAILABLE",
+  public_data {"type":"NEQUI","phone_number":"...","phone":"..."}.
+  Un cobro contra esa fuente -> 201 PENDING, payment_method_type "NEQUI" y
+  payment_method.phone_number, SIN pedirle al usuario aprobar otra vez. La recurrencia por Nequi
+  funciona.
+  EVENTO VERIFICADO EN PRODUCCION (mismo DIAG):
+    event = nequi_token.updated
+    dataKeys = nequi_token          <-- RAIZ DISTINTA, no data.transaction
+    txKeys = (vacio)
+    sigProps = ["nequi_token.id","nequi_token.status","nequi_token.phone_number"]
+  El resolvedor dinamico de checksum (lib/wompi.ts:166-179) manejo bien la raiz nueva: el evento
+  PASO la verificacion de firma y solo despues cayo por el guard de data.transaction
+  (eventos/route.ts:78-80). O sea: ensanchar WompiEvento (lib/wompi.ts:158-164) para aceptar
+  data.nequi_token es un cambio de TIPOS + una rama nueva por event name, NO un cambio de
+  verificacion. Se valida la decision de resolver signature.properties dinamicamente en vez de
+  cablear los campos.
+  HUECO DE PRUEBAS: el sandbox AUTO-APRUEBA. Se probaron 3991111111 y 3001234567: ambos pasaron a
+  APPROVED sin ninguna interaccion en app. NO hay forma de ejercitar en sandbox "el usuario nunca
+  aprobo" ni "el usuario rechazo", que es justo la rama de abandono que la UI debe manejar. Esa
+  rama se prueba con mocks nuestros, no contra Wompi.
+
+- **EXTRA: los acceptance tokens caducan Y son de UN SOLO USO.**
+  GET /v1/merchants/{public_key} (sin Authorization; la llave va en el path) -> 200.
+  presigned_acceptance (END_USER_POLICY): claims {contract_id:472, permalink, file_hash, jit,
+  email:"", exp}. exp medido tres veces: 3601s = EXACTAMENTE 1 HORA.
+  presigned_personal_data_auth (PERSONAL_DATA_AUTH): claims {contract_id:439, permalink,
+  file_hash, jit, email:""} — SIN claim exp. Ese no caduca por tiempo.
+  UN SOLO USO (probado dos veces): mismo par en dos payment sources -> el 1o 201, el 2o 422
+  INPUT_VALIDATION_ERROR {"acceptance_token":["El token de aceptacion ya fue usado"]}. Con un par
+  FRESCO -> 201.
+  => Un par NUEVO por CADA payment source. No se cachean ni se reutilizan. La ventana real entre
+  "el usuario marca los checkboxes" y "creamos la fuente" es de 1 HORA: si el 3DS se alarga, hay
+  que re-pedir consentimiento.
+  Permalinks reales (distintos a los que muestra la doc):
+    END_USER_POLICY    https://wompi.com/assets/downloadble/reglamento-Usuarios-Colombia.pdf
+    PERSONAL_DATA_AUTH https://wompi.com/assets/downloadble/autorizacion-tratamiento-datos-personales.pdf
+
+- **EXTRA: NO se puede anular una fuente de pago normal.**
+  PUT /v1/payment_sources/357353/void -> 422 UNPROCESSABLE "Unicamente se pueden anular fuentes
+  de pago con el tipo de operacion financiera 'PREAUTHORIZATION'".
+  El void documentado aplica solo a fuentes de preautorizacion, NO a una tarjeta guardada normal.
+  No existe endpoint para revocar/borrar una fuente corriente, asi que tampoco se pudo cobrar
+  contra una VOIDED: ese estado es INALCANZABLE por API (queda sin resolver por imposible).
+  CONSECUENCIA DE PRODUCTO: "quitar mi metodo de pago" es una operacion NUESTRA (borrar/marcar la
+  fila y dejar de cobrar), no de Wompi; Wompi conserva la fuente. El estado 'VOIDED' del check de
+  fuentes_pago es un estado LOCAL nuestro, no un espejo de Wompi. Impacta la revocacion de
+  consentimiento (F4.c-1 seccion 5): hay que poder demostrar que DEJAMOS DE COBRAR, porque no
+  podemos demostrar que Wompi olvido la fuente.
+
+- **EXTRA: forma real de las respuestas (correcciones a F4.c-1).**
+  POST /v1/tokens/cards -> 201. data: id, created_at, brand, name, last_four, bin, exp_year,
+  exp_month, card_holder, created_with_cvc, expires_at, validity_ends_at.
+  exp_year/exp_month NO vienen transpuestos (la doc los muestra mal; el API responde bien).
+  Campos que la doc no menciona: created_with_cvc, validity_ends_at.
+  VIGENCIAS: el TOKEN de tarjeta dura ~2 DIAS (validity_ends_at +2d); la FUENTE DE PAGO dura
+  ~6 ANOS (public_data.validity_ends_at 2032). Tokenizar y crear la fuente en la misma sesion.
+  POST /v1/payment_sources -> 201. data: id (NUMERO, ej 357353 -> bigint confirmado), public_data,
+  token, type, status, customer_email. public_data de CARD: bin, last_four, card_holder,
+  validity_ends_at, type.
+  OJO: public_data NO trae "brand". La marca (VISA/MASTERCARD) SOLO viene en la respuesta de
+  TOKENIZACION => hay que capturarla ahi y persistirla; despues no se recupera de la fuente.
+  El payment_method.extra de una transaccion si es rico: bin, name, brand, issuer, card_type
+  (CREDIT/DEBIT), last_four, card_holder, is_three_ds, country_iso2, three_ds_auth_type.
+
+- **EXTRA: el challenge 3DS es real y NO se puede automatizar.**
+  Tarjeta 2303779951000446 -> brand MASTERCARD. Fuente creada -> 201 con status "PENDING" (no
+  AVAILABLE). GET con llave privada devuelve data.extra.three_ds_auth (OJO: bajo .extra, no en la
+  raiz de data):
+    current_step "CHALLENGE", current_step_status "PENDING", status "success", transStatus "C",
+    challengeRequired true, threeDSServerTransID (uuid), three_ds_method_data (HTML escapado,
+    1786 chars, empieza con &lt;!DOCTYPE html&gt;)
+  Se queda en PENDING indefinidamente (3 polls sin cambio) porque nadie completa el challenge:
+  confirma empiricamente que el enrolamiento con tarjeta EXIGE USUARIO PRESENTE y que el cron
+  jamas podra crear ni rescatar una fuente. Render obligatorio en iframe via srcDoc con el HTML
+  DESESCAPADO (la doc lo subraya: nunca src).
+
+- **PENDIENTE DE SOPORTE WOMPI (no se resuelve leyendo doc ni en sandbox)**
+  - 3RI solo Mastercard: confirmar, y definir que hacemos con Visa en cobro recurrente
+    (cobro sin proteccion 3RI vs empujar a renovacion manual). Es una decision de PRODUCTO.
+  - Activacion de 3DS en produccion (la doc dice que requiere solicitud a soporte).
+  - Comportamiento COF de recurrent:true sobre procesador RBM real (sandbox usa CARD_SANDBOX).
+
+- **VEREDICTO DE FASEO**: F4.c-3 (modelo de datos) y F4.c-4 (Nequi) quedan DESBLOQUEADAS sin
+  incognitas. F4.c-5 (cobro automatico) tambien: su arquitectura ya esta decidida por Q2 — el cron
+  inicia, el webhook otorga, la reference no cambia. F4.c-6 (tarjeta) sigue esperando SOLO las
+  respuestas de soporte de arriba, no mas investigacion.
+
 ### F4.b-2 ✅ Cron de ciclo de vida de suscripciones — CLOSED
 - **Closed**: 2026-07-28. El ejecutor que faltaba: NADIE actuaba sobre plan_expira, asi que un plan vencido conservaba todas las funciones Pro para siempre, y las columnas de cambio programado de F4.b-1 no tenian quien las aplicara.
 - **Arquitectura (decision de Julian, patron de plataformas de billing)**: el cron es el UNICO escritor del estado efectivo. Todos los gates existentes siguen leyendo rest.plan sin tocarse — NO se agrego helper de gating por fecha ni segunda fuente de verdad. La ventana de hasta ~24h (Vercel dispara dentro de la hora programada) desaparece sola cuando F4.c cobre antes del vencimiento.
