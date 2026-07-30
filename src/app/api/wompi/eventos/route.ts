@@ -54,6 +54,24 @@ export async function POST(request: Request) {
   }
 
   // ── Firma OK a partir de aqui: el payload es autentico de Wompi ──
+
+  // DIAG F4.c-2 — TEMPORAL, quitar despues de responder. Los logs de Vercel no
+  // exponen el body, y el spike de sandbox dejo dos cosas sin resolver: si el
+  // webhook llega para un cobro con payment_source_id, y si el payload lo trae
+  // (GET /v1/transactions lo OMITE, pero la doc de eventos lo muestra). Se
+  // loguean NOMBRES de campos + el payment_source_id; nunca el body, el email
+  // ni nada sensible. El cast local evita tocar WompiTransaction, que es
+  // justamente el tipo que este DIAG existe para validar.
+  const txDiag = (data.transaction ?? {}) as Record<string, unknown>
+  console.info(
+    '[wompi/eventos] DIAG event=', event?.event,
+    'txKeys=', Object.keys(txDiag).join(','),
+    'dataKeys=', Object.keys(data ?? {}).join(','),
+    'sigProps=', JSON.stringify(event?.signature?.properties ?? null),
+    'hasPaymentSourceId=', 'payment_source_id' in txDiag,
+    'paymentSourceId=', txDiag.payment_source_id ?? null
+  )
+
   const transaction = data.transaction
   const reference = transaction?.reference
   const status = transaction?.status
