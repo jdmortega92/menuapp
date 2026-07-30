@@ -659,6 +659,89 @@ Decision 2026-07-03: Julian mantiene $15k/$29k mensual ($150k/$290k anual, ~2 me
   inicia, el webhook otorga, la reference no cambia. F4.c-6 (tarjeta) sigue esperando SOLO las
   respuestas de soporte de arriba, no mas investigacion.
 
+### F4.c-1 ✅ Recurrencia: anatomia del flujo actual y que exige el enrolamiento — CLOSED
+- **Registrado retroactivamente el 2026-07-30**: la investigacion se corrio ANTES del spike, pero
+  nunca se escribio en este documento — vivia solo en el chat. Se recupera al abrir F4.c-3. Cada
+  afirmacion de anatomia se RE-VERIFICO contra el repo al escribirla (las lineas citadas son las
+  de hoy). Donde F4.c-2 corrigio un hallazgo de esta investigacion, manda F4.c-2.
+
+- **ANATOMIA DEL FLUJO ACTUAL — no hay recurrencia, y no es un vacio parcial.**
+  /suscripcion llama iniciarPagoWompi (suscripcion/page.tsx:176-197) -> POST /api/wompi/checkout
+  -> el server firma y devuelve una URL -> window.location.href al Checkout Web de Wompi
+  (construirUrlCheckout, lib/wompi.ts:58-78). El usuario paga EN WOMPI y vuelve por redirect-url
+  a /suscripcion?estado=procesando (checkout/route.ts:83-84); el plan lo otorga despues el
+  webhook, nunca la UI. CERO tokenizacion: no se llama /v1/tokens/* ni /v1/payment_sources en
+  ningun punto del repo, no existe tabla de metodos guardados, y payment_source_id no aparece en
+  ninguna parte — ni en WompiTransaction (lib/wompi.ts:148-156) ni en el webhook. Hoy el PAN
+  jamas toca nuestro DOM, y esa propiedad es exactamente la que el enrolamiento pone en juego.
+  CONSECUENCIA: F4.c no es "activar el cobro automatico" sobre lo que hay; es un SEGUNDO flujo de
+  pago completo conviviendo con el actual. El pago unico por Checkout Web NO se retira.
+
+- **LOS DOS CAMINOS DE ENROLAMIENTO (a nivel de contrato).** Ambos terminan en lo mismo: una
+  fuente de pago con id numerico contra la que se cobra con POST /v1/transactions
+  {payment_source_id, recurrent:true, signature}.
+  - TARJETA: POST /v1/tokens/cards -> token de tarjeta (vida ~2 DIAS) -> POST /v1/payment_sources
+    con acceptance_token + acceptance_personal_auth -> la fuente puede quedar PENDING por
+    challenge 3DS -> polling server-side + iframe. Tokenizar y crear la fuente en la MISMA sesion.
+  - NEQUI: POST /v1/tokens/nequi {phone_number} -> PENDING -> el usuario aprueba en la app Nequi
+    -> polling GET (o evento nequi_token.updated) hasta APPROVED -> POST /v1/payment_sources
+    type NEQUI. Sin 3DS, sin iframe: es el camino corto, y por eso va primero.
+
+- **LO QUE NO SE PUEDE AUTOMATIZAR (define el faseo, no es un detalle de UX).**
+  (a) El challenge 3DS exige un humano frente a la pantalla: la fuente se queda en PENDING
+  indefinidamente si nadie lo completa (confirmado empiricamente en F4.c-2). (b) La aprobacion en
+  la app Nequi es del usuario, en su telefono, fuera de nuestro control y sin tope de tiempo
+  garantizado. (c) Los dos checkboxes de consentimiento son un acto del usuario y sus tokens
+  duran 1 HORA y son de UN SOLO USO. Las tres cosas dicen lo mismo: EL CRON JAMAS PODRA CREAR NI
+  RESCATAR UNA FUENTE DE PAGO. Enrolar es siempre una sesion interactiva; el cron solo cobra
+  contra una fuente que ya existe.
+
+- **METODOS: cuales se pueden guardar y cuales no.** Almacenables como payment source:
+  CARD, NEQUI, DAVIPLATA, BANCOLOMBIA_TRANSFER. NO almacenables: PSE (redirect bancario, el
+  usuario autoriza cada transaccion en el portal de su banco) y SU_PLUS. El check de tipo de
+  fuentes_pago (F4.c-3) admite los CUATRO almacenables desde el dia uno aunque solo se construya
+  CARD y NEQUI: ensanchar un CHECK despues es una migracion que no hace falta pagar.
+  OJO al copy: /suscripcion:425 anuncia hoy "Nequi, Bancolombia, tarjeta de credito/debito" como
+  medios de PAGO — cuales de esos se pueden GUARDAR es otra lista, y la UI no puede confundirlas.
+
+- **LO QUE TIENE QUE ESTAR A LA VISTA AL ENROLAR (no es legalese: es el producto).**
+  Antes de que el usuario marque nada: (1) el monto exacto que se le cobrara; (2) la cadencia
+  (mensual o anual); (3) la fecha del primer cobro y la del siguiente — salen de
+  calcularPlanExpira (lib/wompi.ts:116-140), que ya es la fuente de esa fecha, NO de un calculo
+  nuevo de la UI; (4) que se renueva HASTA QUE EL USUARIO CANCELE; (5) COMO se cancela, y que
+  cancelar es diferido (conserva el tiempo pagado, F4.b-1); (6) que metodo queda guardado
+  (marca + last four, o telefono enmascarado). Y (7) DOS checkboxes SEPARADOS, cada uno con su
+  permalink visible (reglamento de usuarios / autorizacion de tratamiento de datos): nunca un
+  solo "acepto todo", porque son dos contratos distintos y se evidencian por separado.
+
+- **QUE SE ROMPE (inventario del dano, hecho antes de tocar nada).**
+  1. /api/wompi/checkout hoy tiene UNA sola salida: armar la URL del Checkout Web (:86-96).
+     El enrolamiento necesita una rama que NO redirige a Wompi — crea la fuente server-side y
+     devuelve estado, porque la llave privada no puede salir del server (ver F4.c-2/Q1).
+  2. /suscripcion se bifurca en varios puntos: iniciarPagoWompi (:176-197) deja de ser el unico
+     camino de compra; el bloque "Metodo de pago" (:419-428) es hoy un cartel ESTATICO y tiene
+     que pasar a mostrar la fuente real con su accion de quitarla; y el copy honesto de F4.b-2
+     ("No se renueva automaticamente") deja de ser cierto para quien active el cobro, asi que se
+     vuelve CONDICIONAL. Una frase equivocada ahi es una mentira sobre el dinero del usuario.
+  3. El webhook se ensancha. WompiEvento (lib/wompi.ts:158-164) solo declara data.transaction y
+     el guard de eventos/route.ts:60-62 descarta todo lo que no la traiga: nequi_token.updated
+     llega con raiz data.nequi_token, PASA la verificacion de firma y muere ahi (verificado en
+     F4.c-2/Q4). Es un cambio de TIPOS mas una rama por nombre de evento, no de verificacion.
+     WompiTransaction ademas necesita payment_source_id.
+  4. CONFLICTO plan_programado vs cobro — el que de verdad puede cobrar de mas. Si una fila tiene
+     una bajada agendada (F4.b-1) Y le toca cobro el mismo dia, cobrar ANTES de aplicar el cambio
+     le cobra al usuario un plan que ya cancelo. Hoy el cron corre el barrido A (aplicar cambios)
+     antes del B (expirar), y ese orden es EL CORRECTO para insertar el cobro despues de A — pero
+     el comentario que justifica el orden (cron/suscripciones/route.ts:130-131) habla de no mandar
+     dos correos por el mismo evento. O sea: el orden que nos salva existe POR SUERTE, no por
+     diseno, y nada impide que una edicion futura lo invierta sin saber lo que rompe. F4.c-5 debe
+     FIJARLO explicitamente: el cobro va DESPUES del barrido A y jamas toca una fila con
+     plan_programado pendiente.
+
+- **FASEO QUE SALIO DE AQUI**: c-1 investigacion (esta) -> c-2 spike de sandbox -> c-3 modelo de
+  datos -> c-4 Nequi (camino corto, sin 3DS) -> c-5 cobro automatico por cron -> c-6 tarjeta
+  (3DS, el mas caro, al final). Confirmado sin cambios por F4.c-2.
+
 ### F4.b-2 ✅ Cron de ciclo de vida de suscripciones — CLOSED
 - **Closed**: 2026-07-28. El ejecutor que faltaba: NADIE actuaba sobre plan_expira, asi que un plan vencido conservaba todas las funciones Pro para siempre, y las columnas de cambio programado de F4.b-1 no tenian quien las aplicara.
 - **Arquitectura (decision de Julian, patron de plataformas de billing)**: el cron es el UNICO escritor del estado efectivo. Todos los gates existentes siguen leyendo rest.plan sin tocarse — NO se agrego helper de gating por fecha ni segunda fuente de verdad. La ventana de hasta ~24h (Vercel dispara dentro de la hora programada) desaparece sola cuando F4.c cobre antes del vencimiento.

@@ -40,6 +40,14 @@ export interface Restaurante {
    *  Opcionales: columnas nuevas, las filas viejas llegan sin ellas. */
   plan_programado?: string | null
   fecha_cambio_programado?: string | null
+  /** Opt-in EXPLICITO al cobro recurrente (F4.c-3). Local: no existe en Wompi.
+   *  NO se deriva de "tiene una fuente de pago guardada" — guardar la tarjeta y
+   *  autorizar que te cobren son dos decisiones distintas, y el usuario debe
+   *  poder apagar la renovacion conservando el metodo. Lo lee el cron (F4.c-5).
+   *  Opcional: columna nueva con default false; ausente == sin cobro automatico. */
+  cobro_automatico?: boolean
+  /** Cuando el usuario activo el cobro automatico. Local. Null si nunca lo activo. */
+  cobro_automatico_desde?: string | null
   idioma: string
   color_principal: string
   tema: 'claro' | 'oscuro' | 'natural' | 'premium'
@@ -303,6 +311,120 @@ export interface Suscripcion {
   fecha_renovacion: string
   credito_referidos: number
   activa: boolean
+}
+
+/* ============================================
+   FUENTES DE PAGO TOKENIZADAS (F4.c-3)
+   Cobro recurrente. Ver ROADMAP-FIXES.md F4.c-1 (anatomia) y F4.c-2 (spike).
+   Estas dos tablas las escribe SOLO el service role: el enrolamiento es 100%
+   server-side porque POST y GET /v1/payment_sources exigen la llave PRIVADA
+   (F4.c-2/Q1) — el navegador no puede ni crear la fuente en Wompi.
+   ============================================ */
+
+/** Tipos de fuente que Wompi permite GUARDAR como payment source. Los cuatro
+ *  son almacenables (confirmado en el spike); hoy solo CARD y NEQUI tienen
+ *  codigo de enrolamiento (F4.c-4 y F4.c-6). PSE y SU_PLUS no entran: no son
+ *  tokenizables (PSE autoriza cada transaccion en el portal del banco). */
+export type TipoFuentePago = 'CARD' | 'NEQUI' | 'DAVIPLATA' | 'BANCOLOMBIA_TRANSFER'
+
+/** PENDING / AVAILABLE / ERROR espejan data.status de Wompi.
+ *  VOIDED NO ESPEJA NADA: es un estado LOCAL nuestro. No existe endpoint para
+ *  revocar una fuente normal (PUT .../void devuelve 422: solo aplica a fuentes
+ *  PREAUTHORIZATION). VOIDED significa "DEJAMOS de cobrar contra esta fuente";
+ *  la fuente SIGUE VIVA en Wompi y no hay forma de pedirle que la olvide. */
+export type EstadoFuentePago = 'PENDING' | 'AVAILABLE' | 'ERROR' | 'VOIDED'
+
+/** Fila de la tabla fuentes_pago. El dueno solo LEE las suyas (RLS select);
+ *  no hay policies de escritura para authenticated, a proposito. */
+export interface FuentePago {
+  id: string
+  restaurante_id: string
+  /** data.id de POST /v1/payment_sources. Es un NUMERO en Wompi (ej. 357352),
+   *  bigint en la DB. No es un string por mas que parezca un identificador. */
+  wompi_payment_source_id: number
+  /** data.type de la fuente de pago. */
+  tipo: TipoFuentePago
+  /** data.status de Wompi, salvo VOIDED que es nuestro. Ver EstadoFuentePago. */
+  estado: EstadoFuentePago
+  /** Local. La fuente que usara el cron de cobro (F4.c-5). Maximo una por
+   *  restaurante (indice unico parcial en la DB). */
+  predeterminada: boolean
+
+  // ----- Display CARD -----
+  /** VISA / MASTERCARD. ORIGEN UNICO: la respuesta de POST /v1/tokens/cards.
+   *  public_data de la fuente NO trae brand y el GET de la fuente tampoco: se
+   *  captura al TOKENIZAR o se pierde para siempre (solo reaparece en
+   *  payment_method.extra de una transaccion ya cobrada). */
+  marca: string | null
+  /** public_data.last_four. Texto, no entero. */
+  last_four: string | null
+  /** public_data.bin. */
+  bin: string | null
+  /** public_data.card_holder. */
+  titular: string | null
+  /** exp_month de la tokenizacion, VERBATIM. La doc de Wompi los muestra
+   *  transpuestos; el API responde bien. No se normaliza aqui: el spike no
+   *  registro si el ano llega como "29" o "2029". */
+  exp_mes: string | null
+  /** exp_year de la tokenizacion, VERBATIM. Ver exp_mes. */
+  exp_ano: string | null
+
+  // ----- Display NEQUI -----
+  /** Solo NEQUI. public_data devuelve phone Y phone_number duplicados y no trae
+   *  "name"; se lee phone_number y se ENMASCARA antes de guardar (ej. ***1111).
+   *  El numero completo no se persiste: Wompi ya lo tiene, nosotros solo pintamos. */
+  telefono_enmascarado: string | null
+
+  /** public_data.validity_ends_at de la FUENTE (~6 anos). NO confundir con el
+   *  validity_ends_at del TOKEN de tarjeta, que dura ~2 dias. */
+  vigencia_hasta: string | null
+  /** Local. Cuando dejamos de cobrar contra esta fuente. Campo OPERATIVO (lo
+   *  leen cron y UI); la evidencia formal es la fila REVOCADO de la bitacora. */
+  revocada_en: string | null
+  /** Local, texto libre en la DB. Convencion: usuario_solicito / cuenta_eliminada
+   *  / fuente_fallida / plan_cancelado. */
+  motivo_revocacion: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type EventoConsentimiento = 'OTORGADO' | 'REVOCADO'
+
+/** Fila de consentimientos_pago: bitacora APPEND-ONLY (trigger que bloquea
+ *  UPDATE) del consentimiento de cobro recurrente. Existe porque NO podemos
+ *  demostrar que Wompi olvido una fuente — lo unico evidenciable es nuestra
+ *  propia conducta: que el usuario acepto, y que dejamos de cobrar. */
+export interface ConsentimientoPago {
+  id: string
+  restaurante_id: string
+  /** Null A PROPOSITO: el consentimiento se captura ANTES de que exista la
+   *  fuente y la ventana es de 1 HORA (el token END_USER_POLICY expira a los
+   *  3601s). Si el 3DS se alarga, la fila queda huerfana y ESO es el registro
+   *  de que hubo que re-pedirlo. */
+  fuente_pago_id: string | null
+  evento: EventoConsentimiento
+  /** claim contract_id del JWT END_USER_POLICY (472 en el spike). */
+  politica_contract_id: number | null
+  /** claim file_hash. Fija QUE texto acepto el usuario: el permalink apunta a un
+   *  PDF que Wompi puede cambiar. */
+  politica_file_hash: string | null
+  /** PERMALINK del reglamento, NO el JWT. El JWT es de UN SOLO USO y expira en 1
+   *  hora: guardado no prueba nada. Valor real capturado en el spike:
+   *  https://wompi.com/assets/downloadble/reglamento-Usuarios-Colombia.pdf */
+  politica_permalink: string | null
+  /** claim contract_id del JWT PERSONAL_DATA_AUTH (439 en el spike). */
+  datos_contract_id: number | null
+  /** claim file_hash del PERSONAL_DATA_AUTH. Ver politica_file_hash. */
+  datos_file_hash: string | null
+  /** PERMALINK de la autorizacion de datos, NO el JWT. Ese token no trae claim
+   *  exp (no caduca por tiempo) pero SIGUE siendo de un solo uso. Valor real:
+   *  https://wompi.com/assets/downloadble/autorizacion-tratamiento-datos-personales.pdf */
+  datos_permalink: string | null
+  /** Solo para REVOCADO: por que dejamos de cobrar. */
+  motivo: string | null
+  ip: string | null
+  user_agent: string | null
+  created_at: string
 }
 
 export interface ItemPedido {
