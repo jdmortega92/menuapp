@@ -498,6 +498,18 @@ Decision 2026-07-03: Julian mantiene $15k/$29k mensual ($150k/$290k anual, ~2 me
 
 ## Items
 
+### F4.c-3 ✅ Modelo de datos de fuentes de pago tokenizadas — CLOSED
+- **Closed**: 2026-07-30. Solo SQL + tipos: cero UI, cero rutas, cero logica. Nada visible para el usuario, asi que esta fase no podia romper a nadie.
+- **SQL corrido a mano en Supabase, PIEZA POR PIEZA con verificacion de cada objeto** (regla del INCIDENTE 2: dos migraciones anteriores murieron a mitad). Las 6 piezas: (1) tabla fuentes_pago 18 columnas + comentarios de origen por columna; (2) tabla consentimientos_pago 14 columnas + comentarios; (3) RLS + 2 policies de solo-select para authenticated — VERIFICADO en las DOS dimensiones (relrowsecurity=true Y pg_policies con 2 filas, cmd=SELECT, roles={authenticated}): activar RLS sin policies es deny silencioso indistinguible de tabla vacia, que es exactamente el incidente que ya vivimos dos veces; (4) 7 indices; (5) 2 columnas en restaurantes con backfill verificado (4 filas, las 4 en false, ninguna con fecha — nadie quedo con cobro automatico por accidente); (6) trigger append-only.
+- **Garantias ESTRUCTURALES (no dependen de que el codigo se porte bien)**: uq_fuentes_pago_wompi_id impide que un reintento de enrolamiento duplique la fuente; uq_fuentes_pago_predeterminada (indice UNICO PARCIAL where predeterminada) hace IMPOSIBLE que un restaurante tenga dos fuentes cobrables — el cron nunca tendra que elegir.
+- **VOIDED es LOCAL, no espejo de Wompi**: el comentario de la columna estado lo dice explicitamente porque F4.c-2 probo que NO existe endpoint para revocar una fuente normal. VOIDED = "dejamos de cobrar"; la fuente sigue viva en Wompi y no hay forma de pedirle que la olvide.
+- **consentimientos_pago existe precisamente por eso**: si no podemos evidenciar que Wompi olvido la fuente, lo unico evidenciable es nuestra conducta. Bitacora APPEND-ONLY (trigger que bloquea UPDATE) con eventos OTORGADO/REVOCADO. Se guardan los PERMALINKS + file_hash + contract_id, NUNCA los JWT: son de un solo uso y expiran en 1 hora, guardados no prueban nada; el file_hash fija QUE texto acepto el usuario, porque el permalink apunta a un PDF que Wompi puede cambiar.
+- **Trigger solo BEFORE UPDATE, sin DELETE, a proposito**: bloquear DELETE romperia el borrado en cascada al eliminar una cuenta, y el derecho al borrado (Ley 1581) pesa mas que la retencion de evidencia. Nadie puede REESCRIBIR la historia de un consentimiento; borrarla con la cuenta si.
+- **cobro_automatico NO se deriva de "tiene fuente guardada"**: guardar la tarjeta y autorizar que te cobren son dos decisiones distintas, y el usuario debe poder apagar la renovacion conservando el metodo (patron Netflix/Spotify).
+- **tipo admite los CUATRO almacenables** (CARD, NEQUI, DAVIPLATA, BANCOLOMBIA_TRANSFER) aunque solo se construya CARD y NEQUI: ensanchar un CHECK despues es una migracion que no hace falta pagar. OJO: el constraint fuentes_pago_display_coherente solo cubre CARD y NEQUI hoy — agregar DAVIPLATA o BANCOLOMBIA_TRANSFER exige tocarlo tambien.
+- **Tipos**: FuentePago, ConsentimientoPago, TipoFuentePago, EstadoFuentePago, EventoConsentimiento en src/types/index.ts, cada campo con su procedencia comentada. Commit 60deaf5 (junto con el rescate de F4.c-1).
+- **SQL no versionado**: este repo no tiene migraciones. El SQL vive en Supabase y su unica copia legible es esta entrada — no borrarla.
+
 ### F4.c-2 ✅ Spike de sandbox Wompi: los 4 bloqueadores, RESUELTOS — CLOSED
 - **Corrido**: 2026-07-29 contra https://sandbox.wompi.co/v1 con llaves pub_test_/prv_test_ de
   .env.local. Codigo DESECHABLE fuera de src/ (scratchpad), borrado al terminar. La unica huella
