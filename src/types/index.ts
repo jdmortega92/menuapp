@@ -340,8 +340,15 @@ export interface FuentePago {
   id: string
   restaurante_id: string
   /** data.id de POST /v1/payment_sources. Es un NUMERO en Wompi (ej. 357352),
-   *  bigint en la DB. No es un string por mas que parezca un identificador. */
-  wompi_payment_source_id: number
+   *  bigint en la DB. No es un string por mas que parezca un identificador.
+   *  NULL mientras el enrolamiento esta PENDING: la fuente de pago no existe
+   *  hasta que el usuario aprueba (F4.c-4). Se llena en el webhook. */
+  wompi_payment_source_id: number | null
+  /** id del token de TOKENIZACION (data.id de POST /v1/tokens/nequi, ej.
+   *  "nequi_test_..."). Es el UNICO enlace entre el evento nequi_token.updated
+   *  y esta fila: ese evento no trae reference ni restaurante. Se escribe al
+   *  enrolar y no vuelve a cambiar. Para CARD (F4.c-6) sera el token de tarjeta. */
+  wompi_token_id: string | null
   /** data.type de la fuente de pago. */
   tipo: TipoFuentePago
   /** data.status de Wompi, salvo VOIDED que es nuestro. Ver EstadoFuentePago. */

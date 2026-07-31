@@ -8,6 +8,10 @@ import {
   calcularPlanExpira,
   esRenovacion,
   calcularChecksumEvento,
+  enmascararTelefono,
+  telefonoNequiValido,
+  leerClaimsAceptacion,
+  construirConsentimiento,
   type WompiEvento,
 } from './wompi'
 
@@ -233,5 +237,155 @@ describe('calcularChecksumEvento (webhook, propiedades dinamicas)', () => {
     expect(calcularChecksumEvento({ ...event, timestamp: 1700000001 }, secret)).not.toBe(
       calcularChecksumEvento(event, secret)
     )
+  })
+})
+
+// ── F4.c-4: enrolamiento Nequi ───────────────────────────────────────────
+
+describe('enmascararTelefono', () => {
+  it('deja SOLO los ultimos 4 digitos (el numero completo nunca se persiste)', () => {
+    expect(enmascararTelefono('3991111111')).toBe('***1111')
+    expect(enmascararTelefono('3001234567')).toBe('***4567')
+  })
+
+  it('limpia separadores antes de enmascarar (public_data no garantiza formato)', () => {
+    expect(enmascararTelefono('300 123 4567')).toBe('***4567')
+    expect(enmascararTelefono('+57 300-123-4567')).toBe('***4567')
+  })
+
+  it('jamas devuelve el numero completo, ni con entradas raras', () => {
+    for (const entrada of ['3991111111', '300 123 4567', '+573001234567']) {
+      const salida = enmascararTelefono(entrada)
+      expect(salida.replace(/\D/g, '').length).toBeLessThanOrEqual(4)
+      expect(salida.startsWith('***')).toBe(true)
+    }
+  })
+
+  it('degrada a **** sin reventar con vacio, null o basura', () => {
+    expect(enmascararTelefono('')).toBe('****')
+    expect(enmascararTelefono(null)).toBe('****')
+    expect(enmascararTelefono(undefined)).toBe('****')
+    expect(enmascararTelefono('abc')).toBe('****')
+    expect(enmascararTelefono('12')).toBe('****')
+  })
+})
+
+describe('telefonoNequiValido', () => {
+  it('acepta 10 digitos que empiezan por 3', () => {
+    expect(telefonoNequiValido('3001234567')).toBe(true)
+    expect(telefonoNequiValido('300 123 4567')).toBe(true)
+  })
+
+  it('rechaza longitud incorrecta o prefijo que no es 3', () => {
+    expect(telefonoNequiValido('300123456')).toBe(false)
+    expect(telefonoNequiValido('30012345678')).toBe(false)
+    expect(telefonoNequiValido('6011234567')).toBe(false)
+    expect(telefonoNequiValido('')).toBe(false)
+    expect(telefonoNequiValido(null)).toBe(false)
+  })
+})
+
+describe('leerClaimsAceptacion', () => {
+  // JWT armado a mano: header.payload.signature, payload en base64url.
+  const jwtCon = (payload: Record<string, unknown>) => {
+    const b64 = Buffer.from(JSON.stringify(payload), 'utf8')
+      .toString('base64')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '')
+    return `eyJhbGciOiJIUzI1NiJ9.${b64}.firma-que-no-se-verifica`
+  }
+
+  it('extrae contract_id, file_hash y permalink (forma real del spike)', () => {
+    const jwt = jwtCon({
+      contract_id: 472,
+      permalink: 'https://wompi.com/assets/downloadble/reglamento-Usuarios-Colombia.pdf',
+      file_hash: 'abc123',
+      jit: 'x',
+      email: '',
+      exp: 1700003601,
+    })
+    expect(leerClaimsAceptacion(jwt)).toEqual({
+      contract_id: 472,
+      file_hash: 'abc123',
+      permalink: 'https://wompi.com/assets/downloadble/reglamento-Usuarios-Colombia.pdf',
+    })
+  })
+
+  it('devuelve nulls sin lanzar con basura: perder un claim no puede tumbar el enrolamiento', () => {
+    const vacio = { contract_id: null, file_hash: null, permalink: null }
+    expect(leerClaimsAceptacion('')).toEqual(vacio)
+    expect(leerClaimsAceptacion(null)).toEqual(vacio)
+    expect(leerClaimsAceptacion('no-es-un-jwt')).toEqual(vacio)
+    expect(leerClaimsAceptacion('a.b.c')).toEqual(vacio)
+  })
+
+  it('ignora claims con el tipo equivocado en vez de propagarlos', () => {
+    const jwt = jwtCon({ contract_id: '472', file_hash: 99, permalink: null })
+    expect(leerClaimsAceptacion(jwt)).toEqual({ contract_id: null, file_hash: null, permalink: null })
+  })
+})
+
+describe('construirConsentimiento', () => {
+  const politica = { contract_id: 472, file_hash: 'hash-politica', permalink: 'https://wompi.com/a.pdf' }
+  const datos = { contract_id: 439, file_hash: 'hash-datos', permalink: 'https://wompi.com/b.pdf' }
+
+  it('OTORGADO: mapea los dos contratos a sus columnas, sin cruzarlos', () => {
+    const fila = construirConsentimiento({
+      restauranteId: 'rest-1',
+      fuentePagoId: 'fuente-1',
+      evento: 'OTORGADO',
+      politica,
+      datos,
+      ip: '1.2.3.4',
+      userAgent: 'Mozilla/5.0',
+    })
+    expect(fila).toEqual({
+      restaurante_id: 'rest-1',
+      fuente_pago_id: 'fuente-1',
+      evento: 'OTORGADO',
+      politica_contract_id: 472,
+      politica_file_hash: 'hash-politica',
+      politica_permalink: 'https://wompi.com/a.pdf',
+      datos_contract_id: 439,
+      datos_file_hash: 'hash-datos',
+      datos_permalink: 'https://wompi.com/b.pdf',
+      motivo: null,
+      ip: '1.2.3.4',
+      user_agent: 'Mozilla/5.0',
+    })
+  })
+
+  it('REVOCADO: sin contratos, con motivo — es evidencia de que dejamos de cobrar', () => {
+    const fila = construirConsentimiento({
+      restauranteId: 'rest-1',
+      fuentePagoId: 'fuente-1',
+      evento: 'REVOCADO',
+      motivo: 'usuario_solicito',
+    })
+    expect(fila.evento).toBe('REVOCADO')
+    expect(fila.motivo).toBe('usuario_solicito')
+    expect(fila.politica_permalink).toBeNull()
+    expect(fila.datos_permalink).toBeNull()
+  })
+
+  it('nunca deja campos undefined: Postgres necesita null explicito', () => {
+    const fila = construirConsentimiento({ restauranteId: 'rest-1', evento: 'REVOCADO' })
+    for (const [clave, valor] of Object.entries(fila)) {
+      expect(valor, `${clave} no puede ser undefined`).not.toBeUndefined()
+    }
+    expect(fila.fuente_pago_id).toBeNull()
+  })
+
+  it('el JWT jamas aparece en la fila (solo permalink, hash y contract_id)', () => {
+    const fila = construirConsentimiento({
+      restauranteId: 'rest-1',
+      evento: 'OTORGADO',
+      politica,
+      datos,
+    })
+    const serializada = JSON.stringify(fila)
+    expect(serializada).not.toContain('eyJ')
+    expect(Object.keys(fila)).not.toContain('acceptance_token')
   })
 })

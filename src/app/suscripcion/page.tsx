@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { Check, X } from 'lucide-react'
 import Icono from '@/components/ui/Icono'
 import Boton from '@/components/ui/Boton'
+import MetodoPago from '@/components/suscripcion/MetodoPago'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks'
 import { createClient } from '@/lib/supabase-browser'
@@ -416,15 +417,17 @@ export default function SuscripcionPage() {
           )
         })}
 
-        {/* Método de pago */}
-        {planActual !== 'gratis' && (
-          <div style={{ padding: '0 20px', marginBottom: '10px', marginTop: '6px' }}>
-            <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Método de pago</div>
-            <div className="card" style={{ padding: '16px', textAlign: 'center' }}>
-              <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Pagos seguros con Wompi</div>
-              <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '4px' }}>Nequi, Bancolombia, tarjeta de crédito/débito</div>
-            </div>
-          </div>
+        {/* Método de pago (F4.c-4). Guarda un método; NO cobra ni cambia el
+            plan. Es independiente del flujo de compra de arriba. Misma condición
+            que el cartel estático al que reemplaza: solo con plan pago, que es
+            el único caso donde guardar un método sirve de algo. */}
+        {planActual !== 'gratis' && rest?.id && (
+          <MetodoPago
+            restauranteId={rest.id}
+            plan={planActual}
+            periodo={periodoActual}
+            planExpira={rest.plan_expira}
+          />
         )}
 
         {/* Credito referidos — OCULTO 2026-07-27 (BL.46). Prometia "gana meses

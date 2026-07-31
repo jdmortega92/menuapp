@@ -153,11 +153,26 @@ export interface WompiTransaction {
   currency?: string
   customer_email?: string
   payment_method_type?: string
+  /** Solo en el payload del WEBHOOK (el GET /v1/transactions/{id} NO lo trae).
+   *  Es el discriminador natural de un cobro contra fuente guardada (F4.c-2/Q2).
+   *  Lo declara F4.c-4 porque ya hay evidencia de su forma; lo CONSUME F4.c-5. */
+  payment_source_id?: number
+}
+
+/** Raiz del evento nequi_token.updated. NO es data.transaction: la raiz es
+ *  distinta (verificado en el spike F4.c-2/Q4), y por eso el guard viejo del
+ *  webhook lo dejaba caer despues de verificar bien la firma. */
+export interface WompiNequiToken {
+  id?: string
+  status?: string
+  phone_number?: string
+  /** El API devuelve phone Y phone_number DUPLICADOS. Se lee phone_number. */
+  phone?: string
 }
 
 export interface WompiEvento {
   event?: string
-  data?: { transaction?: WompiTransaction }
+  data?: { transaction?: WompiTransaction; nequi_token?: WompiNequiToken }
   signature?: { properties?: string[]; checksum?: string }
   timestamp?: number
   environment?: string
@@ -176,4 +191,104 @@ export function calcularChecksumEvento(event: WompiEvento, secret: string): stri
   const concatValores = props.map((p) => String(resolverPath(data, p))).join('')
   const cadena = `${concatValores}${event.timestamp}${secret}`
   return createHash('sha256').update(cadena).digest('hex').toUpperCase()
+}
+
+// ── Enrolamiento Nequi (F4.c-4) ──────────────────────────────────────────
+
+// Un numero de celular colombiano no se guarda completo en ninguna parte de
+// nuestra base: Wompi ya lo tiene y nosotros solo necesitamos pintarlo. Se
+// conservan los ULTIMOS 4 digitos, que es lo que el usuario reconoce.
+// Defensivo con la entrada porque el valor puede venir del usuario (10 digitos
+// limpios) o de public_data de Wompi (formato no garantizado).
+export function enmascararTelefono(valor: string | null | undefined): string {
+  const digitos = (valor ?? '').replace(/\D/g, '')
+  if (digitos.length < 4) return '****'
+  return `***${digitos.slice(-4)}`
+}
+
+// Un celular valido para Nequi: 10 digitos y empieza por 3 (misma regla que
+// PhoneInput). Se revalida en el SERVER: la validacion del componente es UX,
+// no una defensa.
+export function telefonoNequiValido(valor: string | null | undefined): boolean {
+  return /^3\d{9}$/.test((valor ?? '').replace(/\D/g, ''))
+}
+
+/** Metadatos de un acceptance token que SI se persisten. El JWT jamas. */
+export interface ClaimsAceptacion {
+  contract_id: number | null
+  file_hash: string | null
+  permalink: string | null
+}
+
+const CLAIMS_VACIOS: ClaimsAceptacion = { contract_id: null, file_hash: null, permalink: null }
+
+// Lee los claims del acceptance token SIN verificar la firma, a proposito: el
+// JWT llega por HTTPS desde la API de Wompi y aqui no se usa para autorizar
+// nada — solo para EXTRAER los tres datos que hay que guardar como evidencia
+// (contract_id, file_hash, permalink). El token en si es de un solo uso y
+// caduca en 1 hora: guardarlo no probaria nada, por eso solo se guardan estos.
+// Cualquier forma inesperada devuelve nulls en vez de reventar: perder un
+// claim no puede tumbar un enrolamiento.
+export function leerClaimsAceptacion(jwt: string | null | undefined): ClaimsAceptacion {
+  const partes = (jwt ?? '').split('.')
+  if (partes.length !== 3) return CLAIMS_VACIOS
+  try {
+    const base64 = partes[1].replace(/-/g, '+').replace(/_/g, '/')
+    const claims = JSON.parse(Buffer.from(base64, 'base64').toString('utf8')) as Record<string, unknown>
+    return {
+      contract_id: typeof claims.contract_id === 'number' ? claims.contract_id : null,
+      file_hash: typeof claims.file_hash === 'string' ? claims.file_hash : null,
+      permalink: typeof claims.permalink === 'string' ? claims.permalink : null,
+    }
+  } catch {
+    return CLAIMS_VACIOS
+  }
+}
+
+/** Fila lista para insertar en consentimientos_pago. */
+export interface FilaConsentimiento {
+  restaurante_id: string
+  fuente_pago_id: string | null
+  evento: 'OTORGADO' | 'REVOCADO'
+  politica_contract_id: number | null
+  politica_file_hash: string | null
+  politica_permalink: string | null
+  datos_contract_id: number | null
+  datos_file_hash: string | null
+  datos_permalink: string | null
+  motivo: string | null
+  ip: string | null
+  user_agent: string | null
+}
+
+// Arma la fila de la bitacora de consentimiento. Puro y testeable a proposito:
+// es la unica evidencia que podemos exhibir de nuestra propia conducta (no
+// existe endpoint para revocar una fuente en Wompi, F4.c-2), asi que su forma
+// no puede depender de que una ruta se acuerde de llenar los campos.
+export function construirConsentimiento(p: {
+  restauranteId: string
+  fuentePagoId?: string | null
+  evento: 'OTORGADO' | 'REVOCADO'
+  politica?: ClaimsAceptacion
+  datos?: ClaimsAceptacion
+  motivo?: string | null
+  ip?: string | null
+  userAgent?: string | null
+}): FilaConsentimiento {
+  const politica = p.politica ?? CLAIMS_VACIOS
+  const datos = p.datos ?? CLAIMS_VACIOS
+  return {
+    restaurante_id: p.restauranteId,
+    fuente_pago_id: p.fuentePagoId ?? null,
+    evento: p.evento,
+    politica_contract_id: politica.contract_id,
+    politica_file_hash: politica.file_hash,
+    politica_permalink: politica.permalink,
+    datos_contract_id: datos.contract_id,
+    datos_file_hash: datos.file_hash,
+    datos_permalink: datos.permalink,
+    motivo: p.motivo ?? null,
+    ip: p.ip ?? null,
+    user_agent: p.userAgent ?? null,
+  }
 }
