@@ -11,10 +11,19 @@ import Boton from '@/components/ui/Boton'
 // opcionales (vinculaciones, avisos de destacado) + texto de peligro +
 // footer peligro/secundario. El cierre ocurre ANTES de onConfirm (mismo
 // orden que el patron original: limpiar estado puntero, luego borrar).
+//
+// CONFIRM-SUSCRIPCION: las etiquetas de los dos botones son PROPS OPCIONALES
+// con el default de siempre, asi que ningun call site anterior cambia. Hicieron
+// falta porque las acciones de suscripcion no son borrados: "Sí, eliminar" seria
+// copy MENTIROSO al cancelar un plan (no se elimina nada, se agenda un cambio),
+// y en esa hoja el neutro tiene que dejar de llamarse "Cancelar" — al lado de
+// "cancelar la suscripción" las dos palabras significarian cosas opuestas.
 export default function ConfirmarEliminar({
   titulo,
   nombre,
   textoPeligro = 'Esta acción no se puede deshacer.',
+  textoConfirmar = 'Sí, eliminar',
+  textoCancelar = 'Cancelar',
   onConfirm,
   onClose,
   children,
@@ -22,6 +31,8 @@ export default function ConfirmarEliminar({
   titulo: string
   nombre: string
   textoPeligro?: string
+  textoConfirmar?: string
+  textoCancelar?: string
   onConfirm: () => void
   onClose: () => void
   children?: ReactNode
@@ -47,10 +58,10 @@ export default function ConfirmarEliminar({
           }}
           style={{ flex: 1 }}
         >
-          Sí, eliminar
+          {textoConfirmar}
         </Boton>
         <Boton variante="secundario" onClick={onClose} style={{ flex: 1 }}>
-          Cancelar
+          {textoCancelar}
         </Boton>
       </div>
     </Modal>

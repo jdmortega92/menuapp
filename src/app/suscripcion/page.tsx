@@ -5,6 +5,7 @@ import { Check, X } from 'lucide-react'
 import Icono from '@/components/ui/Icono'
 import Boton from '@/components/ui/Boton'
 import MetodoPago from '@/components/suscripcion/MetodoPago'
+import ConfirmarEliminar from '@/components/menu-admin/ConfirmarEliminar'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks'
 import { createClient } from '@/lib/supabase-browser'
@@ -23,6 +24,11 @@ export default function SuscripcionPage() {
   const [pagoProcesando, setPagoProcesando] = useState(false)
   // Reactivar no es un cambio de plan: flag propio, fuera de planEnProceso.
   const [reactivando, setReactivando] = useState(false)
+  // CONFIRM-SUSCRIPCION: bajar a Gratis termina la relacion comercial y hasta
+  // hoy corria al primer clic desde DOS sitios (el boton de la card Gratis y el
+  // enlace "Cancelar suscripción"). Se confirma en el ruteo, no en cada boton,
+  // para que ninguna entrada quede sin puerta.
+  const [confirmarCancelar, setConfirmarCancelar] = useState(false)
   // Mientras algo esta en vuelo se deshabilitan TODOS los botones (evita dobles
   // cobros), pero solo el del plan en vuelo cambia de label.
   const cambiando = planEnProceso !== null
@@ -106,10 +112,16 @@ export default function SuscripcionPage() {
 
   // Ruteo del boton: bajar a gratis es cambio directo; subir a un plan pago
   // pasa por Wompi (F4.a-2) y NO escribe el plan aqui (lo confirma el webhook).
-  async function cambiarPlan(nuevoPlan: Plan) {
+  function cambiarPlan(nuevoPlan: Plan) {
     if (!rest?.id) return
-    if (nuevoPlan === 'gratis') return bajarAGratis()
-    return iniciarPagoWompi(nuevoPlan)
+    // Bajar a Gratis NO se ejecuta al primer clic: abre la hoja compartida.
+    // bajarAGratis solo corre desde su onConfirm, asi que cerrar sin confirmar
+    // no toca nada.
+    if (nuevoPlan === 'gratis') {
+      setConfirmarCancelar(true)
+      return
+    }
+    void iniciarPagoWompi(nuevoPlan)
   }
 
   // Cancelar NO es bajar de plan (F4.b-1). Con tiempo pagado por delante el
@@ -460,6 +472,33 @@ export default function SuscripcionPage() {
               {planEnProceso === 'gratis' ? 'Cancelando...' : 'Cancelar suscripción'}
             </span>
           </div>
+        )}
+
+        {/* CONFIRM-SUSCRIPCION: cancelar la suscripción. El copy dice lo que de
+            verdad pasa, que NO es una pérdida inmediata: con tiempo pagado por
+            delante F4.b-1 AGENDA el cambio y el plan sigue vivo hasta la fecha.
+            Sin tiempo restante sí es inmediato, y entonces el copy lo dice —
+            prometer una fecha que no existe sería mentir en la otra dirección. */}
+        {confirmarCancelar && (
+          <ConfirmarEliminar
+            titulo="¿Cancelar tu suscripción?"
+            nombre={`Plan ${nombrePlanActual}`}
+            textoConfirmar="Sí, cancelar mi plan"
+            // El neutro NO puede llamarse "Cancelar" aquí: al lado de "cancelar
+            // la suscripción" las dos palabras dirían cosas opuestas.
+            textoCancelar="Volver"
+            textoPeligro={puedeProgramar
+              ? 'Al llegar esa fecha perderás las funciones de tu plan.'
+              : 'Perderás las funciones de tu plan de inmediato.'}
+            onConfirm={bajarAGratis}
+            onClose={() => setConfirmarCancelar(false)}
+          >
+            <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '10px', lineHeight: 1.5 }}>
+              {puedeProgramar
+                ? `Tu plan ${nombrePlanActual} sigue activo hasta el ${fechaLargaColombia(expiraVigente)}. Ese día pasarás a Gratis.`
+                : 'No te queda tiempo pagado por delante, así que el cambio se aplica de inmediato.'}
+            </div>
+          </ConfirmarEliminar>
         )}
 
       </div>

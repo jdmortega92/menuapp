@@ -5,6 +5,7 @@ import { AlertCircle, Clock, Smartphone, Trash2 } from 'lucide-react'
 import Icono from '@/components/ui/Icono'
 import Boton from '@/components/ui/Boton'
 import PhoneInput from '@/components/ui/PhoneInput'
+import ConfirmarEliminar from '@/components/menu-admin/ConfirmarEliminar'
 import { useFuentePago } from '@/hooks/data/useFuentePago'
 import { formatoPrecio } from '@/lib/precio'
 import { precioDe, type Periodo } from '@/lib/planes'
@@ -36,6 +37,11 @@ export default function MetodoPago({ restauranteId, plan, periodo, planExpira }:
   const [aceptaDatos, setAceptaDatos] = useState(false)
   const [enviando, setEnviando] = useState(false)
   const [quitando, setQuitando] = useState(false)
+  // Solo el metodo YA GUARDADO (AVAILABLE) se confirma: ahi hay algo que
+  // perder. Cancelar un enrolamiento PENDING o reintentar tras un ERROR no
+  // destruyen nada guardado — misma linea que CONFIRM-DELETE, que dejo las
+  // desactivaciones reversibles sin confirmacion a proposito.
+  const [confirmarQuitar, setConfirmarQuitar] = useState(false)
   const [error, setError] = useState('')
   const [permalinks, setPermalinks] = useState<{ politica: string | null; datos: string | null }>({
     politica: null,
@@ -149,7 +155,7 @@ export default function MetodoPago({ restauranteId, plan, periodo, planExpira }:
                 </div>
               </div>
             </div>
-            <Boton variante="terciario" tamano="sm" onClick={quitarMetodo} disabled={quitando}
+            <Boton variante="terciario" tamano="sm" onClick={() => setConfirmarQuitar(true)} disabled={quitando}
               style={{ marginTop: '10px', color: 'var(--color-danger)' }}>
               <Icono icono={Trash2} size={14} />
               {quitando ? 'Quitando...' : 'Quitar método'}
@@ -278,6 +284,27 @@ export default function MetodoPago({ restauranteId, plan, periodo, planExpira }:
           <div style={{ fontSize: '11px', color: 'var(--color-danger)', marginTop: '8px' }}>{error}</div>
         )}
       </div>
+
+      {/* CONFIRM-SUSCRIPCION: quitar el metodo guardado. Misma hoja compartida
+          que platos/categorias/combos/promos — no hay una segunda. Cerrar sin
+          confirmar no hace nada: quitarMetodo solo corre desde onConfirm. */}
+      {confirmarQuitar && fuente?.estado === 'AVAILABLE' && (
+        <ConfirmarEliminar
+          titulo="¿Quitar este método de pago?"
+          nombre={`Nequi ${fuente.telefono_enmascarado ?? ''}`}
+          textoConfirmar="Sí, quitar"
+          // El default ("Esta acción no se puede deshacer") seria FALSO: el
+          // usuario puede volver a guardar su Nequi cuando quiera.
+          textoPeligro="Si tu plan vence sin que lo pagues, pasarás a Gratis."
+          onConfirm={quitarMetodo}
+          onClose={() => setConfirmarQuitar(false)}
+        >
+          <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '10px', lineHeight: 1.5 }}>
+            Se quitará el método guardado. Tu plan no se renovará automáticamente:
+            tendrás que pagarlo a mano cada vez. Puedes volver a agregarlo cuando quieras.
+          </div>
+        </ConfirmarEliminar>
+      )}
     </div>
   )
 }
