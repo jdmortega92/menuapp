@@ -262,7 +262,9 @@ async function manejarTokenNequi(token: WompiNequiToken) {
   }
 
   // ── APPROVED: recien aqui existe permiso para crear la fuente de pago ──
-  if (!credencialesListas('wompi/eventos')) {
+  // Aqui SI hacen falta las dos: publica para releer /merchants (par de
+  // aceptacion fresco) y PRIVADA para crear la fuente de pago.
+  if (!credencialesListas('wompi/eventos', ['publica', 'privada'])) {
     // Config rota: 500 para que Wompi reintente cuando este arreglada.
     return NextResponse.json({ error: 'Pasarela no configurada' }, { status: 500 })
   }

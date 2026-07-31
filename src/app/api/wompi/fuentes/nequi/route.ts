@@ -54,7 +54,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Restaurante no disponible' }, { status: 500 })
   }
 
-  if (!credencialesListas('wompi/fuentes/nequi')) {
+  // SOLO la llave publica: esta ruta lee /merchants (llave en el path) y
+  // tokeniza (publica). La privada no hace falta aqui — la fuente de pago la
+  // crea el webhook. Exigirla seria pedir una credencial que esta ruta no usa.
+  if (!credencialesListas('wompi/fuentes/nequi', ['publica'])) {
     return NextResponse.json({ error: 'Pasarela no configurada' }, { status: 500 })
   }
 

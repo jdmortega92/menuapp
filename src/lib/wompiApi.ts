@@ -3,38 +3,47 @@ import { leerClaimsAceptacion, type ClaimsAceptacion } from './wompi'
 // ── Llamadas HTTP a la API de Wompi (F4.c-4) ─────────────────────────────
 // SEPARADO de lib/wompi.ts A PROPOSITO: ese modulo es puro y unit-testeable
 // (firmas, fechas, parsers) y debe seguir siendolo. Aqui vive todo lo que hace
-// red y todo lo que toca la LLAVE PRIVADA.
+// red y todo lo que toca las credenciales.
 //
-// LLAVE PRIVADA: WOMPI_PRIVATE_KEY. Sin prefijo NEXT_PUBLIC_, asi que Next
-// jamas la inlinea en el bundle del navegador; y este modulo solo lo importan
-// route handlers (server). El spike (F4.c-2/Q1) probo que POST y GET de
-// /v1/payment_sources y POST /v1/tokens/nequi EXIGEN la privada: la publica
-// devuelve 401. Por eso el enrolamiento es 100% server-side y no existe
-// ninguna variante de esto que pueda correr en el navegador.
+// QUE LLAVE USA CADA ENDPOINT — esto NO es intercambiable y confundirlo da 401:
+//   GET  /v1/merchants/{public_key}  -> NINGUNA cabecera. La llave publica va en
+//        el PATH; mandar Authorization aqui no aporta nada.
+//   POST /v1/tokens/nequi            -> PUBLICA. La tokenizacion es la operacion
+//        pensada para ser segura desde el cliente (por eso el Widget puede
+//        tokenizar una tarjeta sin exponer nada). Mandar la privada da 401.
+//   POST /v1/tokens/cards            -> PUBLICA (mismo motivo). F4.c-6.
+//   POST /v1/payment_sources         -> PRIVADA. Probado en el spike F4.c-2/Q1:
+//        sin auth -> 401 INVALID_ACCESS_TOKEN; con pub_test_ -> 401 "Solicitud
+//        no autorizada"; con prv_test_ -> 201. Igual el GET de la fuente.
+//   POST /v1/transactions            -> PRIVADA. No se usa en F4.c-4 (es F4.c-5).
 //
-// GET /v1/merchants/{public_key} es la excepcion: NO lleva Authorization, la
-// llave publica va en el path.
+// La regla de fondo: TOKENIZAR es publico, GUARDAR y COBRAR son privados.
+//
+// WOMPI_PRIVATE_KEY no lleva prefijo NEXT_PUBLIC_, asi que Next jamas la
+// inlinea en el bundle del navegador; y este modulo solo lo importan route
+// handlers (server). El enrolamiento con Nequi, de hecho, NO necesita la llave
+// privada en ningun momento: la usa solo el webhook, al crear la fuente.
 
 // Sandbox por DEFECTO: si la variable falta, se prefiere fallar contra el
 // entorno de pruebas antes que golpear produccion por accidente.
 const BASE = (process.env.WOMPI_API_URL ?? 'https://sandbox.wompi.co/v1').replace(/\/+$/, '')
 
-function llavePrivada(): string {
-  return (process.env.WOMPI_PRIVATE_KEY ?? '').trim()
+/** Que credencial viaja en la cabecera Authorization de una llamada. */
+export type Llave = 'publica' | 'privada' | 'ninguna'
+
+function valorDe(llave: Llave): string {
+  if (llave === 'publica') return (process.env.NEXT_PUBLIC_WOMPI_PUBLIC_KEY ?? '').trim()
+  if (llave === 'privada') return (process.env.WOMPI_PRIVATE_KEY ?? '').trim()
+  return ''
 }
 
-function llavePublica(): string {
-  return (process.env.NEXT_PUBLIC_WOMPI_PUBLIC_KEY ?? '').trim()
-}
-
-/** Se loguea la LONGITUD de cada credencial, nunca el valor (mismo patron que
- *  /api/wompi/checkout y el cron): un valor truncado pasa el guard de "existe"
- *  y solo se detecta por su longitud. */
-export function credencialesListas(etiqueta: string): boolean {
-  const priv = llavePrivada()
-  const pub = llavePublica()
-  console.info(`[${etiqueta}] creds len: WOMPI_PRIVATE_KEY=${priv.length} NEXT_PUBLIC_WOMPI_PUBLIC_KEY=${pub.length}`)
-  return priv.length > 0 && pub.length > 0
+/** Verifica SOLO las credenciales que la operacion necesita de verdad. Se
+ *  loguea la LONGITUD de cada una, jamas el valor: un valor truncado o con un
+ *  newline pegado pasa el guard de "existe" y solo se delata por su longitud. */
+export function credencialesListas(etiqueta: string, necesita: Llave[]): boolean {
+  const detalle = necesita.map((l) => `${l}=${valorDe(l).length}`).join(' ')
+  console.info(`[${etiqueta}] creds len: ${detalle}`)
+  return necesita.every((l) => valorDe(l).length > 0)
 }
 
 /** Resultado uniforme: las rutas deciden que responder, nadie lanza. */
@@ -42,17 +51,45 @@ export type ResultadoWompi<T> =
   | { ok: true; datos: T }
   | { ok: false; status: number; mensaje: string }
 
-async function pedir<T>(
-  url: string,
-  init: RequestInit,
+async function pedir<T>(p: {
+  metodo: 'GET' | 'POST'
+  /** Ruta para el LOG (sin ids ni llaves), no la URL real. */
+  ruta: string
+  url: string
+  llave: Llave
+  cuerpo?: unknown
   etiqueta: string
-): Promise<ResultadoWompi<T>> {
+}): Promise<ResultadoWompi<T>> {
+  const credencial = valorDe(p.llave)
+  if (p.llave !== 'ninguna' && !credencial) {
+    console.error(`[${p.etiqueta}] ${p.metodo} ${p.ruta} SIN llave ${p.llave} configurada`)
+    return { ok: false, status: 500, mensaje: `Falta la llave ${p.llave}` }
+  }
+
+  // Este sello es la linea que hace diagnosticable un 401 de un vistazo: dice
+  // QUE llave se uso en QUE ruta y con que longitud. Sin el, un 401 no
+  // distingue entre llave equivocada, ausente o truncada — que fue exactamente
+  // el bug de la primera version (tokenizacion firmada con la privada).
+  const sello =
+    p.llave === 'ninguna'
+      ? `${p.metodo} ${p.ruta} llave=ninguna`
+      : `${p.metodo} ${p.ruta} llave=${p.llave}(len=${credencial.length})`
+
+  const headers: Record<string, string> = {}
+  if (p.cuerpo !== undefined) headers['Content-Type'] = 'application/json'
+  if (p.llave !== 'ninguna') headers.Authorization = `Bearer ${credencial}`
+
   let res: Response
   try {
-    res = await fetch(url, { ...init, cache: 'no-store' })
+    res = await fetch(p.url, {
+      method: p.metodo,
+      headers,
+      body: p.cuerpo === undefined ? undefined : JSON.stringify(p.cuerpo),
+      cache: 'no-store',
+    })
   } catch (err) {
     // Red caida: status 0 para que el llamador lo trate como transitorio.
-    console.error(`[${etiqueta}] fallo de red:`, err instanceof Error ? err.message : 'desconocido')
+    console.error(`[${p.etiqueta}] ${sello} -> fallo de red:`, err instanceof Error ? err.message : 'desconocido')
     return { ok: false, status: 0, mensaje: 'Sin conexion con la pasarela' }
   }
 
@@ -65,13 +102,13 @@ async function pedir<T>(
 
   if (!res.ok) {
     // El cuerpo de error de Wompi puede traer datos del usuario: se loguea el
-    // STATUS y el tipo de error, jamas el payload completo.
-    const tipo =
-      (cuerpo as { error?: { type?: string } } | null)?.error?.type ?? 'sin tipo'
-    console.error(`[${etiqueta}] Wompi respondio ${res.status} (${tipo})`)
+    // STATUS y el TIPO de error, jamas el payload completo.
+    const tipo = (cuerpo as { error?: { type?: string } } | null)?.error?.type ?? 'sin tipo'
+    console.error(`[${p.etiqueta}] ${sello} -> ${res.status} (${tipo})`)
     return { ok: false, status: res.status, mensaje: tipo }
   }
 
+  console.info(`[${p.etiqueta}] ${sello} -> ${res.status}`)
   return { ok: true, datos: (cuerpo as { data?: T })?.data as T }
 }
 
@@ -94,10 +131,17 @@ interface MerchantResponse {
 }
 
 export async function obtenerParAceptacion(etiqueta: string): Promise<ResultadoWompi<ParAceptacion>> {
-  const pub = llavePublica()
+  const pub = valorDe('publica')
   if (!pub) return { ok: false, status: 500, mensaje: 'Falta la llave publica' }
 
-  const res = await pedir<MerchantResponse>(`${BASE}/merchants/${pub}`, { method: 'GET' }, etiqueta)
+  // La llave publica va en el PATH; NO se manda cabecera Authorization.
+  const res = await pedir<MerchantResponse>({
+    metodo: 'GET',
+    ruta: '/merchants/{public_key}',
+    url: `${BASE}/merchants/${pub}`,
+    llave: 'ninguna',
+    etiqueta,
+  })
   if (!res.ok) return res
 
   const politicaToken = res.datos?.presigned_acceptance?.acceptance_token ?? ''
@@ -129,9 +173,11 @@ export async function obtenerParAceptacion(etiqueta: string): Promise<ResultadoW
 }
 
 // ── Token de Nequi ───────────────────────────────────────────────────────
-// POST /v1/tokens/nequi devuelve HTTP 200 (no 201) con status "PENDING": el
-// usuario todavia tiene que aprobar en su app. La respuesta trae phone Y
-// phone_number duplicados y NO trae "name" (difiere de la doc; spike F4.c-2).
+// LLAVE PUBLICA: tokenizar es la operacion pensada para ser segura desde el
+// cliente. Con la PRIVADA responde 401 (bug de la primera version de F4.c-4).
+// Devuelve HTTP 200 (no 201) con status "PENDING": el usuario todavia tiene que
+// aprobar en su app. La respuesta trae phone Y phone_number duplicados y NO
+// trae "name" (difiere de la doc; spike F4.c-2/Q4).
 
 export interface TokenNequi {
   id: string
@@ -142,21 +188,20 @@ export async function crearTokenNequi(
   telefono: string,
   etiqueta: string
 ): Promise<ResultadoWompi<TokenNequi>> {
-  const priv = llavePrivada()
-  if (!priv) return { ok: false, status: 500, mensaje: 'Falta la llave privada' }
-
-  return pedir<TokenNequi>(
-    `${BASE}/tokens/nequi`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${priv}` },
-      body: JSON.stringify({ phone_number: telefono }),
-    },
-    etiqueta
-  )
+  return pedir<TokenNequi>({
+    metodo: 'POST',
+    ruta: '/tokens/nequi',
+    url: `${BASE}/tokens/nequi`,
+    llave: 'publica',
+    cuerpo: { phone_number: telefono },
+    etiqueta,
+  })
 }
 
 // ── Fuente de pago ───────────────────────────────────────────────────────
+// LLAVE PRIVADA, sin alternativa: probado en el spike (F4.c-2/Q1). Es lo que
+// obliga a que el enrolamiento sea 100% server-side.
+//
 // El par de aceptacion que se consume aqui tiene que ser DISTINTO del que se
 // capturo al enrolar: aquel ya cumplio su papel (evidencia de lo que el usuario
 // acepto) y, si se reusara, Wompi responderia 422 "ya fue usado".
@@ -171,22 +216,18 @@ export async function crearFuenteNequi(
   p: { tokenId: string; email: string; par: ParAceptacion },
   etiqueta: string
 ): Promise<ResultadoWompi<FuenteWompi>> {
-  const priv = llavePrivada()
-  if (!priv) return { ok: false, status: 500, mensaje: 'Falta la llave privada' }
-
-  return pedir<FuenteWompi>(
-    `${BASE}/payment_sources`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${priv}` },
-      body: JSON.stringify({
-        type: 'NEQUI',
-        token: p.tokenId,
-        customer_email: p.email,
-        acceptance_token: p.par.politicaToken,
-        accept_personal_auth: p.par.datosToken,
-      }),
+  return pedir<FuenteWompi>({
+    metodo: 'POST',
+    ruta: '/payment_sources',
+    url: `${BASE}/payment_sources`,
+    llave: 'privada',
+    cuerpo: {
+      type: 'NEQUI',
+      token: p.tokenId,
+      customer_email: p.email,
+      acceptance_token: p.par.politicaToken,
+      accept_personal_auth: p.par.datosToken,
     },
-    etiqueta
-  )
+    etiqueta,
+  })
 }
