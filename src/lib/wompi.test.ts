@@ -5,6 +5,7 @@ import {
   construirReferencia,
   construirReferenciaAutomatica,
   esReferenciaAutomatica,
+  periodoDeReferenciaAutomatica,
   parsearReferencia,
   construirUrlCheckout,
   calcularPlanExpira,
@@ -115,6 +116,32 @@ describe('construirReferenciaAutomatica / esReferenciaAutomatica', () => {
     expect(esReferenciaAutomatica(auto)).toBe(true)
     expect(esReferenciaAutomatica(manual)).toBe(false)
     expect(esReferenciaAutomatica('cualquier-cosa')).toBe(false)
+  })
+})
+
+// El webhook usa esto para enlazar un DECLINED con la fila que reclamo el
+// periodo. Si devolviera basura, el fallo se marcaria en la fila equivocada (o
+// en ninguna) y el correo de aviso no saldria.
+describe('periodoDeReferenciaAutomatica', () => {
+  const id = '11111111-2222-3333-4444-555555555555'
+
+  it('round-trip: recupera EXACTAMENTE el periodo que se facturó', () => {
+    for (const periodoFacturado of ['2026-08-27', '2026-12-31', '2027-01-05']) {
+      const ref = construirReferenciaAutomatica({ restauranteId: id, plan: 'pro', periodo: 'mensual', periodoFacturado })
+      expect(periodoDeReferenciaAutomatica(ref)).toBe(periodoFacturado)
+    }
+  })
+
+  it('devuelve "" para un pago manual (su sufijo es un timestamp)', () => {
+    const manual = construirReferencia({ restauranteId: id, plan: 'pro', periodo: 'mensual', now: 1234567890 })
+    expect(periodoDeReferenciaAutomatica(manual)).toBe('')
+  })
+
+  it('devuelve "" ante una fecha imposible, no una fecha inventada', () => {
+    expect(periodoDeReferenciaAutomatica(`sub_${id}_pro_mensual_auto2026-13-01`)).toBe('')
+    expect(periodoDeReferenciaAutomatica(`sub_${id}_pro_mensual_autoNADA`)).toBe('')
+    expect(periodoDeReferenciaAutomatica(`sub_${id}_pro_mensual_auto`)).toBe('')
+    expect(periodoDeReferenciaAutomatica('basura')).toBe('')
   })
 })
 

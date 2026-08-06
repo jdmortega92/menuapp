@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import { fechaColombia } from './fechas'
+import { fechaCalendario } from './suscripciones'
 import type { Plan } from '@/types'
 import type { Periodo } from './planes'
 
@@ -71,6 +72,19 @@ export function construirReferenciaAutomatica(p: {
 export function esReferenciaAutomatica(reference: string): boolean {
   const parts = reference.split('_')
   return parts.length === 5 && parts[0] === 'sub' && parts[4].startsWith('auto')
+}
+
+/** El PERIODO FACTURADO que va embebido en una referencia automatica
+ *  ('YYYY-MM-DD'), o '' si no es automatica o la fecha no es usable.
+ *
+ *  Es lo que permite al webhook enlazar un DECLINED con la fila de fuentes_pago
+ *  que reclamo ese periodo: el evento de Wompi no trae nuestro latch, pero la
+ *  referencia — que emitimos nosotros — si lo lleva escrito. Se valida con
+ *  fechaCalendario, el MISMO validador que uso el cron al construirla, para que
+ *  no exista una fecha que un lado acepte y el otro no. */
+export function periodoDeReferenciaAutomatica(reference: string): string {
+  if (!esReferenciaAutomatica(reference)) return ''
+  return fechaCalendario(reference.split('_')[4].slice('auto'.length))
 }
 
 // Inversa de construirReferencia. Devuelve null si la forma no calza o si el
