@@ -5,15 +5,16 @@ import {
   calcularChecksumEvento,
   calcularPlanExpira,
   enmascararTelefono,
+  esReferenciaAutomatica,
   esRenovacion,
   parsearReferencia,
   type WompiEvento,
   type WompiNequiToken,
 } from '@/lib/wompi'
 import { credencialesListas, crearFuenteNequi, obtenerParAceptacion } from '@/lib/wompiApi'
-import { centavosDe } from '@/lib/planes'
+import { centavosDe, precioDe } from '@/lib/planes'
 import { fechaColombia } from '@/lib/fechas'
-import { notificarPlanActivo } from '@/lib/email/notificaciones'
+import { notificarPlanActivo, notificarRenovacionCobrada } from '@/lib/email/notificaciones'
 
 // PIECE 3 (F4.a-2): webhook de eventos de Wompi. SIN sesion ni cookies (lo
 // llama Wompi server-to-server). Se verifica la firma con WOMPI_EVENTS_SECRET
@@ -178,7 +179,25 @@ export async function POST(request: Request) {
     )
     if (emailDueno) {
       try {
-        await notificarPlanActivo({ to: emailDueno, plan, periodo, planAnterior })
+        // F4.c-5: un COBRO AUTOMATICO no es un cambio de plan y no puede usar el
+        // correo de cambio de plan. Con plan_nuevo === plan_anterior, cambioPlan
+        // cae en su rama de cambio de periodo y responde "Solo cambió la
+        // facturación de tu suscripción" — falso en una renovacion, y ademas
+        // callaria justo lo unico que importa: que le sacamos plata a alguien
+        // que no estaba mirando. Se elige por la FORMA de la referencia, que la
+        // emitimos nosotros; payment_source_id tambien lo distinguiria, pero un
+        // pago manual desde una fuente guardada tambien lo traeria.
+        if (esReferenciaAutomatica(reference)) {
+          await notificarRenovacionCobrada({
+            to: emailDueno,
+            plan,
+            periodo,
+            monto: precioDe(plan, periodo),
+            planExpira,
+          })
+        } else {
+          await notificarPlanActivo({ to: emailDueno, plan, periodo, planAnterior })
+        }
       } catch {
         console.error('[wompi/eventos] envio de email fallo (plan ya activo)')
       }

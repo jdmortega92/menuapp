@@ -3,6 +3,8 @@ import { createHash } from 'node:crypto'
 import {
   firmaIntegridad,
   construirReferencia,
+  construirReferenciaAutomatica,
+  esReferenciaAutomatica,
   parsearReferencia,
   construirUrlCheckout,
   calcularPlanExpira,
@@ -65,6 +67,54 @@ describe('construirReferencia / parsearReferencia', () => {
     expect(parsearReferencia('sub_id_gratis_anual_1')).toBeNull() // gratis no se cobra
     expect(parsearReferencia('sub_id_pro_semanal_1')).toBeNull() // periodo malo
     expect(parsearReferencia('sub__pro_anual_1')).toBeNull() // id vacio
+  })
+})
+
+// La referencia del cobro automatico (F4.c-5). Estos tests protegen la unica
+// propiedad que impide un doble cobro del lado de Wompi (referencia repetida ->
+// 422) y la que impide un cobro SIN plan otorgado (que el webhook la parsee).
+describe('construirReferenciaAutomatica / esReferenciaAutomatica', () => {
+  const id = '11111111-2222-3333-4444-555555555555'
+
+  it('es DETERMINISTA: mismo periodo -> misma referencia (sin Date.now)', () => {
+    const a = construirReferenciaAutomatica({ restauranteId: id, plan: 'pro', periodo: 'mensual', periodoFacturado: '2026-08-27' })
+    const b = construirReferenciaAutomatica({ restauranteId: id, plan: 'pro', periodo: 'mensual', periodoFacturado: '2026-08-27' })
+    expect(a).toBe(b)
+    expect(a).toBe(`sub_${id}_pro_mensual_auto2026-08-27`)
+  })
+
+  it('cambia con el periodo de facturación (si no, el 2º mes nunca cobraría)', () => {
+    const agosto = construirReferenciaAutomatica({ restauranteId: id, plan: 'pro', periodo: 'mensual', periodoFacturado: '2026-08-27' })
+    const septiembre = construirReferenciaAutomatica({ restauranteId: id, plan: 'pro', periodo: 'mensual', periodoFacturado: '2026-09-27' })
+    expect(agosto).not.toBe(septiembre)
+  })
+
+  it('cambia con restaurante, plan y periodo', () => {
+    const base = { restauranteId: id, plan: 'pro' as const, periodo: 'mensual' as const, periodoFacturado: '2026-08-27' }
+    const ref = construirReferenciaAutomatica(base)
+    expect(construirReferenciaAutomatica({ ...base, restauranteId: 'otro-id' })).not.toBe(ref)
+    expect(construirReferenciaAutomatica({ ...base, plan: 'basico' })).not.toBe(ref)
+    expect(construirReferenciaAutomatica({ ...base, periodo: 'anual' })).not.toBe(ref)
+  })
+
+  // EL TEST CRITICO. Una referencia que el webhook no pueda parsear es un cobro
+  // hecho SIN plan otorgado: el peor estado posible del sistema.
+  it('parsearReferencia la lee SIN CAMBIOS (round-trip)', () => {
+    const ref = construirReferenciaAutomatica({ restauranteId: id, plan: 'basico', periodo: 'anual', periodoFacturado: '2027-01-05' })
+    expect(parsearReferencia(ref)).toEqual({ restauranteId: id, plan: 'basico', periodo: 'anual' })
+  })
+
+  it('los guiones de la fecha NO parten el segmento (split es por guion bajo)', () => {
+    const ref = construirReferenciaAutomatica({ restauranteId: id, plan: 'pro', periodo: 'mensual', periodoFacturado: '2026-12-31' })
+    expect(ref.split('_')).toHaveLength(5)
+  })
+
+  it('esReferenciaAutomatica distingue el cobro del cron del pago manual', () => {
+    const auto = construirReferenciaAutomatica({ restauranteId: id, plan: 'pro', periodo: 'mensual', periodoFacturado: '2026-08-27' })
+    const manual = construirReferencia({ restauranteId: id, plan: 'pro', periodo: 'mensual', now: 1234567890 })
+    expect(esReferenciaAutomatica(auto)).toBe(true)
+    expect(esReferenciaAutomatica(manual)).toBe(false)
+    expect(esReferenciaAutomatica('cualquier-cosa')).toBe(false)
   })
 })
 

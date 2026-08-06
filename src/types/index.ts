@@ -391,6 +391,27 @@ export interface FuentePago {
   /** Local, texto libre en la DB. Convencion: usuario_solicito / cuenta_eliminada
    *  / fuente_fallida / plan_cancelado. */
   motivo_revocacion: string | null
+
+  // ----- Cobro automatico (F4.c-5) -----
+  /** LATCH POR PERIODO DE FACTURACION. El plan_expira que se estaba pagando en
+   *  el ultimo intento de cobro ('YYYY-MM-DD'). El cron lo RECLAMA (compare-and
+   *  -swap) ANTES de llamar a Wompi, asi que dos corridas solapadas o una
+   *  corrida repetida no pueden cobrar dos veces el mismo periodo. Se suelta
+   *  solo cuando el webhook mueve plan_expira, o sea cuando el cobro prospero.
+   *  Es el espejo LOCAL del 422 "La referencia ya ha sido usada" de Wompi: dos
+   *  redes independientes para el unico error que cuesta plata.
+   *  Opcional: columna nueva, las filas de F4.c-4 llegan sin ella. */
+  ultimo_cobro_periodo?: string | null
+  /** INICIADO = se le entrego el cobro a Wompi y el resultado lo dira el webhook
+   *  (NO significa cobrado). FALLIDO = no se pudo ni iniciar. No hay 'COBRADO':
+   *  el cron nunca sabe eso, y ponerlo aqui invitaria a leerlo como autorizacion. */
+  ultimo_cobro_estado?: 'INICIADO' | 'FALLIDO' | null
+  /** Causa corta del ultimo fallo, para diagnostico. NUNCA el cuerpo de error de
+   *  Wompi: puede traer datos del usuario. */
+  ultimo_cobro_error?: string | null
+  /** Cuando se hizo el ultimo intento. */
+  ultimo_cobro_en?: string | null
+
   created_at: string
   updated_at: string
 }

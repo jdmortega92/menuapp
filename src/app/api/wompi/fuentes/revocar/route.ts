@@ -79,6 +79,22 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'No se pudo quitar el metodo' }, { status: 500 })
   }
 
+  // F4.c-5: quitar el metodo APAGA tambien el opt-in. Si cobro_automatico
+  // quedara en true, un re-enrolamiento posterior reactivaria el cobro
+  // recurrente EN SILENCIO, sin que el usuario volviera a autorizarlo — y hasta
+  // entonces la fila estaria en un estado que se lee como "suscrito" sin fuente
+  // contra la cual cobrar. El opt-in muere con el metodo que lo sostenia.
+  const { error: errCobro } = await admin
+    .from('restaurantes')
+    .update({ cobro_automatico: false, cobro_automatico_desde: null })
+    .eq('id', rest.id)
+  if (errCobro) {
+    // No revierte: la fuente ya esta VOIDED, asi que el cron no cobra igual
+    // (debeCobrarse exige una fuente AVAILABLE). Se loguea como incidente
+    // porque deja la fila describiendo algo que no es cierto.
+    console.error('[wompi/fuentes/revocar] apagado de cobro_automatico fallo:', errCobro.message)
+  }
+
   // La evidencia se escribe DESPUES de dejar de cobrar, no antes: si el update
   // fallara, no queremos un registro que afirme algo que no ocurrio.
   const { error: errConsent } = await admin.from('consentimientos_pago').insert(

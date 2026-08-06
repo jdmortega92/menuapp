@@ -231,3 +231,58 @@ export async function crearFuenteNequi(
     etiqueta,
   })
 }
+
+// ── Cobro contra una fuente guardada (F4.c-5) ────────────────────────────
+// LLAVE PRIVADA. Es la UNICA funcion de todo el repo que mueve dinero sin un
+// humano delante, y por eso su contrato es deliberadamente angosto:
+//
+//   NO decide a quien cobrar (eso es debeCobrarse, puro y testeado).
+//   NO interpreta el resultado como autorizacion. Devuelve 201 con status
+//   "PENDING" (verificado en el spike: pasa a APPROVED ~3s despues), asi que un
+//   "ok" AQUI no significa cobrado y JAMAS puede otorgar un plan. Quien otorga
+//   es el webhook, que es el unico que ve el estado final.
+//
+// Lo que Wompi exige, medido en el spike (F4.c-2/Q2), no leido en la doc:
+//   - signature: OBLIGATORIA (sin ella -> 422 "Firma de integridad requerida no
+//     enviada"). La calcula firmaIntegridad TAL CUAL, sin variante nueva.
+//   - acceptance_token: NO hace falta (201 sin el). Por eso el cron hace UNA
+//     sola llamada por cobro y no necesita releer /merchants.
+//   - reference repetida -> 422. Es una FUNCION, no un fallo: ver
+//     construirReferenciaAutomatica.
+// recurrent:true declara el cobro como recurrente (COF). El sandbox lo acepta
+// pero no lo refleja (procesador CARD_SANDBOX, no RBM): eso solo se verifica en
+// produccion.
+
+export interface TransaccionWompi {
+  id: string
+  status: string
+  reference?: string
+}
+
+export async function cobrarConFuente(
+  p: {
+    amountInCents: number
+    reference: string
+    customerEmail: string
+    paymentSourceId: number
+    signature: string
+  },
+  etiqueta: string
+): Promise<ResultadoWompi<TransaccionWompi>> {
+  return pedir<TransaccionWompi>({
+    metodo: 'POST',
+    ruta: '/transactions',
+    url: `${BASE}/transactions`,
+    llave: 'privada',
+    cuerpo: {
+      amount_in_cents: p.amountInCents,
+      currency: 'COP',
+      customer_email: p.customerEmail,
+      reference: p.reference,
+      payment_source_id: p.paymentSourceId,
+      recurrent: true,
+      signature: p.signature,
+    },
+    etiqueta,
+  })
+}

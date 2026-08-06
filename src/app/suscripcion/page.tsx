@@ -8,6 +8,7 @@ import MetodoPago from '@/components/suscripcion/MetodoPago'
 import ConfirmarEliminar from '@/components/menu-admin/ConfirmarEliminar'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks'
+import { useFuentePago } from '@/hooks/data/useFuentePago'
 import { createClient } from '@/lib/supabase-browser'
 import { formatoPrecio } from '@/lib/precio'
 import { LISTA_PLANES, PLANES, ahorroAnual, precioDe, type Periodo } from '@/lib/planes'
@@ -53,6 +54,18 @@ export default function SuscripcionPage() {
   // Bajada ya agendada: la fila conserva plan/periodo hasta la fecha.
   const fechaProgramada = (rest?.fecha_cambio_programado ?? '').slice(0, 10)
   const hayCambioProgramado = Boolean(rest?.plan_programado && fechaProgramada)
+  // Misma clave SWR que usa MetodoPago: el hook deduplica, asi que esto NO es
+  // una segunda consulta ni una segunda fuente de verdad — las dos pintan la
+  // misma fila.
+  const { data: fuentePago } = useFuentePago(rest?.id)
+  // RENOVACION AUTOMATICA REAL, evaluada POR FILA. Exige las DOS cosas: el
+  // opt-in del usuario Y una fuente contra la cual cobrar. Un solo flag para
+  // todo el mundo seria mentirle a la mitad, y las dos mentiras posibles duelen
+  // en direcciones opuestas: prometer una renovacion que no va a ocurrir deja a
+  // alguien en gratis sin avisar, y negar una que SI va a ocurrir es un cobro
+  // sorpresa. Es exactamente el par de condiciones que evalua debeCobrarse.
+  const renuevaAutomatico =
+    Boolean(rest?.cobro_automatico) && fuentePago?.estado === 'AVAILABLE'
 
   useEffect(() => {
     if (!cargando && !usuario) {
@@ -228,16 +241,18 @@ export default function SuscripcionPage() {
   // plan_expira llega de Postgres como timestamptz ('2026-08-27T00:00:00+00:00');
   // fechaLargaColombia lo formatea por fecha calendario y devuelve '' si no calza.
   const renovacion = rest?.plan_expira ? fechaLargaColombia(rest.plan_expira) : ''
-  // NADIE renueva ni cobra automáticamente todavía (F4.c diferido) y nada baja el
-  // plan al vencer (F4.b-2 pendiente). Decir "Renueva el X" prometía un cobro
-  // recurrente inexistente: el copy dice lo que de verdad pasa con esa fecha.
-  // Con una bajada agendada la fecha es de finalización y el bloque de retención
-  // de arriba ya la explica; ahí no se repite el aviso de pago.
+  // QUÉ dice esa fecha depende de ESTA fila, no del estado del producto.
+  // Con cobro automático activo la fecha es de RENOVACIÓN; sin él sigue siendo
+  // de VENCIMIENTO y el copy honesto de F4.b-2 se mantiene tal cual.
+  // Una bajada agendada gana sobre todo: ahí la fecha es de finalización (y el
+  // cron nunca cobra esa fila), y el bloque de retención de arriba ya la explica.
   const renovacionTexto = renovacion
     ? hayCambioProgramado
       ? `Activo hasta el ${renovacion}`
       : expiraVigente
-        ? `Tu plan vence el ${renovacion}`
+        ? renuevaAutomatico
+          ? `Se renueva el ${renovacion}`
+          : `Tu plan vence el ${renovacion}`
         : `Tu plan venció el ${renovacion}`
     : ''
   const mostrarAvisoPago = planActual !== 'gratis' && renovacion !== '' && !hayCambioProgramado
@@ -316,7 +331,9 @@ export default function SuscripcionPage() {
               </div>
               {mostrarAvisoPago && (
                 <div style={{ fontSize: '11px', color: 'var(--color-accent-dark)', opacity: 0.7, marginTop: '4px', maxWidth: '230px', lineHeight: 1.4 }}>
-                  No se renueva automáticamente: para continuar, vuelve a pagarlo.
+                  {renuevaAutomatico
+                    ? 'Se renueva automáticamente con tu método guardado. Puedes apagarlo abajo.'
+                    : 'No se renueva automáticamente: para continuar, vuelve a pagarlo.'}
                 </div>
               )}
             </div>
@@ -439,6 +456,8 @@ export default function SuscripcionPage() {
             plan={planActual}
             periodo={periodoActual}
             planExpira={rest.plan_expira}
+            cobroAutomatico={Boolean(rest.cobro_automatico)}
+            onCambioCobro={mutateRestaurante}
           />
         )}
 

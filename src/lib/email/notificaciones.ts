@@ -2,6 +2,8 @@ import { enviarEmail } from './sender'
 import { cambioPlan } from './templates/cambioPlan'
 import { planVencido } from './templates/planVencido'
 import { cambioAplicado } from './templates/cambioAplicado'
+import { cobroFallido } from './templates/cobroFallido'
+import { renovacionCobrada } from './templates/renovacionCobrada'
 import type { Plan } from '@/types'
 import type { Periodo } from '@/lib/planes'
 
@@ -37,5 +39,36 @@ export async function notificarCambioAplicado(p: {
   return enviarEmail({
     to: p.to,
     ...cambioAplicado({ planAnterior: p.planAnterior, planNuevo: p.planNuevo }),
+  })
+}
+
+// F4.c-5: los dos avisos del cobro automatico. Salen de sitios DISTINTOS a
+// proposito, y eso refleja quien sabe que:
+//   - el FALLO lo manda el CRON: es lo unico que el cron sabe de primera mano
+//     (que no pudo ni iniciar el cobro). Nunca manda un "cobrado".
+//   - el EXITO lo manda el WEBHOOK: es el unico que ve el estado final y el
+//     unico que conoce el nuevo plan_expira.
+export async function notificarCobroFallido(p: {
+  to: string
+  plan: string
+  monto: number
+  planExpira: string
+}) {
+  return enviarEmail({
+    to: p.to,
+    ...cobroFallido({ plan: p.plan, monto: p.monto, planExpira: p.planExpira }),
+  })
+}
+
+export async function notificarRenovacionCobrada(p: {
+  to: string
+  plan: Plan
+  periodo: Periodo
+  monto: number
+  planExpira: string
+}) {
+  return enviarEmail({
+    to: p.to,
+    ...renovacionCobrada({ plan: p.plan, periodo: p.periodo, monto: p.monto, planExpira: p.planExpira }),
   })
 }

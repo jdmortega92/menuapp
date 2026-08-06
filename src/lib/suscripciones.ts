@@ -46,3 +46,119 @@ export function debeExpirar(
   if (!fecha) return false
   return fecha < hoy
 }
+
+// ── Cobro automatico (F4.c-5) ────────────────────────────────────────────
+// La regla que decide si a una fila le toca COBRO. No cobra: solo responde
+// si/no. Vale la pena releer la regla de arquitectura antes de tocarla: el cron
+// SOLO INICIA el cobro y el webhook otorga el plan (F4.c-2/Q2), asi que un
+// "true" de mas aqui es plata del usuario, no un bug de estado.
+
+/** Cuantos dias ANTES de plan_expira se intenta el cobro.
+ *
+ *  N=3, y el numero importa por tres razones distintas:
+ *  1. COLCHON DE FALLO. Si el cobro se cae, al usuario le quedan 3 dias de plan
+ *     VIVO para recibir el correo y pagar a mano antes de que el barrido de
+ *     expiracion lo baje a gratis. Cobrar el mismo dia del vencimiento no deja
+ *     margen: un fallo = plan caido sin aviso util.
+ *  2. VENTANA, NO UN DIA. Vercel Cron es best-effort (puede saltarse una
+ *     corrida), asi que la elegibilidad tiene que durar varios dias o una
+ *     corrida perdida se traduce en una renovacion perdida. Con N=3 hay tres
+ *     oportunidades; el latch por periodo (ultimo_cobro_periodo) garantiza que
+ *     solo UNA de las tres cobre.
+ *  3. TAN CORTO COMO SE PUEDA. Cada dia de anticipacion es un dia mas en que una
+ *     cancelacion llega tarde. 3 es el minimo que cumple 1 y 2.
+ *  Cobrar antes NO le quema dias a nadie: el webhook renueva EXTENDIENDO desde
+ *  plan_expira, no desde hoy (F4.b-1, bug B). */
+export const DIAS_ANTES_DE_COBRAR = 3
+
+/** Resta dias a una fecha calendario 'YYYY-MM-DD'. Devuelve '' si la entrada no
+ *  es una fecha usable.
+ *
+ *  Usa Date.UTC solo como ARITMETICA de calendario (maneja solo el desborde de
+ *  mes y de anio), igual que el clamp de fin de mes de calcularPlanExpira: los
+ *  tres componentes entran explicitos y se leen con getUTC*, asi que ni el huso
+ *  del servidor ni su reloj participan. La prohibicion de esta familia de reglas
+ *  es el RELOJ del servidor, no el objeto Date como calculadora. */
+export function restarDias(valor: string | null | undefined, dias: number): string {
+  const fecha = fechaCalendario(valor)
+  if (!fecha) return ''
+  const [y, m, d] = fecha.split('-').map(Number)
+  const t = new Date(Date.UTC(y, m - 1, d - dias))
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${t.getUTCFullYear()}-${pad(t.getUTCMonth() + 1)}-${pad(t.getUTCDate())}`
+}
+
+/** La fuente de pago del restaurante, en la forma minima que la regla necesita.
+ *  null = no hay fuente viva. */
+export interface FuenteCobrable {
+  estado?: string | null
+  predeterminada?: boolean | null
+  wompi_payment_source_id?: number | null
+  /** Latch POR PERIODO: el plan_expira que se estaba pagando en el ultimo
+   *  intento. Espejo local del 422 "La referencia ya ha sido usada" de Wompi. */
+  ultimo_cobro_periodo?: string | null
+}
+
+/** La fila de restaurantes, en la forma minima que la regla necesita. */
+export interface FilaCobro {
+  plan?: string | null
+  periodo_plan?: string | null
+  plan_expira?: string | null
+  cobro_automatico?: boolean | null
+  plan_programado?: string | null
+  fuente?: FuenteCobrable | null
+}
+
+const PLANES_COBRABLES = new Set(['basico', 'pro'])
+const PERIODOS_COBRABLES = new Set(['mensual', 'anual'])
+
+/** true SOLO si a esta fila le toca cobro automatico hoy. Fail-closed en todas
+ *  las ramas: ante cualquier duda NO se cobra y el usuario cae a la renovacion
+ *  manual, que es el lado barato de equivocarse.
+ *
+ *  Las siete condiciones, y por que cada una existe:
+ *  1. OPT-IN EXPLICITO. cobro_automatico===true, nunca "tiene fuente guardada":
+ *     guardar el metodo y autorizar el cobro son dos decisiones distintas
+ *     (F4.c-3). Un undefined de una fila vieja NO es un si.
+ *  2. PLAN COBRABLE. basico o pro, no "distinto de gratis": el monto sale de
+ *     centavosDe(plan, periodo) y un plan desconocido se tarificaria en silencio.
+ *  3. PERIODO COBRABLE. Misma razon: periodo_plan es texto libre en la DB y
+ *     cualquier valor raro se cobraria como mensual.
+ *  4. SIN CAMBIO AGENDADO. Quien cancelo NO SE COBRA, jamas. Hoy el orden de
+ *     barridos (cambios agendados ANTES del cobro) ya lo evitaria, pero ese
+ *     orden es una propiedad del llamador y una edicion futura puede invertirlo
+ *     sin saber lo que rompe (era el riesgo #4 de F4.c-1). Aqui queda FIJADO en
+ *     la regla, que es lo unico que no depende de en que orden se llame.
+ *  5. FUENTE COBRABLE. AVAILABLE + predeterminada + con id numerico de Wompi.
+ *     PENDING/ERROR/VOIDED no cobran: no hay contra que cobrar.
+ *  6. VENTANA. plan_expira valido y hoy dentro de [plan_expira-N, plan_expira].
+ *     El extremo superior es la ultima oportunidad si Vercel se salto corridas;
+ *     por debajo del inferior todavia es demasiado pronto.
+ *  7. LATCH POR PERIODO. Si ya se intento el cobro de ESTE plan_expira, no se
+ *     vuelve a intentar: sin reintentos silenciosos (F4-DECISIONES). El latch se
+ *     suelta solo cuando el webhook mueve plan_expira, o sea cuando el cobro de
+ *     verdad prospero. */
+export function debeCobrarse(fila: FilaCobro, hoy: string): boolean {
+  if (fila.cobro_automatico !== true) return false
+  if (!fila.plan || !PLANES_COBRABLES.has(fila.plan)) return false
+  if (!fila.periodo_plan || !PERIODOS_COBRABLES.has(fila.periodo_plan)) return false
+  if (fila.plan_programado) return false
+
+  const fuente = fila.fuente
+  if (!fuente) return false
+  if (fuente.estado !== 'AVAILABLE') return false
+  if (fuente.predeterminada !== true) return false
+  if (typeof fuente.wompi_payment_source_id !== 'number') return false
+
+  const expira = fechaCalendario(fila.plan_expira)
+  if (!expira) return false
+  if (hoy > expira) return false
+  const desde = restarDias(expira, DIAS_ANTES_DE_COBRAR)
+  if (!desde || hoy < desde) return false
+
+  // El latch guarda el plan_expira del intento anterior: se compara contra la
+  // fecha CALENDARIO por si Postgres devolvio un timestamptz.
+  if (fechaCalendario(fuente.ultimo_cobro_periodo) === expira) return false
+
+  return true
+}

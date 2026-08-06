@@ -38,6 +38,41 @@ export function construirReferencia(p: {
   return `sub_${p.restauranteId}_${p.plan}_${p.periodo}_${ts}`
 }
 
+// ── Referencia de un COBRO AUTOMATICO (F4.c-5) ───────────────────────────
+// MISMA forma de 5 segmentos, pero el ultimo NO es Date.now(): es
+// 'auto<plan_expira>', o sea el PERIODO DE FACTURACION que se esta pagando.
+//
+// Por que determinista: el spike (F4.c-2/Q2) probo que Wompi RECHAZA una
+// referencia repetida (422 "La referencia ya ha sido usada"). Con esta forma,
+// una corrida duplicada del cron -> mismo periodo -> MISMA referencia -> 422 en
+// vez de un segundo cobro. Es la red de seguridad del lado de Wompi, encima del
+// latch local (ultimo_cobro_periodo) y de la idempotencia por facturas.numero.
+// Con Date.now() las tres redes se caen a la vez: cada corrida cobraria de nuevo.
+//
+// El sufijo 'auto' NO es decorativo: distingue un cobro nuestro de un pago
+// manual por Checkout Web en logs y facturas, sin columna nueva.
+// La fecha lleva guiones (no guion bajo), asi que sigue siendo UN solo segmento
+// para split('_') y parsearReferencia la lee SIN CAMBIOS — el round-trip esta
+// fijado por test, porque una referencia que el webhook no pueda parsear seria
+// un cobro sin plan otorgado: el peor estado posible.
+export function construirReferenciaAutomatica(p: {
+  restauranteId: string
+  plan: Plan
+  periodo: Periodo
+  /** plan_expira que se esta renovando, 'YYYY-MM-DD'. */
+  periodoFacturado: string
+}): string {
+  return `sub_${p.restauranteId}_${p.plan}_${p.periodo}_auto${p.periodoFacturado}`
+}
+
+/** true si la referencia la emitio el cron de cobro automatico. Lo usa el
+ *  webhook SOLO para elegir el copy del correo (renovacion vs cambio de plan);
+ *  jamas para decidir si otorga el plan. */
+export function esReferenciaAutomatica(reference: string): boolean {
+  const parts = reference.split('_')
+  return parts.length === 5 && parts[0] === 'sub' && parts[4].startsWith('auto')
+}
+
 // Inversa de construirReferencia. Devuelve null si la forma no calza o si el
 // plan/periodo no son validos (defensa: solo se procesa lo que emitimos).
 export function parsearReferencia(
