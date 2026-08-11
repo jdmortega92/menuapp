@@ -10,8 +10,10 @@ import {
   debeExpirar,
   restarDias,
   debeCobrarse,
+  bloqueoDeActivacion,
   DIAS_ANTES_DE_COBRAR,
   type FilaCobro,
+  type FilaActivacion,
 } from './suscripciones'
 
 const HOY = '2026-07-27'
@@ -275,5 +277,94 @@ describe('debeCobrarse (barrido C: cobro automatico)', () => {
 
   it('una fila vacía no cobra nada (fail-closed)', () => {
     expect(debeCobrarse({}, HOY)).toBe(false)
+  })
+})
+
+// ── bloqueoDeActivacion: la guarda del ENCENDIDO ──
+// Existe por una fila REAL de producción: cobro_automatico=true junto a
+// plan_programado='gratis'. Se encendió el interruptor con una cancelación
+// agendada y la ruta lo aceptó, porque miraba plan (que durante una cancelación
+// diferida sigue siendo el plan PAGO) y nunca plan_programado.
+describe('bloqueoDeActivacion (guarda del opt-in)', () => {
+  const base: FilaActivacion = {
+    plan: 'pro',
+    plan_programado: null,
+    hayFuente: true,
+  }
+
+  it('la fila normal SÍ puede encender', () => {
+    expect(bloqueoDeActivacion(base)).toBe(null)
+  })
+
+  // EL TEST DE LA REGRESIÓN. Si este se pone en verde con un null, volvió el bug.
+  describe('cancelación pendiente', () => {
+    it('con una cancelación agendada NO se puede encender', () => {
+      expect(bloqueoDeActivacion({ ...base, plan_programado: 'gratis' })).toBe('cancelacion_pendiente')
+    })
+    it('el plan SIGUE siendo el pago durante la cancelación: mirar plan no basta', () => {
+      // Exactamente la fila contradictoria de producción: plan pago vivo,
+      // fuente guardada, bajada agendada. Todo menos plan_programado dice "sí".
+      const fila: FilaActivacion = { plan: 'pro', plan_programado: 'gratis', hayFuente: true }
+      expect(fila.plan).not.toBe('gratis')
+      expect(bloqueoDeActivacion(fila)).toBe('cancelacion_pendiente')
+    })
+    it('una bajada agendada a otro plan pago también bloquea', () => {
+      expect(bloqueoDeActivacion({ ...base, plan_programado: 'basico' })).toBe('cancelacion_pendiente')
+    })
+    it('sin cambio agendado (null, undefined o vacío) no bloquea', () => {
+      expect(bloqueoDeActivacion({ ...base, plan_programado: null })).toBe(null)
+      expect(bloqueoDeActivacion({ ...base, plan_programado: undefined })).toBe(null)
+      expect(bloqueoDeActivacion({ ...base, plan_programado: '' })).toBe(null)
+    })
+  })
+
+  describe('método de pago', () => {
+    it('sin fuente viva NO se puede encender', () => {
+      expect(bloqueoDeActivacion({ ...base, hayFuente: false })).toBe('sin_fuente')
+    })
+  })
+
+  describe('plan', () => {
+    it('gratis no se renueva', () => {
+      expect(bloqueoDeActivacion({ ...base, plan: 'gratis' })).toBe('plan_no_cobrable')
+    })
+    it('básico y pro sí', () => {
+      expect(bloqueoDeActivacion({ ...base, plan: 'basico' })).toBe(null)
+      expect(bloqueoDeActivacion({ ...base, plan: 'pro' })).toBe(null)
+    })
+    it('un plan desconocido o ausente NO se puede armar: el cron tampoco lo cobraría', () => {
+      expect(bloqueoDeActivacion({ ...base, plan: 'enterprise' })).toBe('plan_no_cobrable')
+      expect(bloqueoDeActivacion({ ...base, plan: null })).toBe('plan_no_cobrable')
+      expect(bloqueoDeActivacion({ ...base, plan: undefined })).toBe('plan_no_cobrable')
+    })
+  })
+
+  it('una fila vacía no puede encender nada (fail-closed)', () => {
+    expect(bloqueoDeActivacion({ hayFuente: false })).toBe('sin_fuente')
+  })
+
+  // Las dos reglas tienen que estar de acuerdo: nada que la guarda deje ARMAR
+  // debería ser algo que el cron se niegue a cobrar por el mismo motivo, y nada
+  // que la guarda bloquee debería cobrarse. Este test ata las dos.
+  it('coherencia con debeCobrarse: lo que la guarda bloquea, el cron tampoco lo cobra', () => {
+    const filaCobrable: FilaCobro = {
+      plan: 'pro',
+      periodo_plan: 'mensual',
+      plan_expira: '2026-07-30',
+      cobro_automatico: true,
+      plan_programado: 'gratis',
+      fuente: {
+        estado: 'AVAILABLE',
+        predeterminada: true,
+        wompi_payment_source_id: 357841,
+        ultimo_cobro_periodo: null,
+      },
+    }
+    expect(bloqueoDeActivacion({
+      plan: filaCobrable.plan,
+      plan_programado: filaCobrable.plan_programado,
+      hayFuente: true,
+    })).toBe('cancelacion_pendiente')
+    expect(debeCobrarse(filaCobrable, HOY)).toBe(false)
   })
 })

@@ -162,3 +162,52 @@ export function debeCobrarse(fila: FilaCobro, hoy: string): boolean {
 
   return true
 }
+
+// ── Guarda de ENCENDIDO del opt-in (F4.c-5) ──────────────────────────────
+// La regla que decide si una fila puede ARMAR cobro_automatico. Vive aqui, y no
+// suelta dentro de la ruta, por la misma razon que debeCobrarse: es una regla
+// sobre plata, y una regla sobre plata tiene que ser probable sin levantar
+// Supabase ni Next. La ruta la aplica; nadie mas decide esto por su cuenta.
+//
+// SOLO GOBIERNA EL ENCENDIDO. Apagar NUNCA se consulta ni se bloquea: salir
+// tiene que ser mas facil que entrar, y una fila que ya quedo en un estado
+// contradictorio tiene que poder apagarse SIEMPRE.
+
+/** La fila de restaurantes en la forma minima que necesita la guarda. */
+export interface FilaActivacion {
+  plan?: string | null
+  /** Cancelacion o bajada YA AGENDADA (F4.b-1). Truthy = pendiente. */
+  plan_programado?: string | null
+  /** Hay una fuente AVAILABLE + predeterminada contra la cual cobrar. */
+  hayFuente: boolean
+}
+
+/** Por que NO se puede encender. null = se puede. */
+export type BloqueoActivacion = 'sin_fuente' | 'plan_no_cobrable' | 'cancelacion_pendiente'
+
+/** El motivo por el que esta fila no puede armar el cobro automatico, o null si
+ *  puede. Fail-closed: ante un dato ausente o raro NO se arma.
+ *
+ *  1. SIN FUENTE. Encender sin nada contra que cobrar deja un opt-in verdadero
+ *     que el cron nunca podra ejecutar, y la UI diciendo "Se renueva el X".
+ *  2. PLAN NO COBRABLE. Se exige la MISMA lista cerrada que usa debeCobrarse, no
+ *     "distinto de gratis": armar un plan que la regla del cron va a rechazar es
+ *     prometer una renovacion que no va a ocurrir.
+ *  3. CANCELACION PENDIENTE — el que produjo la fila contradictoria en
+ *     produccion (cobro_automatico=true junto a plan_programado='gratis'). Ojo
+ *     con el campo: durante una cancelacion agendada, plan SIGUE siendo el plan
+ *     pago (esa es toda la idea de F4.b-1, el usuario conserva lo que pago), asi
+ *     que mirar plan NO ve la cancelacion. La cancelacion vive en
+ *     plan_programado y solo ahi.
+ *
+ *     Y se RECHAZA, no se reinterpreta: encender la renovacion NO es deshacer una
+ *     cancelacion. Tratarlo como reactivacion implicita revertiria un "para" del
+ *     usuario a cambio de que tocara otro control — exactamente el movimiento
+ *     que no se hace con plata ajena. Deshacer la cancelacion es Reactivar, que
+ *     es un boton propio y explicito (/suscripcion). */
+export function bloqueoDeActivacion(fila: FilaActivacion): BloqueoActivacion | null {
+  if (!fila.hayFuente) return 'sin_fuente'
+  if (!fila.plan || !PLANES_COBRABLES.has(fila.plan)) return 'plan_no_cobrable'
+  if (fila.plan_programado) return 'cancelacion_pendiente'
+  return null
+}

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase-server'
 import { createAdminClient } from '@/lib/supabase-admin'
 import { construirConsentimiento } from '@/lib/wompi'
+import { bloqueoDeActivacion, type BloqueoActivacion } from '@/lib/suscripciones'
 
 // F4.c-5 — EL OPT-IN. Enciende y apaga restaurantes.cobro_automatico, que es la
 // unica condicion del cron que representa una DECISION del usuario (las demas
@@ -13,10 +14,16 @@ import { construirConsentimiento } from '@/lib/wompi'
 // de log de cada encendido y apagado y (b) una fila en la bitacora de
 // consentimiento. Un update suelto desde el navegador no deja ninguna de las dos.
 //
-// GUARDA DURA — no se puede encender sin fuente de pago AVAILABLE. Si se
-// pudiera, el cron tendria un opt-in verdadero sin nada contra que cobrar y la
-// UI diria "Se renueva el X" mintiendo. Apagar, en cambio, NUNCA se bloquea:
-// salir tiene que ser mas facil que entrar.
+// GUARDA DURA — no se puede encender sin fuente de pago AVAILABLE, con un plan
+// que no se cobra, ni SOBRE UNA CANCELACION AGENDADA. Si se pudiera, el cron
+// tendria un opt-in verdadero sin nada contra que cobrar y la UI diria "Se
+// renueva el X" mintiendo. Apagar, en cambio, NUNCA se bloquea: salir tiene que
+// ser mas facil que entrar.
+//
+// La guarda es lib/suscripciones.bloqueoDeActivacion y no un if aqui: es una
+// regla sobre plata y tiene test propio. La UI ademas deshabilita el
+// interruptor durante una cancelacion pendiente, pero eso es COMODIDAD — la
+// defensa real es esta, que es la unica que un cliente no puede saltarse.
 //
 // Encender NO cobra nada hoy: el primer cobro ocurre N dias antes de
 // plan_expira (lib/suscripciones, DIAS_ANTES_DE_COBRAR).
@@ -26,6 +33,20 @@ import { construirConsentimiento } from '@/lib/wompi'
 // exhibible de por que dejamos de cobrarle a alguien. Dejar que el navegador
 // escriba ahi lo que quiera convertiria la bitacora en un campo de notas.
 const MOTIVOS_APAGADO = new Set(['cobro_automatico_desactivado', 'suscripcion_cancelada'])
+
+// El mensaje que ve el usuario por cada motivo de rechazo. Van EN LA RESPUESTA
+// y no como un codigo que el cliente traduzca: la tarjeta muestra literalmente
+// lo que el server decidio, asi no hay dos versiones del mismo "no" que puedan
+// divergir. Todos son 409 (conflicto con el estado de la fila, no un error del
+// request) y todos son accionables: dicen que hacer, no solo que fallo.
+// Van con acentos, a diferencia de los comentarios de este archivo: estas
+// cadenas se PINTAN en la tarjeta tal cual llegan.
+const MENSAJE_BLOQUEO: Record<BloqueoActivacion, string> = {
+  sin_fuente: 'No tienes un método de pago guardado.',
+  plan_no_cobrable: 'Tu plan actual no se renueva automáticamente.',
+  cancelacion_pendiente:
+    'Tienes una cancelación programada: reactiva tu suscripción antes de encender la renovación automática.',
+}
 
 export async function POST(request: Request) {
   let body: unknown
@@ -61,7 +82,9 @@ export async function POST(request: Request) {
   // de /api/wompi/*): nadie puede encenderle el cobro automatico a otro.
   const { data: rest, error: restError } = await supabase
     .from('restaurantes')
-    .select('id, plan')
+    // plan_programado ENTRA a la consulta: durante una cancelacion agendada el
+    // plan sigue siendo el pago, asi que sin esta columna la guarda es ciega.
+    .select('id, plan, plan_programado')
     .eq('usuario_id', user.id)
     .maybeSingle()
   if (restError || !rest) {
@@ -81,13 +104,18 @@ export async function POST(request: Request) {
     .eq('predeterminada', true)
     .maybeSingle()
 
+  // La guarda corre ANTES del update y SOLO al encender. Se le pasa la fila tal
+  // como esta HOY: si el estado cambio entre que la UI se pinto y este POST
+  // llego (por ejemplo, se cancelo en otra pestana), gana lo que dice la fila.
   if (activar) {
-    if (!fuente) {
-      return NextResponse.json({ error: 'No hay un metodo de pago guardado' }, { status: 409 })
-    }
-    if (!rest.plan || rest.plan === 'gratis') {
-      // El plan gratis no se factura: no hay nada que renovar.
-      return NextResponse.json({ error: 'El plan gratis no se renueva' }, { status: 409 })
+    const bloqueo = bloqueoDeActivacion({
+      plan: rest.plan,
+      plan_programado: rest.plan_programado,
+      hayFuente: Boolean(fuente),
+    })
+    if (bloqueo) {
+      console.info(`[wompi/cobro-automatico] encendido rechazado restaurante=${rest.id} motivo=${bloqueo}`)
+      return NextResponse.json({ error: MENSAJE_BLOQUEO[bloqueo], motivo: bloqueo }, { status: 409 })
     }
   }
 

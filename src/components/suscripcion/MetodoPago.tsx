@@ -35,6 +35,11 @@ interface Props {
    *  por su cuenta podrian discrepar y una de las dos estaria mintiendo sobre
    *  el dinero del usuario. */
   cobroAutomatico: boolean
+  /** Hay una cancelacion (o bajada) YA AGENDADA: rest.plan_programado con su
+   *  fecha. Llega por prop, igual que cobroAutomatico y por la misma razon: la
+   *  pagina ya la calculo para pintar el banner de retencion con "Reactivar", y
+   *  las dos tienen que estar de acuerdo sobre si hay una cancelacion viva. */
+  cancelacionPendiente: boolean
   /** Revalida la fila del restaurante tras encender/apagar. Puede devolver una
    *  promesa (lo hace: es el mutate de SWR) y aqui SE ESPERA — ver
    *  cambiarCobroAutomatico. */
@@ -47,6 +52,7 @@ export default function MetodoPago({
   periodo,
   planExpira,
   cobroAutomatico,
+  cancelacionPendiente,
   onCambioCobro,
 }: Props) {
   const { data: fuente, isLoading, mutate } = useFuentePago(restauranteId)
@@ -91,6 +97,11 @@ export default function MetodoPago({
     ? fechaLargaColombia(restarDias(planExpira, DIAS_ANTES_DE_COBRAR))
     : ''
   const fechaVence = planExpira ? fechaLargaColombia(planExpira) : ''
+  // Renovación REAL, no solo la casilla: con una cancelación agendada el cron no
+  // cobra (debeCobrarse se niega con plan_programado), así que el copy de cobro
+  // futuro tiene que apagarse aunque la bandera siga en true. Es el mismo
+  // criterio de /suscripcion, que exige opt-in Y fuente antes de prometer nada.
+  const renuevaDeVerdad = cobroAutomatico && !cancelacionPendiente
   // Sin consentimiento no se habilita nada: son dos casillas SEPARADAS y
   // ninguna viene marcada. Un "acepto todo" no cumple el requisito.
   const listoParaEnviar =
@@ -142,11 +153,22 @@ export default function MetodoPago({
         body: JSON.stringify({ activar }),
       })
       if (!res.ok) {
+        // 409 = la fila NO admite el encendido (sin método, plan que no se
+        // cobra, cancelación agendada). Ese mensaje lo escribe el server y se
+        // muestra tal cual: es accionable y es la única versión del "no". El
+        // resto de fallos son técnicos y se resuelven reintentando.
+        const data = res.status === 409 ? await res.json().catch(() => null) : null
         setError(
-          activar
-            ? 'No pudimos activar la renovación automática. Intenta de nuevo.'
-            : 'No pudimos desactivar la renovación automática. Intenta de nuevo.'
+          typeof data?.error === 'string'
+            ? data.error
+            : activar
+              ? 'No pudimos activar la renovación automática. Intenta de nuevo.'
+              : 'No pudimos desactivar la renovación automática. Intenta de nuevo.'
         )
+        // La casilla no se movió en el server: hay que repintar del estado real
+        // o quedaría marcada por el clic del navegador mientras la fila dice lo
+        // contrario — una tarjeta mintiendo sobre si autorizaste un cobro.
+        await onCambioCobro()
         return
       }
       // NADA optimista: el interruptor solo se mueve cuando la fila ya cambio.
@@ -224,7 +246,11 @@ export default function MetodoPago({
                     cobramos nada automáticamente" sigue siendo literalmente
                     cierto para este usuario. */}
                 <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>
-                  {cobroAutomatico
+                  {/* Con una cancelación agendada NO hay renovación, esté la
+                      casilla como esté: el cron no cobra una fila con
+                      plan_programado. Prometerla aquí sería anunciar un cargo
+                      que no va a existir. */}
+                  {renuevaDeVerdad
                     ? 'Con este método renovamos tu plan automáticamente.'
                     : 'Método guardado. No cobramos nada automáticamente.'}
                 </div>
@@ -244,7 +270,7 @@ export default function MetodoPago({
             }}>
               <div>Monto: <strong style={{ color: 'var(--text-primary)' }}>${formatoPrecio(precio)}</strong> {cadencia}</div>
               <div>
-                {cobroAutomatico ? 'Próximo cobro: ' : 'Se cobraría el: '}
+                {renuevaDeVerdad ? 'Próximo cobro: ' : 'Se cobraría el: '}
                 <strong style={{ color: 'var(--text-primary)' }}>
                   {fechaCobro || 'unos días antes de que venza tu plan'}
                 </strong>
@@ -266,15 +292,54 @@ export default function MetodoPago({
                 esta ahi. Apagar tampoco: salir tiene que ser mas facil que
                 entrar (misma linea que CONFIRM-DELETE, que solo confirma lo que
                 destruye algo). */}
-            <label style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', marginTop: '12px', cursor: cambiandoCobro ? 'default' : 'pointer' }}>
-              <input type="checkbox" className="casilla" checked={cobroAutomatico} disabled={cambiandoCobro}
-                onChange={(e) => cambiarCobroAutomatico(e.target.checked)}
-                style={{ marginTop: '2px', cursor: cambiandoCobro ? 'default' : 'pointer' }} />
-              <span style={{ fontSize: '12px', color: 'var(--text-primary)', lineHeight: 1.45 }}>
-                Renovar mi plan automáticamente con este método
-                {cambiandoCobro && <span style={{ color: 'var(--text-tertiary)' }}> · guardando...</span>}
-              </span>
-            </label>
+            {/* CON UNA CANCELACIÓN AGENDADA el interruptor se bloquea, pero
+                SOLO EN LA DIRECCIÓN DE ENCENDER. Apagar sigue disponible
+                siempre: si no, una fila que ya quedó en el estado contradictorio
+                (encendido + cancelación pendiente) no tendría forma de apagarse
+                desde aquí — y bloquear la salida es justo lo que no se hace.
+                Esto es comodidad, no la defensa: la guarda real es el 409 de
+                /api/wompi/cobro-automatico, que un cliente no puede saltarse.
+                Se deshabilita en vez de ocultarse porque el usuario tiene que
+                VER que existe y por qué no puede usarlo ahora. */}
+            {(() => {
+              const bloqueadoPorCancelacion = cancelacionPendiente && !cobroAutomatico
+              const inactivo = cambiandoCobro || bloqueadoPorCancelacion
+              return (
+                <>
+                  <label style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', marginTop: '12px', cursor: inactivo ? 'default' : 'pointer' }}>
+                    <input type="checkbox" className="casilla" checked={cobroAutomatico} disabled={inactivo}
+                      onChange={(e) => cambiarCobroAutomatico(e.target.checked)}
+                      style={{ marginTop: '2px', cursor: inactivo ? 'default' : 'pointer' }} />
+                    <span style={{ fontSize: '12px', color: bloqueadoPorCancelacion ? 'var(--text-tertiary)' : 'var(--text-primary)', lineHeight: 1.45 }}>
+                      Renovar mi plan automáticamente con este método
+                      {cambiandoCobro && <span style={{ color: 'var(--text-tertiary)' }}> · guardando...</span>}
+                    </span>
+                  </label>
+                  {/* El porqué va junto al control deshabilitado y nombra la
+                      salida ("Reactivar suscripción", el botón del banner de
+                      arriba): un control apagado sin explicación se lee como
+                      que la app está rota. */}
+                  {bloqueadoPorCancelacion && (
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '6px', marginLeft: '22px', lineHeight: 1.45 }}>
+                      Cancelaste tu suscripción, así que no volveremos a cobrarte. Si quieres seguir
+                      con tu plan, usa <strong style={{ color: 'var(--text-primary)' }}>Reactivar suscripción</strong> arriba
+                      y después podrás encender la renovación automática.
+                    </div>
+                  )}
+                  {/* Estado contradictorio (cancelación agendada CON el cobro
+                      todavía encendido): no se puede llegar aquí desde la UI,
+                      pero una fila vieja puede estar así. Se dice la verdad y se
+                      deja apagar. El cron igual no la cobra: debeCobrarse se
+                      niega con plan_programado. */}
+                  {cancelacionPendiente && cobroAutomatico && (
+                    <div style={{ fontSize: '11px', color: 'var(--color-warning)', marginTop: '6px', marginLeft: '22px', lineHeight: 1.45 }}>
+                      Tienes una cancelación programada: no te cobraremos la renovación aunque esta
+                      casilla esté marcada. Puedes apagarla aquí mismo.
+                    </div>
+                  )}
+                </>
+              )
+            })()}
 
             <Boton variante="terciario" tamano="sm" onClick={() => setConfirmarQuitar(true)} disabled={quitando}
               style={{ marginTop: '10px', color: 'var(--color-danger)' }}>

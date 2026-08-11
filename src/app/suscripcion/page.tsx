@@ -508,6 +508,11 @@ export default function SuscripcionPage() {
             periodo={periodoActual}
             planExpira={rest.plan_expira}
             cobroAutomatico={Boolean(rest.cobro_automatico)}
+            // La MISMA condición que pinta el banner de retención con
+            // "Reactivar": la tarjeta bloquea el encendido y señala ese botón,
+            // así que las dos tienen que estar de acuerdo sobre si hay una
+            // cancelación viva. Un solo cálculo, en un solo sitio.
+            cancelacionPendiente={hayCambioProgramado}
             onCambioCobro={mutateRestaurante}
           />
         )}
