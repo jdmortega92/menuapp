@@ -21,6 +21,12 @@ import { construirConsentimiento } from '@/lib/wompi'
 // Encender NO cobra nada hoy: el primer cobro ocurre N dias antes de
 // plan_expira (lib/suscripciones, DIAS_ANTES_DE_COBRAR).
 
+// Motivos admitidos al APAGAR. Es una LISTA CERRADA y no texto libre: este
+// valor termina en consentimientos_pago, que es append-only y es la evidencia
+// exhibible de por que dejamos de cobrarle a alguien. Dejar que el navegador
+// escriba ahi lo que quiera convertiria la bitacora en un campo de notas.
+const MOTIVOS_APAGADO = new Set(['cobro_automatico_desactivado', 'suscripcion_cancelada'])
+
 export async function POST(request: Request) {
   let body: unknown
   try {
@@ -29,10 +35,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Body invalido' }, { status: 400 })
   }
 
-  const { activar } = (body ?? {}) as Record<string, unknown>
+  const { activar, motivo } = (body ?? {}) as Record<string, unknown>
   // Booleano ESTRICTO: un 'true' de string o un undefined no encienden nada.
   if (typeof activar !== 'boolean') {
     return NextResponse.json({ error: 'Falta activar' }, { status: 400 })
+  }
+  // El motivo solo aplica al apagado (encender siempre es el mismo acto) y se
+  // valida contra la lista cerrada. Ausente = el apagado manual de siempre.
+  const motivoApagado = motivo === undefined || motivo === null
+    ? 'cobro_automatico_desactivado'
+    : typeof motivo === 'string' && MOTIVOS_APAGADO.has(motivo)
+      ? motivo
+      : null
+  if (motivoApagado === null) {
+    return NextResponse.json({ error: 'Motivo invalido' }, { status: 400 })
   }
 
   const supabase = await createClient()
@@ -101,7 +117,7 @@ export async function POST(request: Request) {
       restauranteId: rest.id,
       fuentePagoId: fuente?.id ?? null,
       evento: activar ? 'OTORGADO' : 'REVOCADO',
-      motivo: activar ? 'cobro_automatico_activado' : 'cobro_automatico_desactivado',
+      motivo: activar ? 'cobro_automatico_activado' : motivoApagado,
       ip: request.headers.get('x-forwarded-for'),
       userAgent: request.headers.get('user-agent'),
     })

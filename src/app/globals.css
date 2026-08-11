@@ -422,6 +422,40 @@ p { font-size: 0.9375rem; line-height: 1.6; color: var(--text-secondary); }
 
 .label { font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 4px; display: block; }
 
+/* Casilla de verificacion. El checkbox nativo pinta su estado marcado con el
+   AZUL DEL SISTEMA OPERATIVO, y el azul quedo eliminado del admin (UI-ADMIN):
+   la paleta es naranja zapote para lo primario, verde/rojo semanticos y
+   neutros. Se apaga la apariencia nativa y se pinta con el MISMO naranja que
+   el interruptor de promos/combos de /menu — un control de encendido no puede
+   cambiar de color segun donde este.
+   El palomito es un borde en L rotado, no una fuente ni un SVG: asi no depende
+   de que ningun glifo cargue. */
+.casilla {
+  appearance: none; -webkit-appearance: none;
+  width: 16px; height: 16px; flex-shrink: 0; margin: 0;
+  border: 1px solid var(--border-medium);
+  border-radius: 4px;
+  background: var(--bg-secondary);
+  cursor: pointer;
+  display: inline-grid; place-content: center;
+  transition: background var(--transicion-ui), border-color var(--transicion-ui);
+}
+.casilla::after {
+  content: ''; width: 8px; height: 4px;
+  border-left: 2px solid #FFFFFF;
+  border-bottom: 2px solid #FFFFFF;
+  transform: rotate(-45deg) translate(1px, -1px);
+  opacity: 0;
+  transition: opacity var(--transicion-ui);
+}
+.casilla:checked { background: var(--color-accent); border-color: var(--color-accent); }
+.casilla:checked::after { opacity: 1; }
+/* Deshabilitada: se atenua pero NO se vuelve gris al marcarse. Mientras la
+   renovacion automatica se esta guardando la casilla queda disabled, y perder
+   el naranja ahi se leeria como "se apago". */
+.casilla:disabled { opacity: 0.55; cursor: default; }
+/* El anillo de foco lo pone la regla global :focus-visible. */
+
 .badge {
   display: inline-flex; align-items: center;
   padding: 3px 10px; border-radius: var(--radius-full);

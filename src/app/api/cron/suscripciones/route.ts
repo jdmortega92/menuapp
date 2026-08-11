@@ -16,7 +16,7 @@ import {
   notificarCobroFallido,
 } from '@/lib/email/notificaciones'
 import { centavosDe, precioDe, type Periodo } from '@/lib/planes'
-import { construirReferenciaAutomatica, firmaIntegridad } from '@/lib/wompi'
+import { construirConsentimiento, construirReferenciaAutomatica, firmaIntegridad } from '@/lib/wompi'
 import { cobrarConFuente, credencialesListas } from '@/lib/wompiApi'
 import type { Plan } from '@/types'
 
@@ -139,7 +139,7 @@ export async function GET(request: Request) {
   //     cancelo es el peor bug de este archivo, y se evita aqui.
   const { data: programados, error: errProgramados } = await admin
     .from('restaurantes')
-    .select('id, plan, plan_programado, fecha_cambio_programado, usuario_id')
+    .select('id, plan, plan_programado, fecha_cambio_programado, usuario_id, cobro_automatico')
     .not('plan_programado', 'is', null)
     .lte('fecha_cambio_programado', hoy)
 
@@ -154,9 +154,24 @@ export async function GET(request: Request) {
     const planNuevo = fila.plan_programado as string
     const planAnterior = (fila.plan as string | null) ?? 'gratis'
 
+    // DESARME AL APLICAR (F4.c-5). Cancelar ya apaga el cobro automatico en el
+    // momento de cancelar (/suscripcion), asi que aqui casi siempre no hay nada
+    // que apagar. Esta rama existe para las filas que se agendaron ANTES de esa
+    // regla y para cualquier camino futuro que agende una bajada sin pasar por
+    // esa pantalla: el sitio donde la cancelacion SE APLICA es el ultimo que
+    // puede garantizar que nadie termina en gratis con la bandera armada.
+    // Solo para bajadas a gratis: un cambio agendado ENTRE planes pagos (que
+    // hoy no existe) no es una cancelacion y no debe tocar el opt-in.
+    const desarmaCobro = planNuevo === 'gratis' && fila.cobro_automatico === true
+
     const { error } = await admin
       .from('restaurantes')
-      .update({ plan: planNuevo, plan_programado: null, fecha_cambio_programado: null })
+      .update({
+        plan: planNuevo,
+        plan_programado: null,
+        fecha_cambio_programado: null,
+        ...(desarmaCobro ? { cobro_automatico: false, cobro_automatico_desde: null } : {}),
+      })
       .eq('id', fila.id)
     if (error) {
       // Una fila rota no puede tumbar el barrido: se cuenta y se sigue.
@@ -165,6 +180,35 @@ export async function GET(request: Request) {
       continue
     }
     resumen.aplicados++
+
+    // Evidencia del desarme, con el MISMO peso que le da la ruta del opt-in:
+    // toda salida del cobro automatico deja una fila REVOCADO en la bitacora
+    // append-only, sin importar quien la ejecute. Se enlaza la fuente viva si
+    // existe (aqui puede no haberla: quitar el metodo tambien apaga el opt-in).
+    // Si el insert falla NO se revierte el desarme — dejar a alguien con el
+    // cobro armado porque no pudimos escribir un log es peor que perder
+    // evidencia; misma decision que en /api/wompi/cobro-automatico.
+    if (desarmaCobro) {
+      const { data: fuenteViva } = await admin
+        .from('fuentes_pago')
+        .select('id')
+        .eq('restaurante_id', fila.id)
+        .eq('estado', 'AVAILABLE')
+        .eq('predeterminada', true)
+        .maybeSingle()
+      const { error: errConsent } = await admin.from('consentimientos_pago').insert(
+        construirConsentimiento({
+          restauranteId: fila.id as string,
+          fuentePagoId: fuenteViva?.id ?? null,
+          evento: 'REVOCADO',
+          motivo: 'suscripcion_cancelada',
+        })
+      )
+      if (errConsent) {
+        console.error(`[cron/suscripciones] consentimiento REVOCADO fallo restaurante=${fila.id}:`, errConsent.message)
+      }
+      console.info(`[cron/suscripciones] cobro automatico apagado al aplicar cancelacion restaurante=${fila.id}`)
+    }
 
     const to = await emailDelDueno(fila.usuario_id as string | null)
     if (to) {

@@ -30,6 +30,11 @@ export default function SuscripcionPage() {
   // enlace "Cancelar suscripción"). Se confirma en el ruteo, no en cada boton,
   // para que ninguna entrada quede sin puerta.
   const [confirmarCancelar, setConfirmarCancelar] = useState(false)
+  // Cancelar era la unica accion de esta pagina que podia fallar EN SILENCIO
+  // (los errores solo iban a consola). Desde que cancelar tambien apaga el
+  // cobro automatico hay un fallo que el usuario TIENE que ver: si no pudimos
+  // apagarlo, no cancelamos, y callarlo lo dejaria creyendo que si.
+  const [errorCancelar, setErrorCancelar] = useState('')
   // Mientras algo esta en vuelo se deshabilitan TODOS los botones (evita dobles
   // cobros), pero solo el del plan en vuelo cambia de label.
   const cambiando = planEnProceso !== null
@@ -141,10 +146,48 @@ export default function SuscripcionPage() {
   // cambio se AGENDA y el usuario conserva lo que compró hasta el vencimiento
   // (estándar de la industria: cancelar = no renovar). Solo cuando no queda
   // tiempo (sin plan_expira o ya vencido) la bajada se aplica en el acto.
+  //
+  // CANCELAR APAGA EL COBRO AUTOMÁTICO (F4.c-5). Quien cancela dijo "para":
+  // dejar el opt-in encendido junto a una bajada agendada es una contradicción
+  // que hoy nadie vería, porque debeCobrarse ya se niega si hay plan_programado
+  // y el plan gratis no se cobra — la bandera se quedaría en true PARA SIEMPRE
+  // y solo reaparecería el día que el usuario volviera a un plan pago, armando
+  // un cobro recurrente que nunca volvió a autorizar. El método guardado NO se
+  // toca: apagar la renovación y borrar la tarjeta son decisiones distintas
+  // (misma línea que F4.c-3), y el usuario puede reactivar y volver a
+  // encenderla a mano.
   async function bajarAGratis() {
     if (!rest?.id) return
     setPlanEnProceso('gratis')
+    setErrorCancelar('')
     const supabase = createClient()
+
+    // SE APAGA ANTES DE CANCELAR, y si no se puede apagar NO se cancela. El
+    // orden importa porque los dos fallos posibles no cuestan lo mismo:
+    // apagado sin cancelación deja a alguien con su plan vivo y la renovación
+    // apagada (visible, reversible con un clic, y erra hacia NO mover plata);
+    // cancelación sin apagado deja exactamente la bandera armada que este
+    // bloque existe para eliminar. Va por la ruta del server y no por un update
+    // suelto: esta columna deja línea de log y fila en la bitácora de
+    // consentimiento, y un update desde el navegador no deja ninguna de las dos.
+    if (rest.cobro_automatico) {
+      try {
+        const res = await fetch('/api/wompi/cobro-automatico', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ activar: false, motivo: 'suscripcion_cancelada' }),
+        })
+        if (!res.ok) {
+          setErrorCancelar('No pudimos apagar la renovación automática, así que no cancelamos tu plan. Intenta de nuevo.')
+          setPlanEnProceso(null)
+          return
+        }
+      } catch {
+        setErrorCancelar('No pudimos apagar la renovación automática, así que no cancelamos tu plan. Intenta de nuevo.')
+        setPlanEnProceso(null)
+        return
+      }
+    }
 
     // fue_pago es un latch one-way (STRATEGIC.2): NINGUNA de las dos ramas lo
     // toca (solo el pago lo activa). De él depende la regla de fotos del plan
@@ -187,6 +230,14 @@ export default function SuscripcionPage() {
 
   // Deshacer la cancelación (patrón "Restart membership"). Solo limpia las dos
   // columnas: el plan nunca se bajó, así que no hay nada que restaurar.
+  //
+  // NO REENCIENDE cobro_automatico, A PROPÓSITO. Es asimétrico y tiene que
+  // serlo: cancelar es el usuario diciendo "para" y apagar el cobro es
+  // obedecerlo, pero reactivar el plan NO es pedir que le vuelvan a sacar plata
+  // sola. Rearmar un cargo recurrente porque el usuario pulsó "Reactivar"
+  // sería exactamente el cobro sorpresa que todo F4.c evita: encenderlo vuelve
+  // a ser un acto explícito, con los términos a la vista, en la tarjeta de
+  // método de pago. Si alguien "arregla" esta asimetría, rompe esa garantía.
   async function reactivarSuscripcion() {
     if (!rest?.id) return
     setReactivando(true)
@@ -490,6 +541,11 @@ export default function SuscripcionPage() {
             <span onClick={() => cambiarPlan('gratis')} style={{ fontSize: '12px', color: 'var(--color-danger)', cursor: 'pointer' }}>
               {planEnProceso === 'gratis' ? 'Cancelando...' : 'Cancelar suscripción'}
             </span>
+            {errorCancelar && (
+              <div style={{ fontSize: '11px', color: 'var(--color-danger)', marginTop: '6px', lineHeight: 1.45 }}>
+                {errorCancelar}
+              </div>
+            )}
           </div>
         )}
 
@@ -517,6 +573,16 @@ export default function SuscripcionPage() {
                 ? `Tu plan ${nombrePlanActual} sigue activo hasta el ${fechaLargaColombia(expiraVigente)}. Ese día pasarás a Gratis.`
                 : 'No te queda tiempo pagado por delante, así que el cambio se aplica de inmediato.'}
             </div>
+            {/* Apagar el cobro automático es una CONSECUENCIA DECLARADA de
+                cancelar, no un efecto secundario silencioso: se anuncia con la
+                misma condición con la que ocurre (cobro_automatico en true), y
+                se dice también lo que NO pasa — el método guardado sobrevive,
+                porque prometer de menos aquí sería asustar sin motivo. */}
+            {Boolean(rest?.cobro_automatico) && (
+              <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '10px', lineHeight: 1.5 }}>
+                También apagaremos el cobro automático. Tu método de pago guardado no se elimina.
+              </div>
+            )}
           </ConfirmarEliminar>
         )}
 

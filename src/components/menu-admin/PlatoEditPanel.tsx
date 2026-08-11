@@ -366,6 +366,7 @@ function PlatoEditPanel({
         <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
           <input
             type="checkbox"
+            className="casilla"
             checked={draft.hasVariantes}
             onChange={(e) => {
               const turningOff = !e.target.checked && draft.hasVariantes

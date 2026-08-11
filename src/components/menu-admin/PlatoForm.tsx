@@ -254,6 +254,7 @@ function PlatoForm({
         <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
           <input
             type="checkbox"
+            className="casilla"
             checked={plato.hasVariantes}
             onChange={(e) => setPlato({ ...plato, hasVariantes: e.target.checked })}
           />

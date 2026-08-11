@@ -35,8 +35,10 @@ interface Props {
    *  por su cuenta podrian discrepar y una de las dos estaria mintiendo sobre
    *  el dinero del usuario. */
   cobroAutomatico: boolean
-  /** Revalida la fila del restaurante tras encender/apagar. */
-  onCambioCobro: () => void
+  /** Revalida la fila del restaurante tras encender/apagar. Puede devolver una
+   *  promesa (lo hace: es el mutate de SWR) y aqui SE ESPERA — ver
+   *  cambiarCobroAutomatico. */
+  onCambioCobro: () => void | Promise<unknown>
 }
 
 export default function MetodoPago({
@@ -148,7 +150,12 @@ export default function MetodoPago({
         return
       }
       // NADA optimista: el interruptor solo se mueve cuando la fila ya cambio.
-      onCambioCobro()
+      // Y SE ESPERA A QUE LLEGUE. Sin el await, "guardando..." se apagaba antes
+      // de que la fila volviera y la casilla se quedaba pintando el valor
+      // ANTERIOR sin decirlo — que es como se ve una tarjeta que miente sobre
+      // si autorizaste un cobro. La casilla se mueve cuando la fila real,
+      // releida, dice que se movio.
+      await onCambioCobro()
     } catch {
       setError('No pudimos guardar el cambio. Intenta de nuevo.')
     } finally {
@@ -173,8 +180,9 @@ export default function MetodoPago({
       await mutate()
       // Quitar el metodo APAGA el cobro automatico en el server: hay que
       // revalidar tambien la fila del restaurante o la pagina seguiria diciendo
-      // "Se renueva el X" sin nada contra que cobrar.
-      onCambioCobro()
+      // "Se renueva el X" sin nada contra que cobrar. Se espera por la misma
+      // razon que en cambiarCobroAutomatico.
+      await onCambioCobro()
     } catch {
       setError('No pudimos quitar el método. Intenta de nuevo.')
     } finally {
@@ -259,7 +267,7 @@ export default function MetodoPago({
                 entrar (misma linea que CONFIRM-DELETE, que solo confirma lo que
                 destruye algo). */}
             <label style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', marginTop: '12px', cursor: cambiandoCobro ? 'default' : 'pointer' }}>
-              <input type="checkbox" checked={cobroAutomatico} disabled={cambiandoCobro}
+              <input type="checkbox" className="casilla" checked={cobroAutomatico} disabled={cambiandoCobro}
                 onChange={(e) => cambiarCobroAutomatico(e.target.checked)}
                 style={{ marginTop: '2px', cursor: cambiandoCobro ? 'default' : 'pointer' }} />
               <span style={{ fontSize: '12px', color: 'var(--text-primary)', lineHeight: 1.45 }}>
@@ -361,7 +369,7 @@ export default function MetodoPago({
             {/* DOS casillas SEPARADAS, ninguna premarcada, cada una con su
                 propio enlace. Son dos contratos distintos. */}
             <label style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', marginTop: '12px', cursor: 'pointer' }}>
-              <input type="checkbox" checked={aceptaReglamento} disabled={enviando}
+              <input type="checkbox" className="casilla" checked={aceptaReglamento} disabled={enviando}
                 onChange={(e) => setAceptaReglamento(e.target.checked)}
                 style={{ marginTop: '2px', cursor: 'pointer' }} />
               <span style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.45 }}>
@@ -375,7 +383,7 @@ export default function MetodoPago({
             </label>
 
             <label style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', marginTop: '8px', cursor: 'pointer' }}>
-              <input type="checkbox" checked={aceptaDatos} disabled={enviando}
+              <input type="checkbox" className="casilla" checked={aceptaDatos} disabled={enviando}
                 onChange={(e) => setAceptaDatos(e.target.checked)}
                 style={{ marginTop: '2px', cursor: 'pointer' }} />
               <span style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.45 }}>
