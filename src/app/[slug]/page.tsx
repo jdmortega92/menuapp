@@ -36,6 +36,8 @@ import { getSessionId, visitaYaLogueada, marcarVisitaLogueada } from '@/lib/anal
 import { makeCartKey, enriquecerComboPlatos } from '@/lib/cart'
 import { useCart } from '@/hooks/useCart'
 import { mostrarFotosPublico } from '@/lib/fotosGate'
+import { textoTipoNegocio } from '@/lib/tiposNegocio'
+import { sorprendemeDisponible } from '@/lib/sorprendeme'
 import type { Plan } from '@/types'
 
 export default function MenuPublicoPage() {
@@ -162,7 +164,7 @@ export default function MenuPublicoPage() {
     promosVisibles,
     platoDiaVisible: platoDiaVisibleRaw,
     platoGanadorVisible: platoGanadorVisibleRaw,
-    sorprendemeVisible,
+    categoriasPorHorario,
     categoriasFiltradas,
     categoriasListado,
   } = useMenuVisibility({
@@ -181,6 +183,18 @@ export default function MenuPublicoPage() {
   // Idéntico en valor: el flag del hook ya incluye la truthiness de x.
   const platoDiaVisible = platoDia && platoDiaVisibleRaw
   const platoGanadorVisible = platoGanador && platoGanadorVisibleRaw
+
+  // Sorpréndeme (CIERRE P1): la regla completa vive en lib/sorprendeme. El
+  // boton exige ademas que no haya busqueda; el panel de resultado ya abierto
+  // se evalua sin busqueda para no cerrarse solo mientras el comensal escribe.
+  const sorprendemeBase = {
+    activo: config?.sorprendeme_activo,
+    plan: planRest,
+    categoriasElegidas: config?.sorprendeme_categorias,
+    categoriasAbiertasIds: categoriasPorHorario.map((c: any) => c.id as string),
+  }
+  const sorprendemeBoton = sorprendemeDisponible({ ...sorprendemeBase, busqueda })
+  const sorprendemeResultado = sorprendemeDisponible({ ...sorprendemeBase, busqueda: '' })
 
   // Índices de promos extraídos a usePromoIndices (Refactor Fase 2). Consumen
   // promosVisibles (output de useMenuVisibility) + gates de plan; el contrato
@@ -218,33 +232,21 @@ export default function MenuPublicoPage() {
   function sorprendeme() {
     
     const resultado: any[] = []
-    
-    // Si hay categorías configuradas para sorpréndeme, usar esas
+
+    // Un plato al azar de cada una de las 2 categorias elegidas. Sin fallback
+    // (CIERRE P1): con 0 o 1 elegidas el boton ni aparece (lib/sorprendeme), y
+    // el fallback viejo tomaba platos de categorias cerradas por horario.
     const catsSorprendeme = config?.sorprendeme_categorias || []
-    
-    
-    if (catsSorprendeme.length === 2) {
-      catsSorprendeme.forEach((catId: string) => {
-        const cat = categorias.find((c: any) => c.id === catId)
-        if (cat) {
-          const disponibles = cat.platos.filter((p: any) => p.disponible)
-          if (disponibles.length > 0) {
-            resultado.push(disponibles[Math.floor(Math.random() * disponibles.length)])
-          }
-        }
-      })
-    } else {
-      // Fallback: uno de cada categoría diferente
-      const catsConPlatos = categorias.filter((c: any) => c.platos.some((p: any) => p.disponible))
-      const catsRandom = [...catsConPlatos].sort(() => Math.random() - 0.5)
-      for (const cat of catsRandom) {
-        if (resultado.length >= 3) break
-        const disponibles = cat.platos.filter((p: any) => p.disponible && !resultado.find((r: any) => r.id === p.id))
+    if (catsSorprendeme.length !== 2) return
+    catsSorprendeme.forEach((catId: string) => {
+      const cat = categorias.find((c: any) => c.id === catId)
+      if (cat) {
+        const disponibles = cat.platos.filter((p: any) => p.disponible)
         if (disponibles.length > 0) {
           resultado.push(disponibles[Math.floor(Math.random() * disponibles.length)])
         }
       }
-    }
+    })
 
     if (resultado.length === 0) return
     setSorpresaPlatos(resultado)
@@ -374,8 +376,13 @@ export default function MenuPublicoPage() {
             fontSize: '12px',
             color: 'var(--theme-text-muted)',
           }}>
-            <span style={{ textTransform: 'capitalize' }}>{restaurante.tipo}</span>
-            <span>·</span>
+            {/* Label con tildes (o el detalle de 'otro'); '' = se omite con su "·". */}
+            {textoTipoNegocio(restaurante.tipo, restaurante.tipo_detalle) && (
+              <>
+                <span>{textoTipoNegocio(restaurante.tipo, restaurante.tipo_detalle)}</span>
+                <span>·</span>
+              </>
+            )}
             <span>{restaurante.ciudad}</span>
             {(() => {
               // Indicador de abierto/cerrado ahora mismo
@@ -488,7 +495,7 @@ export default function MenuPublicoPage() {
         )}
 
         {/* Sorpréndeme botón */}
-        {esBasicoPublico && config?.sorprendeme_activo && sorprendemeVisible && !busqueda.trim() && (
+        {sorprendemeBoton && (
           <div style={{ padding: '0 16px 10px' }}>
             <div onClick={sorprendeme} style={{
               border: mostrarSorpresa ? `1px solid ${color}` : '1px dashed var(--theme-border-strong)',
@@ -506,7 +513,7 @@ export default function MenuPublicoPage() {
         )}
 
         {/* Sorpréndeme resultado */}
-        {esBasicoPublico && sorprendemeVisible && mostrarSorpresa && (
+        {sorprendemeResultado && mostrarSorpresa && (
           <div style={{ padding: '0 16px 14px' }}>
             <div style={{
               background: washSutil(color),

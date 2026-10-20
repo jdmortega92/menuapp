@@ -17,6 +17,7 @@ import PasswordInput from '@/components/ui/PasswordInput'
 import { isPasswordValid, getPasswordError } from '@/lib/passwordValidation'
 import PhoneInput from '@/components/ui/PhoneInput'
 import BottomNav from '@/components/BottomNav'
+import { TIPOS_NEGOCIO, MAX_TIPO_DETALLE, tipoDetalleParaGuardar } from '@/lib/tiposNegocio'
 
 // ── Helpers del selector de color (COLOR-PICKER restyle) ──
 // Luminancia percibida aproximada (sRGB ponderado) para decidir el color del
@@ -58,6 +59,8 @@ export default function ConfigPage() {
 
   const [nombre, setNombre] = useState('')
   const [tipo, setTipo] = useState('restaurante')
+  // Solo con tipo 'otro' (CIERRE P1): texto libre que ve el comensal.
+  const [tipoDetalle, setTipoDetalle] = useState('')
   const [ciudad, setCiudad] = useState('')
   const [whatsapp, setWhatsapp] = useState('')
   const [direccion, setDireccion] = useState('')
@@ -101,7 +104,6 @@ export default function ConfigPage() {
   const [confirmarPassword, setConfirmarPassword] = useState('')
   const [guardandoPass, setGuardandoPass] = useState(false)
   const [passGuardada, setPassGuardada] = useState(false)
-  const [sorprendemeCats, setSorprendemeCats] = useState<string[]>([])
   const [logoUrl, setLogoUrl] = useState<string | null>(null)
   const [bannerUrl, setBannerUrl] = useState<string | null>(null)
   const [subiendoImagen, setSubiendoImagen] = useState(false)
@@ -114,6 +116,7 @@ export default function ConfigPage() {
     if (!rest || !usuario) return
     setNombre(rest.nombre || '')
     setTipo(rest.tipo || 'restaurante')
+    setTipoDetalle(rest.tipo_detalle || '')
     setCiudad(rest.ciudad || '')
     setWhatsapp(rest.whatsapp || '')
     setDireccion(rest.direccion || '')
@@ -135,7 +138,6 @@ export default function ConfigPage() {
       calificaciones_activo: configData.calificaciones_activo ?? true,
       sorprendeme_activo: configData.sorprendeme_activo ?? true,
     })
-    if (configData.sorprendeme_categorias) setSorprendemeCats(configData.sorprendeme_categorias)
   }, [configData])
 
   // Seed horarios local state (preserve day-of-week sort)
@@ -209,16 +211,6 @@ export default function ConfigPage() {
     { id: 'premium', nombre: 'Premium', desc: 'Refinado, elegante', plan: 'pro' },
   ]
 
-  const tiposNegocio = [
-    { valor: 'restaurante', label: 'Restaurante' },
-    { valor: 'cafeteria', label: 'Cafetería' },
-    { valor: 'panaderia', label: 'Panadería' },
-    { valor: 'bar', label: 'Bar' },
-    { valor: 'comida_rapida', label: 'Comida rápida' },
-    { valor: 'heladeria', label: 'Heladería' },
-    { valor: 'food_truck', label: 'Food truck' },
-    { valor: 'otro', label: 'Otro' },
-  ]
   // recortarImagen vive en lib/imagen; la UI de recorte en components/ui/CropModal.
 
   function seleccionarImagen(tipo: 'logo' | 'banner', file: File) {
@@ -332,13 +324,6 @@ export default function ConfigPage() {
     router.push('/login')
   }
 
-  async function guardarSorprendemeCats(nuevas: string[]) {
-    setSorprendemeCats(nuevas)
-    if (!rest?.id) return
-    const supabase = createClient()
-    await supabase.from('config_restaurante').update({ sorprendeme_categorias: nuevas }).eq('restaurante_id', rest.id)
-    await mutateConfig()
-  }
   async function guardarHorarios() {
     if (!rest?.id) return
     setGuardandoHorarios(true)
@@ -392,6 +377,8 @@ export default function ConfigPage() {
 
     await supabase.from('restaurantes').update({
       nombre, tipo, ciudad, whatsapp, direccion, descripcion,
+      // null si el tipo no es 'otro': cambiar de tipo limpia el detalle.
+      tipo_detalle: tipoDetalleParaGuardar(tipo, tipoDetalle),
       color_principal: colorPrincipal, tema: temaFinal,
     }).eq('id', rest.id)
     await mutateRestaurante()
@@ -444,8 +431,15 @@ export default function ConfigPage() {
               <div style={{ marginBottom: '12px' }}>
                 <label className="label">Tipo de negocio</label>
                 <select className="input" value={tipo} onChange={(e) => setTipo(e.target.value)} style={{ appearance: 'none' }}>
-                  {tiposNegocio.map(t => <option key={t.valor} value={t.valor}>{t.label}</option>)}
+                  {TIPOS_NEGOCIO.map(t => <option key={t.valor} value={t.valor}>{t.label}</option>)}
                 </select>
+                {tipo === 'otro' && (
+                  <div style={{ marginTop: '10px' }}>
+                    <label className="label" htmlFor="tipo-detalle">¿Qué tipo de negocio es?</label>
+                    <input id="tipo-detalle" className="input" type="text" placeholder="Ej: Floristería"
+                      maxLength={MAX_TIPO_DETALLE} value={tipoDetalle} onChange={(e) => setTipoDetalle(e.target.value)} />
+                  </div>
+                )}
               </div>
               <div style={{ marginBottom: '12px' }}>
                 <label className="label">Ciudad</label>
@@ -865,7 +859,7 @@ export default function ConfigPage() {
               {[
                 { key: 'whatsapp_activo', label: 'Pedidos por WhatsApp', desc: 'Los clientes pueden pedir por WhatsApp', plan: 'gratis' },
                 { key: 'calificaciones_activo', label: 'Calificaciones', desc: 'Los clientes pueden calificar platos', plan: 'gratis' },
-                { key: 'sorprendeme_activo', label: 'Sorpréndeme', desc: 'Combinación aleatoria de platos', plan: 'gratis' },
+                { key: 'sorprendeme_activo', label: 'Sorpréndeme', desc: 'Combinación aleatoria de platos', plan: 'basico' },
                 { key: 'combos_activo', label: 'Combos', desc: 'Paquetes de platos con descuento', plan: 'pro' },
                 { key: 'promos_activo', label: 'Promociones', desc: '2x1, descuento, precio especial', plan: 'pro' },
                 { key: 'plato_dia_activo', label: 'Plato del día', desc: 'Plato destacado con cuenta regresiva', plan: 'pro' },

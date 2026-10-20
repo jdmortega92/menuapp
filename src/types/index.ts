@@ -17,6 +17,9 @@ export interface Restaurante {
   usuario_id: string
   nombre: string
   tipo: TipoNegocio
+  /** Solo con tipo 'otro' (CIERRE P1): texto libre que ve el comensal, max 40
+   *  (CHECK en la DB). null para cualquier otro tipo. */
+  tipo_detalle?: string | null
   ciudad: string
   whatsapp: string
   direccion?: string

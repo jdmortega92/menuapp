@@ -422,8 +422,10 @@ function PlatoEditPanel({
           <div style={{ marginBottom: '10px' }}>
             <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Foto del plato</div>
             {plato.foto_url && (
-              <div style={{ width: '100%', aspectRatio: '16/9', borderRadius: 'var(--radius-sm)', overflow: 'hidden', marginBottom: '8px' }}>
-                <img src={plato.foto_url} alt={plato.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              // Foto COMPLETA en su proporcion natural (CIERRE P1): conviven fotos
+              // viejas 16:9 y nuevas 4:3, y la caja fija 16:9 recortaba las 4:3.
+              <div style={{ width: '100%', borderRadius: 'var(--radius-sm)', overflow: 'hidden', marginBottom: '8px', background: 'var(--bg-tertiary)' }}>
+                <img src={plato.foto_url} alt={plato.nombre} style={{ display: 'block', width: '100%', height: 'auto', maxHeight: '60vh', objectFit: 'contain' }} />
               </div>
             )}
             {sinControl ? (

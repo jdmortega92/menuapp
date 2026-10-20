@@ -1278,6 +1278,11 @@ export default function MiMenuPage() {
                   {sorprendemeCatsMenu.length < 2 && (
                     <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', textAlign: 'center', marginTop: '8px' }}>
                       Selecciona {2 - sorprendemeCatsMenu.length} categoría{sorprendemeCatsMenu.length === 1 ? '' : 's'} más
+                      {/* CIERRE P1: con menos de 2 el botón no aparece en el menú
+                          público (lib/sorprendeme); se dice aquí, junto al contador. */}
+                      <div style={{ marginTop: '4px' }}>
+                        Sorpréndeme aparece en tu menú solo cuando tengas 2 categorías elegidas.
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1439,10 +1444,10 @@ export default function MiMenuPage() {
         {cropModal && (
           <CropModal
             imagen={cropModal.imagen}
-            aspect={16 / 9}
+            aspect={4 / 3}
             titulo="Ajustar foto"
             anchoSalida={800}
-            altoSalida={450}
+            altoSalida={600}
             onConfirm={confirmarRecorte}
             onCancel={() => setCropModal(null)}
           />

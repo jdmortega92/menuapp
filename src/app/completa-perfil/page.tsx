@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-browser'
 import Select from '@/components/ui/Select'
+import { TIPOS_NEGOCIO, MAX_TIPO_DETALLE, tipoDetalleParaGuardar } from '@/lib/tiposNegocio'
 
 export default function CompletaPerfilPage() {
   const router = useRouter()
@@ -15,19 +16,11 @@ export default function CompletaPerfilPage() {
   // Datos del negocio
   const [nombre, setNombre] = useState('')
   const [tipo, setTipo] = useState('')
+  // Solo con tipo 'otro' (CIERRE P1): texto libre que ve el comensal.
+  const [tipoDetalle, setTipoDetalle] = useState('')
   const [ciudad, setCiudad] = useState('')
   const [whatsapp, setWhatsapp] = useState('')
 
-  const tiposNegocio = [
-    { valor: 'restaurante', label: 'Restaurante' },
-    { valor: 'cafeteria', label: 'Cafetería' },
-    { valor: 'panaderia', label: 'Panadería' },
-    { valor: 'bar', label: 'Bar' },
-    { valor: 'comida_rapida', label: 'Comida rápida' },
-    { valor: 'heladeria', label: 'Heladería' },
-    { valor: 'food_truck', label: 'Food truck' },
-    { valor: 'otro', label: 'Otro' },
-  ]
 
   useEffect(() => {
     const supabase = createClient()
@@ -74,6 +67,7 @@ export default function CompletaPerfilPage() {
         usuario_id: user.id,
         nombre,
         tipo,
+        tipo_detalle: tipoDetalleParaGuardar(tipo, tipoDetalle),
         ciudad,
         whatsapp,
         slug,
@@ -245,11 +239,18 @@ export default function CompletaPerfilPage() {
               className="input"
               value={tipo}
               onChange={setTipo}
-              options={tiposNegocio.map(t => ({ value: t.valor, label: t.label }))}
+              options={TIPOS_NEGOCIO.map(t => ({ value: t.valor, label: t.label }))}
               placeholder="Selecciona"
               required
               ariaLabelledBy="tipo-negocio-label"
             />
+            {tipo === 'otro' && (
+              <div style={{ marginTop: '10px' }}>
+                <label className="label" htmlFor="tipo-detalle">¿Qué tipo de negocio es?</label>
+                <input id="tipo-detalle" className="input" type="text" placeholder="Ej: Floristería"
+                  maxLength={MAX_TIPO_DETALLE} value={tipoDetalle} onChange={(e) => setTipoDetalle(e.target.value)} />
+              </div>
+            )}
           </div>
 
           {/* Ciudad */}

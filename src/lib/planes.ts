@@ -23,7 +23,9 @@ export const PLANES: Record<Plan, PlanInfo> = {
     nombre: 'Gratis',
     precioMensual: 0,
     precioAnual: 0,
-    features: ['10 platos máximo', '1 categoría', 'QR básico', 'Escaneos y visitas'],
+    // Calificaciones: gratis en TODOS los planes (decision CIERRE P1); el menu
+    // publico ya las mostraba sin mirar el plan.
+    features: ['10 platos máximo', '1 categoría', 'QR básico', 'Escaneos y visitas', 'Calificaciones de clientes'],
     noFeatures: ['Sin fotos', 'Sin estadísticas detalladas'],
   },
   basico: {
@@ -31,7 +33,7 @@ export const PLANES: Record<Plan, PlanInfo> = {
     nombre: 'Básico',
     precioMensual: 15000,
     precioAnual: 150000,
-    features: ['Platos ilimitados', 'Categorías ilimitadas', 'Fotos opcionales', 'QR personalizado', 'Gráfica + platos más vistos', 'Horarios pico', 'Agotado en tiempo real', 'Personalización del menú'],
+    features: ['Platos ilimitados', 'Categorías ilimitadas', 'Fotos opcionales', 'QR personalizado', 'Gráfica + platos más vistos', 'Horarios pico', 'Agotado en tiempo real', 'Personalización del menú', 'Calificaciones de clientes'],
     noFeatures: ['Sin combos ni promos', 'Sin estadísticas avanzadas'],
   },
   pro: {
@@ -39,7 +41,7 @@ export const PLANES: Record<Plan, PlanInfo> = {
     nombre: 'Pro',
     precioMensual: 29000,
     precioAnual: 290000,
-    features: ['Todo del Básico', 'Combos y promociones', 'Plato del día', 'Plato ganador', 'Calificaciones', 'Embudo de conversión', 'Vistas vs pedidos', 'Mejores y peores días', 'Reporte semanal PDF'],
+    features: ['Todo del Básico', 'Combos y promociones', 'Plato del día', 'Plato ganador', 'Embudo de conversión', 'Vistas vs pedidos', 'Mejores y peores días', 'Reporte semanal PDF'],
     noFeatures: [],
   },
 }

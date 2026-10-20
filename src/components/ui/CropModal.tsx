@@ -5,7 +5,7 @@ import Cropper from 'react-easy-crop'
 import { recortarImagen } from '@/lib/imagen'
 
 // ── CropModal — overlay de recorte de imagen (Fase 3) ──
-// UI compartida por /menu (foto de plato 16:9) y /config (logo redondo, banner
+// UI compartida por /menu (foto de plato 4:3) y /config (logo redondo, banner
 // 3:1). Posee crop/zoom/croppedAreaPixels INTERNAMENTE: el dueño solo guarda el
 // puntero (qué imagen y a qué pertenece) y monta el modal condicionalmente —
 // cada apertura arranca en crop {0,0} / zoom 1 por fresh-mount, sin resets.

@@ -8,6 +8,7 @@ import PasswordInput from '@/components/ui/PasswordInput'
 import { isPasswordValid, getPasswordError } from '@/lib/passwordValidation'
 import PhoneInput from '@/components/ui/PhoneInput'
 import Select from '@/components/ui/Select'
+import { TIPOS_NEGOCIO, MAX_TIPO_DETALLE, textoTipoNegocio, tipoDetalleParaGuardar } from '@/lib/tiposNegocio'
 
 function RegistroContent() {
   const router = useRouter()
@@ -21,21 +22,13 @@ function RegistroContent() {
   // Datos del formulario
   const [nombre, setNombre] = useState('')
   const [tipo, setTipo] = useState('')
+  // Solo con tipo 'otro' (CIERRE P1): texto libre que ve el comensal.
+  const [tipoDetalle, setTipoDetalle] = useState('')
   const [ciudad, setCiudad] = useState('')
   const [whatsapp, setWhatsapp] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
 
-  const tiposNegocio = [
-    { valor: 'restaurante', label: 'Restaurante' },
-    { valor: 'cafeteria', label: 'Cafetería' },
-    { valor: 'panaderia', label: 'Panadería' },
-    { valor: 'bar', label: 'Bar' },
-    { valor: 'comida_rapida', label: 'Comida rápida' },
-    { valor: 'heladeria', label: 'Heladería' },
-    { valor: 'food_truck', label: 'Food truck' },
-    { valor: 'otro', label: 'Otro' },
-  ]
 
   // OJO si algun dia se agrega un flag de carga aqui (p. ej. setCargando(true)):
   // signInWithOAuth navega FUERA en la misma pestana, y al volver con el boton
@@ -66,6 +59,7 @@ function RegistroContent() {
         usuario_id: userId,
         nombre,
         tipo,
+        tipo_detalle: tipoDetalleParaGuardar(tipo, tipoDetalle),
         ciudad,
         whatsapp,
         slug,
@@ -278,11 +272,18 @@ function RegistroContent() {
                   className="input"
                   value={tipo}
                   onChange={setTipo}
-                  options={tiposNegocio.map(t => ({ value: t.valor, label: t.label }))}
+                  options={TIPOS_NEGOCIO.map(t => ({ value: t.valor, label: t.label }))}
                   placeholder="Selecciona"
                   required
                   ariaLabelledBy="tipo-negocio-label"
                 />
+                {tipo === 'otro' && (
+                  <div style={{ marginTop: '10px' }}>
+                    <label className="label" htmlFor="tipo-detalle">¿Qué tipo de negocio es?</label>
+                    <input id="tipo-detalle" className="input" type="text" placeholder="Ej: Floristería"
+                      maxLength={MAX_TIPO_DETALLE} value={tipoDetalle} onChange={(e) => setTipoDetalle(e.target.value)} />
+                  </div>
+                )}
               </div>
 
               {/* Ciudad */}
@@ -360,11 +361,18 @@ function RegistroContent() {
                       className="input"
                       value={tipo}
                       onChange={setTipo}
-                      options={tiposNegocio.map(t => ({ value: t.valor, label: t.label }))}
+                      options={TIPOS_NEGOCIO.map(t => ({ value: t.valor, label: t.label }))}
                       placeholder="Selecciona"
                       required
                       ariaLabelledBy="tipo-negocio-label"
                     />
+                    {tipo === 'otro' && (
+                      <div style={{ marginTop: '10px' }}>
+                        <label className="label" htmlFor="tipo-detalle">¿Qué tipo de negocio es?</label>
+                        <input id="tipo-detalle" className="input" type="text" placeholder="Ej: Floristería"
+                          maxLength={MAX_TIPO_DETALLE} value={tipoDetalle} onChange={(e) => setTipoDetalle(e.target.value)} />
+                      </div>
+                    )}
                   </div>
                   {/* Ciudad */}
                   <div style={{ marginBottom: '14px' }}>
@@ -400,7 +408,7 @@ function RegistroContent() {
                     <div>
                       <div style={{ fontSize: '13px', fontWeight: 500 }}>{nombre || 'Tu negocio'}</div>
                       <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
-                        {tiposNegocio.find((t) => t.valor === tipo)?.label || 'Tipo'} · {ciudad || 'Ciudad'}
+                        {textoTipoNegocio(tipo, tipoDetalle) || 'Tipo'} · {ciudad || 'Ciudad'}
                       </div>
                     </div>
                   </div>

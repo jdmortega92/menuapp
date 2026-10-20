@@ -148,10 +148,15 @@ export default function PlatoDetalleModal({
       showClose={false}
       themeClass={themeClass}
     >
-      {/* Foto grande */}
+      {/* Foto grande. Con foto se ve COMPLETA en su proporcion natural (CIERRE
+          P1): conviven fotos viejas 16:9 y nuevas 4:3, y la caja fija de 200px
+          las recortaba a ~2.5:1. Ancho completo, alto automatico, tope de 60vh;
+          si el tope aplica, contain sobre fondo neutro. Sin foto, el
+          placeholder de siempre. */}
       <div style={{
-        height: '200px',
-        background: tintPlaceholder(color),
+        ...(mostrarFotos && plato.foto_url
+          ? { background: 'var(--theme-surface-muted)' }
+          : { height: '200px', background: tintPlaceholder(color) }),
         borderRadius: 'var(--theme-radius-modal) var(--theme-radius-modal) 0 0',
         display: 'flex',
         alignItems: 'center',
@@ -160,7 +165,7 @@ export default function PlatoDetalleModal({
         overflow: 'hidden',
       }}>
         {mostrarFotos && plato.foto_url ? (
-          <img src={plato.foto_url} alt={plato.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          <img src={plato.foto_url} alt={plato.nombre} style={{ display: 'block', width: '100%', height: 'auto', maxHeight: '60vh', objectFit: 'contain' }} />
         ) : (
           <span style={{ fontSize: '60px', fontWeight: 500, color: color, opacity: 0.3 }}>{plato.nombre.charAt(0)}</span>
         )}
@@ -626,6 +631,7 @@ export default function PlatoDetalleModal({
     {platoCalificar && (
       <CalificarModal
         plato={plato}
+        mostrarFotos={mostrarFotos}
         restauranteId={restauranteId}
         restauranteNombre={restauranteNombre}
         color={color}

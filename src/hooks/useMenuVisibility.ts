@@ -4,7 +4,7 @@ import { isCurrentlyVisible } from '@/lib/visibility'
 
 // ── useMenuVisibility — cadena de visibilidad del menú público ──
 // Derivación PURA (sin estado, sin fetch): categorías por horario → platos
-// visibles → combos/promos visibles → día/ganador/sorpréndeme → búsqueda →
+// visibles → combos/promos visibles → día/ganador → búsqueda →
 // dedup de destacados en el listado.
 //
 // CONTRATO de tiempo: `ahora` llega como PARÁMETRO — la página lo computa una
@@ -85,12 +85,9 @@ export function useMenuVisibility({
   const platoDiaVisible = platoDia && platoDiaEnHorario && platosVisiblesIds.has(platoDia.id)
   const platoGanadorVisible = platoGanador && platosVisiblesIds.has(platoGanador.id)
 
-  // Sorpréndeme: verificar si ambas categorías están activas
-  const sorprendemeVisible = (() => {
-    const catsSorprendeme = config?.sorprendeme_categorias || []
-    if (catsSorprendeme.length !== 2) return true
-    return catsSorprendeme.every((catId: string) => categoriasPorHorario.some((c: any) => c.id === catId))
-  })()
+  // Sorpréndeme ya no se decide aqui: la regla completa (2 categorias exactas,
+  // ambas abiertas, plan, toggle, busqueda) vive en lib/sorprendeme y la aplica
+  // la pagina con categoriasPorHorario (CIERRE P1).
 
   const categoriasFiltradas = busqueda.trim()
     ? categoriasPorHorario.map((cat: any) => ({ ...cat, platos: cat.platos.filter((p: any) => p.nombre.toLowerCase().includes(busqueda.toLowerCase()) || p.descripcion?.toLowerCase().includes(busqueda.toLowerCase())) })).filter((cat: any) => cat.platos.length > 0)
@@ -121,7 +118,6 @@ export function useMenuVisibility({
     promosVisibles,
     platoDiaVisible,
     platoGanadorVisible,
-    sorprendemeVisible,
     categoriasFiltradas,
     categoriasListado,
   }

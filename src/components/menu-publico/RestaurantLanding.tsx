@@ -4,6 +4,7 @@ import { MessageCircle } from 'lucide-react'
 import Icono from '@/components/ui/Icono'
 import { formato12h } from '@/lib/time'
 import { glowBoton, gradientHeader } from '@/lib/brandTints'
+import { textoTipoNegocio } from '@/lib/tiposNegocio'
 
 // Presentación/landing del restaurante (solo origen enlace web; en QR se entra
 // directo al menú). El gate (!mostrarMenu) vive en la página. `ahora`/`horaActual`
@@ -27,6 +28,8 @@ export default function RestaurantLanding({
   whatsappActivo: boolean | undefined
   onVerMenu: () => void
 }) {
+  // Label con tildes (o el detalle de 'otro'); '' = se omite junto con su "·".
+  const tipoTexto = textoTipoNegocio(restaurante.tipo, restaurante.tipo_detalle)
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       {/* Portada: banner sin texto encima (banner solo desde plan Básico) */}
@@ -105,8 +108,8 @@ export default function RestaurantLanding({
                 gap: '6px',
                 alignItems: 'center',
               }}>
-                <span style={{ textTransform: 'capitalize' }}>{restaurante.tipo}</span>
-                <span>·</span>
+                {tipoTexto && <span>{tipoTexto}</span>}
+                {tipoTexto && <span>·</span>}
                 <span>{restaurante.ciudad}</span>
               </div>
             )
@@ -219,8 +222,8 @@ export default function RestaurantLanding({
               }}>
                 {estadoBadge}
                 {estadoBadge && <span>·</span>}
-                <span style={{ textTransform: 'capitalize' }}>{restaurante.tipo}</span>
-                <span>·</span>
+                {tipoTexto && <span>{tipoTexto}</span>}
+                {tipoTexto && <span>·</span>}
                 <span>{restaurante.ciudad}</span>
               </div>
               {estadoTexto && (

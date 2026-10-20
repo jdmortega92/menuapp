@@ -16,6 +16,7 @@ import { tintPlaceholder } from '@/lib/brandTints'
 // reseñas del detalle sale por onResenaCreada.
 export default function CalificarModal({
   plato,
+  mostrarFotos,
   restauranteId,
   restauranteNombre,
   color,
@@ -24,6 +25,9 @@ export default function CalificarModal({
   onResenaCreada,
 }: {
   plato: any
+  /** Mismo gate de fotos que el resto del menu publico (lib/fotosGate). Sin
+   *  el, este modal mostraba la foto aunque el plan la ocultara (BL.42). */
+  mostrarFotos: boolean
   restauranteId: string
   restauranteNombre: string
   color: string
@@ -122,7 +126,7 @@ export default function CalificarModal({
       {/* Plato que va a calificar */}
       <div style={{ background: 'var(--theme-surface-muted)', border: '1px solid var(--theme-border)', borderRadius: 'var(--theme-radius-card)', padding: '12px', display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
         <div style={{ width: '48px', height: '48px', borderRadius: '8px', background: tintPlaceholder(color), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', fontWeight: 500, color: color, flexShrink: 0, overflow: 'hidden' }}>
-          {plato.foto_url ? (
+          {mostrarFotos && plato.foto_url ? (
             <img src={plato.foto_url} alt={plato.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           ) : plato.nombre.charAt(0)}
         </div>
