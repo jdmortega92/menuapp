@@ -535,8 +535,27 @@ export default function PlatoDetalleModal({
           </>
         )}
 
-        {/* Agregar al pedido */}
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+        {/* Agregar al pedido. STICKY al fondo del área que scrollea (el
+            contenedor del Modal, overflow auto / 85vh): desde CIERRE P1 la foto
+            se ve completa (hasta 60vh) y en el teléfono esta barra quedaba
+            debajo del pliegue, sobre todo con variantes y reseñas (CIERRE P1.1).
+            Fondo del propio modal y sombra arriba para que el contenido pase
+            por debajo. Los márgenes negativos la estiran sobre el padding del
+            contenedor (20px a los lados, 16px abajo) para que no se vea texto
+            asomando por los bordes. */}
+        <div style={{
+          display: 'flex',
+          gap: '12px',
+          alignItems: 'center',
+          position: 'sticky',
+          bottom: 0,
+          zIndex: 1,
+          background: 'var(--theme-surface)',
+          borderTop: '1px solid var(--theme-border)',
+          boxShadow: '0 -8px 16px -12px rgba(0, 0, 0, 0.35)',
+          margin: '0 -20px -16px',
+          padding: '12px 20px calc(16px + env(safe-area-inset-bottom, 0px))',
+        }}>
           <div style={{
             display: 'flex',
             alignItems: 'center',
