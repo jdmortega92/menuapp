@@ -9,10 +9,10 @@ import ConfirmarEliminar from '@/components/menu-admin/ConfirmarEliminar'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks'
 import { useFuentePago } from '@/hooks/data/useFuentePago'
-import { createClient } from '@/lib/supabase-browser'
 import { formatoPrecio } from '@/lib/precio'
 import { LISTA_PLANES, PLANES, ahorroAnual, precioDe, type Periodo } from '@/lib/planes'
 import { fechaColombia, fechaLargaColombia } from '@/lib/fechas'
+import { fechaCancelacionProgramada } from '@/lib/suscripciones'
 import type { Plan } from '@/types'
 
 export default function SuscripcionPage() {
@@ -35,6 +35,8 @@ export default function SuscripcionPage() {
   // cobro automatico hay un fallo que el usuario TIENE que ver: si no pudimos
   // apagarlo, no cancelamos, y callarlo lo dejaria creyendo que si.
   const [errorCancelar, setErrorCancelar] = useState('')
+  // Reactivar tambien puede fallar, y hasta CIERRE 1 fallaba en silencio.
+  const [errorReactivar, setErrorReactivar] = useState('')
   // Mientras algo esta en vuelo se deshabilitan TODOS los botones (evita dobles
   // cobros), pero solo el del plan en vuelo cambia de label.
   const cambiando = planEnProceso !== null
@@ -54,8 +56,11 @@ export default function SuscripcionPage() {
   const expiraVigente =
     /^\d{4}-\d{2}-\d{2}$/.test(expiraYmd) && expiraYmd >= fechaColombia() ? expiraYmd : ''
   // Cancelar solo se AGENDA si hay plan pago con tiempo restante; sin tiempo
-  // restante se mantiene la bajada inmediata de siempre.
-  const puedeProgramar = planActual !== 'gratis' && expiraVigente !== ''
+  // restante se mantiene la bajada inmediata de siempre. La regla vive en
+  // lib/suscripciones y es la MISMA que aplica /api/suscripcion/cancelar: aqui
+  // solo decide el copy de la hoja de confirmacion; quien decide de verdad es
+  // el server.
+  const puedeProgramar = fechaCancelacionProgramada(planActual, rest?.plan_expira, fechaColombia()) !== ''
   // Bajada ya agendada: la fila conserva plan/periodo hasta la fecha.
   const fechaProgramada = (rest?.fecha_cambio_programado ?? '').slice(0, 10)
   const hayCambioProgramado = Boolean(rest?.plan_programado && fechaProgramada)
@@ -160,53 +165,39 @@ export default function SuscripcionPage() {
     if (!rest?.id) return
     setPlanEnProceso('gratis')
     setErrorCancelar('')
-    const supabase = createClient()
 
-    // SE APAGA ANTES DE CANCELAR, y si no se puede apagar NO se cancela. El
-    // orden importa porque los dos fallos posibles no cuestan lo mismo:
-    // apagado sin cancelación deja a alguien con su plan vivo y la renovación
-    // apagada (visible, reversible con un clic, y erra hacia NO mover plata);
-    // cancelación sin apagado deja exactamente la bandera armada que este
-    // bloque existe para eliminar. Va por la ruta del server y no por un update
-    // suelto: esta columna deja línea de log y fila en la bitácora de
-    // consentimiento, y un update desde el navegador no deja ninguna de las dos.
-    if (rest.cobro_automatico) {
-      try {
-        const res = await fetch('/api/wompi/cobro-automatico', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ activar: false, motivo: 'suscripcion_cancelada' }),
-        })
-        if (!res.ok) {
-          setErrorCancelar('No pudimos apagar la renovación automática, así que no cancelamos tu plan. Intenta de nuevo.')
-          setPlanEnProceso(null)
-          return
-        }
-      } catch {
-        setErrorCancelar('No pudimos apagar la renovación automática, así que no cancelamos tu plan. Intenta de nuevo.')
-        setPlanEnProceso(null)
-        return
-      }
+    // UNA sola llamada (CIERRE 1). /api/suscripcion/cancelar apaga la
+    // renovación Y agenda (o aplica) la bajada en un único UPDATE condicional,
+    // así que ya no existe el estado intermedio "apagado pero sin cancelar" ni
+    // la ventana en que otra pestaña podía rearmar el cobro entre los dos pasos.
+    // El server decide agendar o inmediata con la misma regla que pinta la hoja
+    // de confirmación, y deja la fila REVOCADO en la bitácora si había opt-in.
+    // fue_pago no se toca en ninguna rama (latch one-way, STRATEGIC.2).
+    let data: { ok?: boolean; modo?: string; fecha?: string; idempotente?: boolean; error?: string } | null = null
+    let ok = false
+    try {
+      const res = await fetch('/api/suscripcion/cancelar', { method: 'POST' })
+      data = await res.json().catch(() => null)
+      ok = res.ok && data?.ok === true
+    } catch {
+      ok = false
     }
-
-    // fue_pago es un latch one-way (STRATEGIC.2): NINGUNA de las dos ramas lo
-    // toca (solo el pago lo activa). De él depende la regla de fotos del plan
-    // gratis (lib/fotosGate); resetearlo republicaría fotos que estaban ocultas.
-    const { error } = puedeProgramar
-      ? await supabase
-          .from('restaurantes')
-          .update({ plan_programado: 'gratis', fecha_cambio_programado: expiraVigente })
-          .eq('id', rest.id)
-      : await supabase
-          .from('restaurantes')
-          // periodo_plan NO se toca: es el periodo COMPRADO, no el del toggle.
-          .update({ plan: 'gratis' })
-          .eq('id', rest.id)
+    if (!ok) {
+      // Un fallo SE VE (C-05): ni correo ni navegación, el mensaje del server
+      // en el mismo hueco de siempre.
+      setErrorCancelar(
+        typeof data?.error === 'string' ? data.error : 'No pudimos cancelar tu suscripción. Intenta de nuevo.'
+      )
+      setPlanEnProceso(null)
+      return
+    }
+    const programado = data?.modo === 'programado'
 
     // Refresca la fila cacheada (useAuth/useRestauranteByUserId) para que el plan
     // nuevo se refleje en todo el admin sin reload (patrón mutate de H.1.c.2.b).
     await mutateRestaurante()
-    if (!error && planActual !== 'gratis') {
+    // idempotente = ya estaba cancelada (otra pestaña): el correo ya salió.
+    if (planActual !== 'gratis' && !data?.idempotente) {
       // Correo de cambio de plan (F3): fire-and-forget, nunca bloquea el flujo.
       // Con fecha_cambio el copy dice "cambiará el <fecha>" en vez de "ya está
       // aplicado" — que sería mentira mientras el plan siga vivo.
@@ -218,14 +209,14 @@ export default function SuscripcionPage() {
           plan_nuevo: 'gratis',
           plan_anterior: planActual,
           periodo_anterior: periodoActual,
-          ...(puedeProgramar ? { fecha_cambio: expiraVigente } : {}),
+          ...(programado && data?.fecha ? { fecha_cambio: data.fecha } : {}),
         }),
       }).catch(console.error)
     }
     setPlanEnProceso(null)
     // Agendado: se queda en la página para que el usuario VEA el estado de
     // retención (sigue teniendo su plan). Inmediato: al dashboard, como siempre.
-    if (!puedeProgramar) router.push('/dashboard')
+    if (!programado) router.push('/dashboard')
   }
 
   // Deshacer la cancelación (patrón "Restart membership"). Solo limpia las dos
@@ -241,11 +232,21 @@ export default function SuscripcionPage() {
   async function reactivarSuscripcion() {
     if (!rest?.id) return
     setReactivando(true)
-    const supabase = createClient()
-    await supabase
-      .from('restaurantes')
-      .update({ plan_programado: null, fecha_cambio_programado: null })
-      .eq('id', rest.id)
+    setErrorReactivar('')
+    // Por /api/suscripcion/reactivar (CIERRE 1): el navegador ya no escribe
+    // columnas de facturación. La ruta tampoco reenciende el cobro.
+    let ok = false
+    try {
+      const res = await fetch('/api/suscripcion/reactivar', { method: 'POST' })
+      ok = res.ok
+    } catch {
+      ok = false
+    }
+    if (!ok) {
+      setErrorReactivar('No pudimos reactivar tu suscripción. Intenta de nuevo.')
+      setReactivando(false)
+      return
+    }
     await mutateRestaurante()
     setReactivando(false)
   }
@@ -353,12 +354,22 @@ export default function SuscripcionPage() {
               <div style={{ fontSize: '12px', color: 'var(--color-warning)', opacity: 0.85, marginTop: '2px' }}>
                 Después pasarás a {nombrePlanProgramado}. Conservas todo lo que pagaste hasta esa fecha.
               </div>
+              {/* C-04: reactivar NO reenciende el cobro automático (a propósito),
+                  y sin esta línea el plan vencería en silencio. */}
+              <div style={{ fontSize: '12px', color: 'var(--color-warning)', opacity: 0.85, marginTop: '2px' }}>
+                Al reactivar, la renovación automática sigue apagada. Puedes volver a activarla en Método de pago.
+              </div>
               <Boton variante="secundario" tamano="sm"
                 onClick={reactivarSuscripcion}
                 style={{ marginTop: '10px' }}
                 disabled={reactivando}>
                 {reactivando ? 'Reactivando...' : 'Reactivar suscripción'}
               </Boton>
+              {errorReactivar && (
+                <div style={{ fontSize: '11px', color: 'var(--color-danger)', marginTop: '6px', lineHeight: 1.45 }}>
+                  {errorReactivar}
+                </div>
+              )}
             </div>
           </div>
         )}

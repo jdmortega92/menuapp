@@ -77,7 +77,8 @@ export default function CompletaPerfilPage() {
         ciudad,
         whatsapp,
         slug,
-        plan: 'gratis',
+        // plan NO se manda (CIERRE 1): las columnas de facturacion no las
+        // escribe el navegador. La DB pone 'gratis' por default.
         idioma: 'es',
       })
 

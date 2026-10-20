@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase-server'
 import { createAdminClient } from '@/lib/supabase-admin'
-import { construirConsentimiento } from '@/lib/wompi'
+import { registrarConsentimiento } from '@/lib/consentimientos'
 import { bloqueoDeActivacion, type BloqueoActivacion } from '@/lib/suscripciones'
 
 // F4.c-5 — EL OPT-IN. Enciende y apaga restaurantes.cobro_automatico, que es la
@@ -122,37 +122,62 @@ export async function POST(request: Request) {
   // cobro_automatico_desde se ESCRIBE al encender y se LIMPIA al apagar: es
   // "desde cuando esta activo", no un historico. El historico son las filas de
   // consentimientos_pago, que son append-only y nadie puede reescribir.
-  const { error: errUpd } = await admin
-    .from('restaurantes')
-    .update({
-      cobro_automatico: activar,
-      cobro_automatico_desde: activar ? new Date().toISOString() : null,
-    })
-    .eq('id', rest.id)
-  if (errUpd) {
-    console.error('[wompi/cobro-automatico] update fallo:', errUpd.message)
-    return NextResponse.json({ error: 'No se pudo guardar' }, { status: 500 })
+  if (activar) {
+    // ENCENDER ES CONDICIONAL (D-HIGH-1). La guarda de arriba valida una FOTO
+    // de la fila; entre esa lectura y este update una cancelacion puede haber
+    // agendado plan_programado (otra pestana, o el propio flujo de cancelar).
+    // El .is('plan_programado', null) hace que la condicion se evalue EN la
+    // escritura, y las filas afectadas dicen si de verdad se armo.
+    const { data: armadas, error: errUpd } = await admin
+      .from('restaurantes')
+      .update({
+        cobro_automatico: true,
+        cobro_automatico_desde: new Date().toISOString(),
+      })
+      .eq('id', rest.id)
+      .is('plan_programado', null)
+      .select('id')
+    if (errUpd) {
+      console.error('[wompi/cobro-automatico] update fallo:', errUpd.message)
+      return NextResponse.json({ error: 'No se pudo guardar' }, { status: 500 })
+    }
+    if (!armadas || armadas.length === 0) {
+      console.info(`[wompi/cobro-automatico] encendido rechazado en la escritura restaurante=${rest.id} motivo=cancelacion_pendiente`)
+      return NextResponse.json(
+        { error: MENSAJE_BLOQUEO.cancelacion_pendiente, motivo: 'cancelacion_pendiente' },
+        { status: 409 }
+      )
+    }
+  } else {
+    const { error: errUpd } = await admin
+      .from('restaurantes')
+      .update({
+        cobro_automatico: false,
+        cobro_automatico_desde: null,
+      })
+      .eq('id', rest.id)
+    if (errUpd) {
+      console.error('[wompi/cobro-automatico] update fallo:', errUpd.message)
+      return NextResponse.json({ error: 'No se pudo guardar' }, { status: 500 })
+    }
   }
 
   // Bitacora. Encender es OTORGADO y apagar es REVOCADO, con motivo propio para
   // no confundirlos con quitar el metodo: el evento describe la AUTORIZACION A
   // COBRAR, y apagar la renovacion es exactamente "dejamos de cobrar" aunque el
-  // metodo siga guardado. Si el insert falla NO se revierte el cambio: dejar al
-  // usuario con el cobro encendido porque no pudimos escribir un log seria peor
-  // que perder evidencia (y al apagar seria directamente inaceptable).
-  const { error: errConsent } = await admin.from('consentimientos_pago').insert(
-    construirConsentimiento({
+  // metodo siga guardado. Solo se llega aqui con el update ya aplicado.
+  await registrarConsentimiento(
+    admin,
+    {
       restauranteId: rest.id,
       fuentePagoId: fuente?.id ?? null,
       evento: activar ? 'OTORGADO' : 'REVOCADO',
       motivo: activar ? 'cobro_automatico_activado' : motivoApagado,
       ip: request.headers.get('x-forwarded-for'),
       userAgent: request.headers.get('user-agent'),
-    })
+    },
+    'wompi/cobro-automatico'
   )
-  if (errConsent) {
-    console.error('[wompi/cobro-automatico] insert de consentimiento fallo:', errConsent.message)
-  }
 
   console.info(`[wompi/cobro-automatico] restaurante=${rest.id} activo=${activar}`)
   return NextResponse.json({ ok: true, cobroAutomatico: activar }, { status: 200 })

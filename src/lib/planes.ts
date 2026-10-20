@@ -47,6 +47,11 @@ export const PLANES: Record<Plan, PlanInfo> = {
 // Orden de renderizado de las cards en /suscripcion.
 export const LISTA_PLANES: PlanInfo[] = [PLANES.gratis, PLANES.basico, PLANES.pro]
 
+// Jerarquia de planes, de menor a mayor. LISTA CERRADA: es lo que decide si un
+// plan_programado es una bajada (lib/suscripciones esBajadaDePlan) antes de que
+// el cron lo escriba como plan. Un string fuera de esta lista no es un plan.
+export const ORDEN_PLANES: readonly Plan[] = ['gratis', 'basico', 'pro']
+
 export function precioDe(plan: Plan, periodo: Periodo): number {
   return periodo === 'anual' ? PLANES[plan].precioAnual : PLANES[plan].precioMensual
 }

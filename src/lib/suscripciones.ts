@@ -8,6 +8,9 @@
 // que pueda arrastrar el huso del servidor (familia BL.29 — Vercel Cron corre en
 // UTC, y entre 00:00 y 04:59 UTC el dia UTC ya es el SIGUIENTE en Colombia).
 
+import { ORDEN_PLANES } from './planes'
+import type { Plan } from '@/types'
+
 // Normaliza lo que devuelve Postgres ('2026-08-27' o
 // '2026-08-27T00:00:00+00:00') a la fecha calendario 'YYYY-MM-DD'. Devuelve ''
 // si no calza o si mes/dia estan fuera de rango: la forma sola no basta,
@@ -30,6 +33,39 @@ export function cambioProgramadoVencido(
   const fecha = fechaCalendario(fechaCambio)
   if (!fecha) return false
   return fecha <= hoy
+}
+
+// ── Cancelacion y cambios agendados (CIERRE 1) ───────────────────────────
+
+// La fecha a la que se AGENDA una cancelacion, o '' si se aplica en el acto.
+// Es la regla que vivia en /suscripcion (puedeProgramar/expiraVigente), movida
+// aqui para que la UI y /api/suscripcion/cancelar no puedan divergir: con plan
+// pago y plan_expira vigente (>= hoy, fecha CALENDARIO COT) se agenda para ese
+// dia y el usuario conserva lo que pago (F4.b-1); sin tiempo restante, o sin
+// fecha valida, la bajada es inmediata.
+export function fechaCancelacionProgramada(
+  plan: string | null | undefined,
+  planExpira: string | null | undefined,
+  hoy: string
+): string {
+  if (!plan || plan === 'gratis') return ''
+  const expira = fechaCalendario(planExpira)
+  if (!expira || expira < hoy) return ''
+  return expira
+}
+
+// true SOLO si programado es un plan ESTRICTAMENTE menor que actual en la lista
+// cerrada de lib/planes. El cron aplica plan_programado como plan sin pasar por
+// un pago, asi que lo unico que puede aplicar asi es una BAJADA: una subida, un
+// mismo plan o un string desconocido no son bajadas (D-CRIT-1).
+export function esBajadaDePlan(
+  actual: string | null | undefined,
+  programado: string | null | undefined
+): boolean {
+  const iActual = ORDEN_PLANES.indexOf((actual ?? '') as Plan)
+  const iProgramado = ORDEN_PLANES.indexOf((programado ?? '') as Plan)
+  if (iActual < 0 || iProgramado < 0) return false
+  return iProgramado < iActual
 }
 
 // Un plan pago vence cuando su fecha YA PASO: < estricto. El dia del

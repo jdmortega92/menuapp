@@ -6,6 +6,7 @@ import {
   cambioProgramadoVencido,
   debeExpirar,
   debeCobrarse,
+  esBajadaDePlan,
   fechaCalendario,
   DIAS_ANTES_DE_COBRAR,
   type FuenteCobrable,
@@ -154,6 +155,39 @@ export async function GET(request: Request) {
     const planNuevo = fila.plan_programado as string
     const planAnterior = (fila.plan as string | null) ?? 'gratis'
 
+    // VALIDACION ANTES DE ESCRIBIR (D-CRIT-1). plan_programado es una columna
+    // que el dueno puede escribir desde su sesion; aplicarla tal cual convertia
+    // al cron en la forma de regalarse un plan pago. Aqui SOLO se aplica una
+    // bajada estricta segun la lista cerrada de lib/planes. El mismo plan se
+    // limpia sin tocar plan (no hay nada que aplicar); cualquier otra cosa
+    // (subida, string desconocido) no se escribe y se cuenta como fallo.
+    if (!esBajadaDePlan(fila.plan as string | null, planNuevo)) {
+      if (planNuevo === fila.plan) {
+        const { data: limpiadas, error: errLimpiar } = await admin
+          .from('restaurantes')
+          .update({ plan_programado: null, fecha_cambio_programado: null })
+          .eq('id', fila.id)
+          .eq('plan', fila.plan)
+          .eq('plan_programado', fila.plan_programado)
+          .eq('fecha_cambio_programado', fila.fecha_cambio_programado)
+          .select('id')
+        if (errLimpiar) {
+          console.error(`[cron/suscripciones] limpiar plan_programado fallo restaurante=${fila.id}:`, errLimpiar.message)
+          resumen.fallidos++
+        } else if (!limpiadas || limpiadas.length === 0) {
+          console.info(`[cron/suscripciones] fila cambio entre lectura y escritura restaurante=${fila.id}`)
+        } else {
+          console.info(`[cron/suscripciones] plan_programado igual al plan actual, limpiado restaurante=${fila.id} plan=${planNuevo}`)
+        }
+        continue
+      }
+      console.error(
+        `[cron/suscripciones] plan_programado invalido restaurante=${fila.id} actual=${fila.plan} programado=${planNuevo}`
+      )
+      resumen.fallidos++
+      continue
+    }
+
     // DESARME AL APLICAR (F4.c-5). Cancelar ya apaga el cobro automatico en el
     // momento de cancelar (/suscripcion), asi que aqui casi siempre no hay nada
     // que apagar. Esta rama existe para las filas que se agendaron ANTES de esa
@@ -164,7 +198,13 @@ export async function GET(request: Request) {
     // hoy no existe) no es una cancelacion y no debe tocar el opt-in.
     const desarmaCobro = planNuevo === 'gratis' && fila.cobro_automatico === true
 
-    const { error } = await admin
+    // ESCRITURA CONDICIONAL (D-CRIT-3): el update exige que la fila siga siendo
+    // la que se leyo (plan, plan_programado y fecha). Si un pago APPROVED entro
+    // a mitad del barrido, el webhook ya limpio plan_programado y aqui no se
+    // escribe nada: aplicar la bajada vieja dejaria en gratis a alguien que
+    // acaba de pagar, y nada lo restauraria.
+    // fila.plan nunca es null aqui: esBajadaDePlan(null, x) es false.
+    const { data: aplicadas, error } = await admin
       .from('restaurantes')
       .update({
         plan: planNuevo,
@@ -173,10 +213,19 @@ export async function GET(request: Request) {
         ...(desarmaCobro ? { cobro_automatico: false, cobro_automatico_desde: null } : {}),
       })
       .eq('id', fila.id)
+      .eq('plan', fila.plan)
+      .eq('plan_programado', fila.plan_programado)
+      .eq('fecha_cambio_programado', fila.fecha_cambio_programado)
+      .select('id')
     if (error) {
       // Una fila rota no puede tumbar el barrido: se cuenta y se sigue.
       console.error(`[cron/suscripciones] aplicar cambio fallo restaurante=${fila.id}:`, error.message)
       resumen.fallidos++
+      continue
+    }
+    if (!aplicadas || aplicadas.length === 0) {
+      // Sin correo ni evidencia: no paso nada que contar.
+      console.info(`[cron/suscripciones] fila cambio entre lectura y escritura restaurante=${fila.id}`)
       continue
     }
     resumen.aplicados++
@@ -248,13 +297,24 @@ export async function GET(request: Request) {
 
     // plan_expira NO se limpia: queda como registro historico de hasta cuando
     // estuvo pago (lo lee /suscripcion para decir "Tu plan venció el ...").
-    const { error } = await admin
+    //
+    // ESCRITURA CONDICIONAL (D-CRIT-3): el mismo predicado que eligio la fila.
+    // Si una renovacion APPROVED movio plan_expira mientras el barrido mandaba
+    // correos, la fila ya no esta vencida y no se baja a gratis.
+    const { data: expiradas, error } = await admin
       .from('restaurantes')
       .update({ plan: 'gratis' })
       .eq('id', fila.id)
+      .neq('plan', 'gratis')
+      .lt('plan_expira', hoy)
+      .select('id')
     if (error) {
       console.error(`[cron/suscripciones] expirar fallo restaurante=${fila.id}:`, error.message)
       resumen.fallidos++
+      continue
+    }
+    if (!expiradas || expiradas.length === 0) {
+      console.info(`[cron/suscripciones] fila cambio entre lectura y escritura restaurante=${fila.id}`)
       continue
     }
     resumen.expirados++
