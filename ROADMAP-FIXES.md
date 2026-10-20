@@ -498,6 +498,29 @@ Decision 2026-07-03: Julian mantiene $15k/$29k mensual ($150k/$290k anual, ~2 me
 
 ## Items
 
+### AUD-2 Privilegios por columna en restaurantes + constraints - CLOSED
+- **Closed**: 2026-10-20. Solo SQL: supabase/migrations/20261020000001_restaurantes_column_grants.sql, corrido a mano seccion por seccion en el Supabase SQL Editor.
+- **Privilegios**: REVOKE INSERT, UPDATE ON restaurantes FROM anon, authenticated. GRANT INSERT sobre 7 columnas: usuario_id, nombre, tipo, ciudad, whatsapp, slug, idioma. GRANT UPDATE sobre 15 columnas: logo_url, banner_url, nombre, tipo, ciudad, whatsapp, direccion, descripcion, color_principal, tema, menu_compartido, qr_generado, codigo_referido, onboarding_cerrado, bienvenida_enviada. Las 8 columnas de facturacion ya no son escribibles por anon/authenticated. SELECT y DELETE sin cambios. Las rutas admin (service role) no se ven afectadas.
+- **Constraints**: UNIQUE(usuario_id) restaurantes_usuario_id_key; CHECK plan IN ('gratis','basico','pro'); CHECK plan_programado IS NULL OR IN ('gratis','basico','pro'); plan NOT NULL (ya lo era).
+- **Cierra**: ID-1, D-CRIT-2, ID-2, D-MED-1 (fue_pago ahora solo lo escribe el webhook).
+- **Evidencia**: el pre-check mostro todos los privilegios en true; post-check whitelist: 0 filas. Probe impersonando al dueno del restaurante de prueba: UPDATE plan 42501, UPDATE fue_pago 42501, UPDATE nombre OK rows=1, segundo INSERT con el mismo usuario_id 23505, INSERT con plan='pro' 42501. Smoke de Julian de los caminos de escritura no-admin en produccion: OK.
+- **REGLA PERMANENTE: una columna nueva de restaurantes que el codigo de navegador o de cliente de sesion tenga que escribir necesita un GRANT INSERT/UPDATE explicito en una migracion de supabase/migrations/. Sin el, la escritura falla con 42501, y hoy la UI se traga ese error y muestra "Guardado" igual (UI-2.0).**
+- **Anotado, sin cambiar**: un dueno en plan gratis puede escribir tema, pero el menu publico aplica el gate Pro al leer ([slug]/page.tsx); bienvenida_enviada la puede resetear el dueno, y el correo de bienvenida solo va a la direccion de la propia sesion.
+- **Commit**: f803db7.
+
+### AUD-1 Escrituras de facturacion salen del navegador + guardas del cron - CLOSED
+- **Closed**: 2026-10-20.
+- **Rutas nuevas** (cliente admin, identidad desde la sesion): /api/suscripcion/cancelar hace UN UPDATE condicional que desarma cobro_automatico y agenda o aplica la bajada, devuelve errores visibles, escribe la fila REVOCADO de consentimiento solo despues de un UPDATE que afecto una fila, y responde idempotente cuando la cancelacion ya existe. /api/suscripcion/reactivar limpia el agendamiento con un UPDATE condicional y nunca rearma cobro_automatico. Helper compartido src/lib/consentimientos.ts, usado tambien por /api/wompi/cobro-automatico.
+- **/api/wompi/cobro-automatico**: encender es un UPDATE condicional (plan_programado IS NULL), y la fila OTORGADO se escribe solo despues de un UPDATE que afecto una fila.
+- **Cron**: el barrido A aplica plan_programado solo si esBajadaDePlan (lista cerrada ORDEN_PLANES en src/lib/planes.ts). El mismo plan limpia el agendamiento; cualquier otra cosa se loguea como "plan_programado invalido" y cuenta en fallidos. Los barridos A y B condicionan sus UPDATE al predicado que eligio la fila; correo y evidencia solo ocurren si una fila fue afectada.
+- **Alta**: registro y completa-perfil ya no mandan plan (default de la DB 'gratis').
+- **Copy C-04** en el banner de retencion: al reactivar, la renovacion automatica sigue apagada.
+- **Funciones puras nuevas**: fechaCancelacionProgramada y esBajadaDePlan en src/lib/suscripciones.ts, con tests en src/lib/cancelacion.test.ts. Tests 431 -> 441.
+- **Cierra**: D-CRIT-1, D-CRIT-3, D-HIGH-1, D-HIGH-1b, C-04, y la parte de cancelar/reactivar de C-05.
+- **Evidencia (restaurante de prueba)**: la cancelacion agendada dejo plan_programado='gratis', fecha_cambio_programado = la fecha de plan_expira, cobro_automatico=false y fue_pago intacto. Reactivar limpio el agendamiento y mantuvo cobro_automatico=false. Cron llamado localmente: una fila con plan_programado='pro' fue rechazada (fallidos 1, fila sin cambios); una bajada a gratis se aplico (aplicados 1); un plan vencido se expiro (expirados 1).
+- **Movido al nivel 2 (camino del cobro automatico)**: D-MED-5 (CAS en la marca FALLIDO del cron) y C-7 (el barrido B no desarma cobro_automatico).
+- **Commit**: 652df8b.
+
 ### AUD-A RLS multi-tenant - cierra escrituras y lecturas cross-tenant - CLOSED
 - **Closed**: 2026-10-20. Solo SQL, cero codigo de app. El registro es abierto, asi que "authenticated" significa "cualquiera con un email": cualquier usuario registrado podia insertar, modificar o borrar filas de CUALQUIER restaurante.
 - **Hallazgo (pg_policies en produccion)**: politicas de escritura que solo exigian auth.role() = 'authenticated', sin chequeo de propiedad, en horarios, plato_del_dia, combos, promos (INSERT/UPDATE/DELETE) y combo_platos, promo_platos (INSERT/DELETE). SELECT cross-tenant para cualquier authenticated en pedidos_whatsapp, visitas_menu, vistas_platos, escaneos. referidos: INSERT publico (true), SELECT publico (true), UPDATE para cualquier sesion (auth.uid() IS NOT NULL).
