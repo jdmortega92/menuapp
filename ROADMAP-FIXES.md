@@ -498,6 +498,37 @@ Decision 2026-07-03: Julian mantiene $15k/$29k mensual ($150k/$290k anual, ~2 me
 
 ## Items
 
+### AUD-A RLS multi-tenant - cierra escrituras y lecturas cross-tenant - CLOSED
+- **Closed**: 2026-10-20. Solo SQL, cero codigo de app. El registro es abierto, asi que "authenticated" significa "cualquiera con un email": cualquier usuario registrado podia insertar, modificar o borrar filas de CUALQUIER restaurante.
+- **Hallazgo (pg_policies en produccion)**: politicas de escritura que solo exigian auth.role() = 'authenticated', sin chequeo de propiedad, en horarios, plato_del_dia, combos, promos (INSERT/UPDATE/DELETE) y combo_platos, promo_platos (INSERT/DELETE). SELECT cross-tenant para cualquier authenticated en pedidos_whatsapp, visitas_menu, vistas_platos, escaneos. referidos: INSERT publico (true), SELECT publico (true), UPDATE para cualquier sesion (auth.uid() IS NOT NULL).
+- **Por que ninguna de las cuatro auditorias lo vio**: no habia SQL en el repo; las politicas vivian solo en Supabase.
+- **Fix**: supabase/migrations/20261020000000_rls_multitenant.sql, el PRIMER SQL versionado del repo, corrido a mano seccion por seccion en el Supabase SQL Editor. Se borraron 23 politicas amplias y se crearon 11 con propiedad:
+  - `<tabla>_propios`, FOR ALL, en horarios, plato_del_dia, combos, promos, combo_platos, promo_platos. Las junctions y plato_del_dia exigen ademas en WITH CHECK que el plato sea del llamador y que la variante, si hay, pertenezca a ese plato.
+  - `<tabla>_lectura_propia`, SELECT, en las cuatro tablas de analitica.
+  - referidos_lectura_propia, SELECT, cuando el llamador es referidor o referido. Sin politicas de escritura en referidos.
+- **Fuera de alcance a proposito**: SELECT publico en las tablas de contenido (lo usa el menu publico) e INSERT publico en las de analitica (ID-5, pendiente).
+- **Evidencia**:
+  - Pre-check (Seccion 0): 38 politicas en las 11 tablas, RLS activo en todas; coincidio exactamente con el brief. El rollback de la Seccion 5 se verifico linea por linea contra ese resultado.
+  - Probe (bloque DO que impersona al usuario B contra el restaurante A, revertido por RAISE). ANTES del fix B toco horarios 7/7, plato_del_dia 1/1, pedidos_whatsapp 47/47, visitas_menu 682/682, vistas_platos 404/404, escaneos 1/1. DESPUES: 0 en todas las tablas. A no tenia combos ni promos; esos quedan cubiertos por el chequeo estructural.
+  - Post-check whitelist (Seccion 3b): 0 filas.
+  - Smoke del dueno (lecturas del dashboard y escrituras del admin): OK.
+- **Hechos verificados en la DB, 2026-10-19/20** (pg_policies, pg_trigger, pg_indexes, information_schema, has_column_privilege). Resuelven items "Could not verify" de los cuatro AUDIT-*.md:
+  - ID-1 / D-CRIT-2 CONFIRMADO: la politica "Restaurante propio" de restaurantes es FOR ALL USING (usuario_id = auth.uid()) sin restriccion de columnas. authenticated tiene UPDATE e INSERT sobre plan, periodo_plan, plan_expira, fue_pago, plan_programado, fecha_cambio_programado, cobro_automatico, cobro_automatico_desde. anon tambien tiene el privilegio; RLS lo bloquea. Por lo tanto D-CRIT-1 NO es condicional.
+  - restaurantes tiene dos politicas SELECT publicas con qual true (ID-3 confirmado).
+  - fuentes_pago, facturas, consentimientos_pago: solo un SELECT del dueno para authenticated, sin politicas de escritura. ID-4 resuelto; no hay hueco de escritura en fuentes_pago.
+  - consentimientos_pago: el trigger trg_consentimientos_pago_inmutable BEFORE UPDATE existe.
+  - facturas.numero es unico (dos indices unicos redundantes: facturas_numero_key, facturas_numero_unico). C-1 / D-HIGH-2 siguen en pie: el plan se otorga ANTES del insert de la factura.
+  - Indices unicos de fuentes_pago existen: uq_fuentes_pago_predeterminada (parcial), uq_fuentes_pago_wompi_id, uq_fuentes_pago_wompi_token.
+  - NUEVO: restaurantes NO tiene indice unico en usuario_id. Una cuenta puede crear varios restaurantes, y las rutas que leen por usuario_id con .single() se rompen con dos filas.
+  - Columnas de restaurantes: plan text default 'gratis'; fue_pago y cobro_automatico boolean default false; plan_expira timestamptz (C-10 latente); fecha_cambio_programado date. El trigger on_restaurante_created AFTER INSERT corre crear_config_restaurante().
+  - Las FKs de combo_platos y promo_platos (padre, plato_id, variante_id) son ON DELETE CASCADE.
+  - referidos.referidor_id y referido_id referencian restaurantes(id) SIN accion ON DELETE. Borrar un restaurante que aparezca en cualquier fila de referidos falla con violacion de FK, y el borrado de cuenta ignora el error (C-02).
+  - calificaciones, visitas_menu, vistas_platos, pedidos_whatsapp no tienen politica DELETE, asi que los deletes del navegador en el borrado de cuenta borran 0 filas (C-02).
+  - suscripciones y datos_facturacion: RLS activo, cero politicas, sin uso en el codigo.
+  - Tipos desactualizados: Referido (src/types/index.ts:269-277) lista columnas que no existen; las reales son referidor_id, referido_id, codigo, estado, beneficio_aplicado. A PedidoWhatsapp le faltan mesa, origen, session_id. A VistaPlato le falta session_id. visitas_menu no tiene tipo.
+- **Pendiente, no resuelto aqui**: grants por columna en restaurantes, UNIQUE(usuario_id) y rutas de servidor para cancelar y reactivar (proximos cierres). ID-5 (INSERT publico en analitica y calificaciones), politicas e indices duplicados, tablas muertas, tipos desactualizados.
+- **Commit**: 583acdd.
+
 ### F4.c-5 ✅ Cobro automatico recurrente — CLOSED
 - **Closed**: 2026-08-05. La fase del dinero: por primera vez el sistema gasta plata de un usuario sin que nadie mire.
 - **Arquitectura (decidida por el spike F4.c-2, no rediseñada)**: el cron SOLO INICIA; el webhook —ya probado en produccion— otorga el plan. El cron NUNCA escribe plan, plan_expira ni fue_pago, y NUNCA interpreta la respuesta de la API como autorizacion.
