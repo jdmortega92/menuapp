@@ -106,7 +106,13 @@ export async function POST(request: Request) {
     // Defensa en profundidad: el monto debe coincidir con el precio real.
     const esperadoCents = centavosDe(plan, periodo)
     if (transaction.amount_in_cents !== esperadoCents) {
-      console.warn('[wompi/eventos] monto no coincide, no se otorga plan')
+      // 200 a proposito (reintentar no cambia el monto), pero como ERROR con
+      // todo lo necesario para reconciliar a mano (C-6): un APPROVED con monto
+      // distinto es plata cobrada sin plan otorgado.
+      console.error(
+        `[wompi/eventos] monto no coincide, no se otorga plan reference=${reference} ` +
+          `restaurante=${restauranteId} esperado=${esperadoCents} recibido=${transaction.amount_in_cents}`
+      )
       return NextResponse.json({ recibido: true }, { status: 200 })
     }
     // Ya procesado: no re-escribir ni duplicar factura.
@@ -121,6 +127,11 @@ export async function POST(request: Request) {
       .select('plan, periodo_plan, plan_expira, usuario_id')
       .eq('id', restauranteId)
       .maybeSingle()
+    if (!restPrev) {
+      // Reintentar no crea el restaurante: 200 y queda en el log para revisar.
+      console.error(`[wompi/eventos] restaurante no existe reference=${reference} restaurante=${restauranteId}`)
+      return NextResponse.json({ recibido: true }, { status: 200 })
+    }
     const planAnterior = (restPrev?.plan as string | undefined) ?? 'gratis'
     const usuarioId = restPrev?.usuario_id as string | undefined
 
@@ -138,37 +149,50 @@ export async function POST(request: Request) {
       new Date(),
       renovacion ? (restPrev?.plan_expira as string | null | undefined) : null
     )
+    // FACTURA + PLAN EN UNA SOLA TRANSACCION (CIERRE 3, C-1 / D-HIGH-2).
+    // Antes: UPDATE del plan y DESPUES insert de la factura, con el error del
+    // insert tragado. Como la factura es la unica huella de idempotencia, un
+    // insert fallido convertia cada reentrega de Wompi en otro mes gratis, y dos
+    // entregas concurrentes podian extender las dos. Ahora la funcion
+    // aplicar_pago_aprobado (supabase/migrations/20261020000002) inserta la
+    // factura con ON CONFLICT (numero) DO NOTHING y solo si entro actualiza el
+    // plan, condicionado a que la fila siga como se leyo arriba. Todo o nada.
     // Un pago CANCELA cualquier bajada agendada: quien paga no se esta bajando.
-    const { error: updErr } = await admin
-      .from('restaurantes')
-      .update({
-        plan,
-        periodo_plan: periodo,
-        fue_pago: true,
-        plan_expira: planExpira,
-        plan_programado: null,
-        fecha_cambio_programado: null,
-      })
-      .eq('id', restauranteId)
-    if (updErr) {
-      console.error('[wompi/eventos] update de restaurante fallo:', updErr.message)
+    const [ano, mes] = fechaColombia().split('-').map(Number)
+    const { data: resultado, error: rpcErr } = await admin.rpc('aplicar_pago_aprobado', {
+      p_restaurante_id: restauranteId,
+      p_numero: reference,
+      p_monto: transaction.amount_in_cents! / 100,
+      p_metodo_pago: transaction.payment_method_type ?? 'wompi',
+      p_periodo_mes: mes,
+      p_periodo_ano: ano,
+      p_fecha_pago: fechaColombia(),
+      p_plan: plan,
+      p_periodo: periodo,
+      p_plan_expira: planExpira,
+      // El estado ANTERIOR tal cual se leyo: la funcion solo escribe si la fila
+      // sigue igual, asi que lo que se calculo arriba sigue siendo valido.
+      p_prev_plan: restPrev.plan ?? null,
+      p_prev_periodo: restPrev.periodo_plan ?? null,
+      p_prev_plan_expira: restPrev.plan_expira ?? null,
+    })
+    if (rpcErr) {
+      if (rpcErr.code === 'MA409') {
+        // La fila cambio entre la lectura y la escritura (otro evento, el cron).
+        // No se escribio nada; el reintento de Wompi recalcula sobre la fila nueva.
+        console.warn(`[wompi/eventos] conflicto, Wompi reintentara reference=${reference} restaurante=${restauranteId}`)
+      } else {
+        console.error(`[wompi/eventos] aplicar_pago_aprobado fallo reference=${reference}:`, rpcErr.message)
+      }
       return NextResponse.json({ error: 'DB' }, { status: 500 }) // Wompi reintenta
     }
-
-    if (!existente) {
-      const [ano, mes] = fechaColombia().split('-').map(Number)
-      const { error: facErr } = await admin.from('facturas').insert({
-        restaurante_id: restauranteId,
-        numero: reference,
-        monto: transaction.amount_in_cents! / 100,
-        metodo_pago: transaction.payment_method_type ?? 'wompi',
-        periodo_mes: mes,
-        periodo_ano: ano,
-        fecha_pago: fechaColombia(),
-        estado: 'aprobada',
-      })
-      // El plan ya se otorgo; un fallo de factura no debe gatillar reintento.
-      if (facErr) console.error('[wompi/eventos] insert de factura fallo:', facErr.message)
+    if (resultado === 'duplicado') {
+      // Otra entrega del MISMO evento ya escribio factura y plan: ni plan ni correo.
+      return NextResponse.json({ recibido: true, idempotente: true }, { status: 200 })
+    }
+    if (resultado !== 'aplicado') {
+      console.error(`[wompi/eventos] aplicar_pago_aprobado devolvio un valor inesperado reference=${reference}: ${String(resultado)}`)
+      return NextResponse.json({ error: 'DB' }, { status: 500 })
     }
 
     // Email (server-callable, sin sesion). No romper el webhook si falla.
