@@ -498,6 +498,27 @@ Decision 2026-07-03: Julian mantiene $15k/$29k mensual ($150k/$290k anual, ~2 me
 
 ## Items
 
+### AUD-4 Entorno de Wompi por prefijo de llaves, freno del cobro automatico y boton Renovar (CIERRE 4) - CLOSED
+- **Closed**: 2026-10-20. Sin SQL. Desplegado y verificado en produccion.
+- **Decision**: los pilotos arrancan CON renovacion automatica desde el primer dia, pero solo despues de cerrar todo el nivel 2 y de que un cobro real controlado salga bien; hasta entonces el freno queda puesto.
+- **Fix W-1**: src/lib/wompiEntorno.ts resuelve el entorno por el prefijo de la llave privada (prv_test_ -> sandbox.wompi.co/v1, prv_prod_ -> production.wompi.co/v1). Falla cerrado si el prefijo es desconocido, si la llave publica (pub_test_/pub_prod_) no coincide, o si WOMPI_API_URL apunta a otro lado. wompiApi.ts no manda nada si la resolucion falla. Loguea "[wompi] entorno=... api=..." una vez por proceso, nunca material de las llaves.
+- **Fix E-2**: el webhook revisa event.environment justo despues de la firma, para todo tipo de evento. Un desajuste, o un environment ausente, responde 500 (no 200) y no escribe nada: un evento real de otro entorno no puede pasar la firma (cada entorno tiene su propio events secret), asi que esta rama solo dispara si nuestra expectativa esta mal, y un 500 hace que Wompi reintente (30 min, 3 h, 24 h) en vez de descartar en silencio un pago real.
+- **Freno**: cobroAutomaticoHabilitado() es true solo cuando NEXT_PUBLIC_COBRO_AUTOMATICO === 'true'. Mientras esta apagado: el cron se salta el barrido de cobros (sin reclamo, sin llamada a Wompi) y reporta cobroAutomaticoHabilitado:false; /api/wompi/cobro-automatico rechaza el encendido con 409 (apagar siempre funciona); /suscripcion y MetodoPago ocultan la casilla y todo texto que prometa renovacion automatica. Ninguna fila de la DB cambio.
+- **C-2 Renovar**: la card del plan actual muestra "Renovar" por el checkout de siempre con el mismo plan+periodo, con el nuevo vencimiento calculado por el propio calcularPlanExpira del webhook (movido sin cambios a src/lib/planExpira.ts para que el cliente lo pueda importar). Agrega "Al renovar se cancela la baja programada." cuando hay una bajada agendada. El toggle de periodo ahora abre en el periodo contratado, asi quien tiene plan anual aterriza en su propia card.
+- **Cierra**: W-1, E-2, C-2.
+- **Evidencia local**: la linea de entorno aparece una vez; /suscripcion con el freno puesto muestra "Tu plan vence el..." y ninguna promesa de renovacion; Renovar muestra el nuevo vencimiento correcto; cron 200 con cobroAutomaticoHabilitado:false; simulador con --environment prod contra llaves test -> 500 "Entorno no coincide" y nada escrito, con --environment test -> pasa hasta el chequeo de monto; encendido -> 409 motivo cobro_deshabilitado. Tests 441 -> 454.
+- **Evidencia produccion**: log de Vercel "[wompi] entorno=test api=sandbox.wompi.co" (las dos llaves son test). Pago real de sandbox por Renovar (VISA 4242, 2026-10-20 11:34): webhook 200 con el chequeo de entorno superado y "destinatario resuelto=true"; plan_expira 2026-11-20 -> 2026-12-20; despues Renovar ofrecio 2027-01-20. El sandbox de Wompi manda environment "test" (su redirect tambien lleva env=test).
+- **Hallazgos**: produccion corre contra el sandbox de Wompi (pub_test_/prv_test_). WOMPI_API_URL nunca estuvo definida en Vercel, asi que antes de este cierre toda llamada a la API caia por defecto en sandbox sin importar las llaves. El checkout abierto desde localhost recibe un 403 del CloudFront de Wompi (redirect URL http); el checkout de prueba solo funciona desde produccion.
+- **REGLA: soltar el freno = poner NEXT_PUBLIC_COBRO_AUTOMATICO=true en Vercel Y redesplegar (los valores NEXT_PUBLIC se inlinean en build). Pasar a produccion de Wompi = cambiar las cuatro variables WOMPI_* juntas (llave privada, llave publica, events secret, integrity secret); si no coinciden, todo lo de Wompi falla cerrado.**
+- **Pendiente**:
+  - Confirmacion al volver del checkout: /suscripcion ignora ?id=<transaction>&env=. Si el webhook se atrasa, el usuario ve el vencimiento viejo justo despues de pagar y puede pagar dos veces -> cierre 5, junto con la consulta de la transaccion en Wompi (C-3).
+  - El valor de environment de los eventos de produccion ('prod') no esta confirmado; verificarlo en el cobro real controlado (cierre 15). Un desajuste responde 500, asi que no se pierde nada.
+  - S-1 (longitudes de secretos en los logs) -> cierre 5.
+  - NEXT_PUBLIC_APP_URL existe en .env.local pero no en Vercel; revisar a donde apuntan los enlaces de los correos -> cierre 7.
+  - Mientras el freno esta puesto, una fila con cobro_automatico=true no puede apagarlo desde la UI (el server sigue aceptando el apagado, y quitar el metodo tambien lo desarma).
+  - /api/wompi/consentimiento ahora necesita la llave privada presente, porque toda llamada a Wompi resuelve el entorno primero.
+- **Commit**: 879d1d6.
+
 ### AUD-3 Webhook APPROVED atomico: factura + plan en una transaccion (CIERRE 3) - CLOSED
 - **Closed**: 2026-10-20. La migracion 20261020000002_aplicar_pago_aprobado.sql se aplico en produccion ANTES de desplegar la ruta.
 - **Problema**: /api/wompi/eventos hacia UPDATE de restaurantes y DESPUES insertaba la factura, tragandose el error del insert. La factura es la unica marca de idempotencia, asi que un insert fallido convertia cada reentrega de Wompi en otro periodo gratis, y dos entregas concurrentes escalonadas podian extender plan_expira las dos.
