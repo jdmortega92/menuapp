@@ -498,6 +498,28 @@ Decision 2026-07-03: Julian mantiene $15k/$29k mensual ($150k/$290k anual, ~2 me
 
 ## Items
 
+### AUD-P1 Producto para la demo: foto completa, tipo de negocio, Sorprendeme y calificaciones (CIERRE P1 + P1.1) - CLOSED
+- **Closed**: 2026-10-20. La migracion 20261020000003_restaurantes_tipo_detalle.sql se aplico en produccion ANTES del deploy.
+- **Origen**: hallazgos de Julian armando el restaurante demo (La Cocina del Morro), confirmados con una investigacion de solo lectura.
+- **Decisiones de Julian**: fotos de platos en 4:3; "Otro" lleva un campo de texto libre; Sorprendeme solo con exactamente 2 categorias elegidas; calificaciones gratis en todos los planes; mapas quedan para el futuro lejano.
+- **Fotos**: el recorte de plato es 4:3 a 800x600 (antes 16:9 a 800x450). PlatoDetalleModal muestra la foto completa en su proporcion natural (ancho 100%, alto auto, maximo 60vh, contain); antes una caja de 200px la recortaba a ~2.5:1. Mismo tratamiento en la vista previa del admin (PlatoEditPanel). BL.42: CalificarModal ahora aplica el gate mostrarFotos.
+- **P1.1**: la barra de cantidad + "Agregar" queda sticky al fondo del area que scrollea del modal; la foto mas alta la habia empujado debajo del pliegue en el telefono.
+- **Tipo de negocio**: una sola lista en src/lib/tiposNegocio.ts (estaba duplicada en tres paginas). El menu publico muestra el label con tildes; antes pintaba el valor crudo ("Comida_rapida", "Cafeteria"). Columna nueva restaurantes.tipo_detalle (text, CHECK de largo recortado <= 40, GRANT INSERT/UPDATE (tipo_detalle) a authenticated, por la regla de AUD-2). Registro, completa-perfil y config preguntan "Que tipo de negocio es?" solo cuando tipo = 'otro' y guardan null en cualquier otro caso. El menu publico muestra el detalle para 'otro' y omite el tipo cuando esta vacio.
+- **Sorprendeme**: una sola regla pura en src/lib/sorprendeme.ts: toggle encendido, plan basico o pro, EXACTAMENTE 2 categorias elegidas, las dos abiertas por horario, sin busqueda activa. El fallback viejo (hasta 3 platos al azar, ignorando horarios) desaparecio. /menu explica la regla, la fila de /config queda etiquetada basico y se borro el guardarSorprendemeCats muerto.
+- **Calificaciones**: salen de la lista de funciones de Pro y entran a Gratis y Basico como "Calificaciones de clientes"; el upsell del dashboard ahora dice "calificacion promedio". El promedio de calificaciones del dashboard sigue siendo Pro.
+- **Cierra**: BL.42, mas hallazgos de producto sin ID de auditoria.
+- **Evidencia**: migracion 0a 0 filas; 0b solo las dos constraints de plan (ninguna sobre tipo); post-check insert/update true para authenticated y false para anon; probe a OK rows=1, b 23514; todo valor de tipo en la DB esta en la lista (bar, otro, restaurante). Smoke local: la foto completa en el modal del plato; "Comida rapida" se muestra con su tilde; otro + "Floristeria" muestra "Floristeria - Popayan"; otro con el detalle vacio muestra solo la ciudad; un registro con otro guardo tipo_detalle; la regla de Sorprendeme se cumplio. Tests 454 -> 469. P1.1: gates pasan.
+- **Pendiente**:
+  - Cambios de plan: un usuario Pro ve "Subir a Basico" (checkout inmediato, sin confirmacion), y cualquier cambio de plan o de periodo descarta los dias pagados que quedaban -> cierre 6 (el valor restante se convierte en dias extra al subir; la bajada se agenda al final del periodo).
+  - Las funciones Pro quedan apagadas despues de subir sin ningun aviso, y el correo dice "desbloqueado" sin decir que hay que encenderlas -> cierre 5, junto con la confirmacion al volver del checkout.
+  - Mapas: el enlace se arma con direccion + ciudad en texto libre; un campo opcional de URL de Google Maps (con el dominio validado) queda para el futuro lejano.
+  - El banner se recorta distinto en la portada (200px) y en el encabezado del menu (140px); no se toco.
+  - Los dos restaurantes existentes con tipo 'otro' y sin detalle ahora muestran solo la ciudad.
+  - usePlan().calificaciones = esPro no se usa (codigo muerto).
+  - La cuenta de prueba jdmortega92+p1@gmail.com (restaurante "bar") queda en la DB de produccion; borrarla cuando exista el borrado de cuenta (cierre 12).
+  - Revision visual de P1.1 en un telefono real.
+- **Commit**: 847bd18 (P1), 0116b09 (P1.1).
+
 ### AUD-4 Entorno de Wompi por prefijo de llaves, freno del cobro automatico y boton Renovar (CIERRE 4) - CLOSED
 - **Closed**: 2026-10-20. Sin SQL. Desplegado y verificado en produccion.
 - **Decision**: los pilotos arrancan CON renovacion automatica desde el primer dia, pero solo despues de cerrar todo el nivel 2 y de que un cobro real controlado salga bien; hasta entonces el freno queda puesto.
