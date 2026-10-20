@@ -1,4 +1,5 @@
 import { leerClaimsAceptacion, type ClaimsAceptacion } from './wompi'
+import { entornoWompiActual } from './wompiEntorno'
 
 // ── Llamadas HTTP a la API de Wompi (F4.c-4) ─────────────────────────────
 // SEPARADO de lib/wompi.ts A PROPOSITO: ese modulo es puro y unit-testeable
@@ -24,9 +25,9 @@ import { leerClaimsAceptacion, type ClaimsAceptacion } from './wompi'
 // handlers (server). El enrolamiento con Nequi, de hecho, NO necesita la llave
 // privada en ningun momento: la usa solo el webhook, al crear la fuente.
 
-// Sandbox por DEFECTO: si la variable falta, se prefiere fallar contra el
-// entorno de pruebas antes que golpear produccion por accidente.
-const BASE = (process.env.WOMPI_API_URL ?? 'https://sandbox.wompi.co/v1').replace(/\/+$/, '')
+// ENTORNO (CIERRE 4, W-1): la base de la API ya no sale de WOMPI_API_URL con
+// sandbox por defecto. La resuelve lib/wompiEntorno a partir del prefijo de las
+// llaves, y si no cuadra NO SE MANDA NINGUNA PETICION (ver pedir).
 
 /** Que credencial viaja en la cabecera Authorization de una llamada. */
 export type Llave = 'publica' | 'privada' | 'ninguna'
@@ -55,11 +56,20 @@ async function pedir<T>(p: {
   metodo: 'GET' | 'POST'
   /** Ruta para el LOG (sin ids ni llaves), no la URL real. */
   ruta: string
-  url: string
+  /** Ruta REAL bajo la base de la API (puede llevar ids), p.ej. '/transactions'. */
+  path: string
   llave: Llave
   cuerpo?: unknown
   etiqueta: string
 }): Promise<ResultadoWompi<T>> {
+  // Fail-closed: sin entorno coherente no sale nada hacia Wompi.
+  const entorno = entornoWompiActual()
+  if (!entorno.ok) {
+    console.error(`[${p.etiqueta}] ${p.metodo} ${p.ruta} NO enviado: entorno de Wompi no resuelto`)
+    return { ok: false, status: 500, mensaje: 'Entorno de Wompi no configurado' }
+  }
+  const url = `${entorno.apiBase}${p.path}`
+
   const credencial = valorDe(p.llave)
   if (p.llave !== 'ninguna' && !credencial) {
     console.error(`[${p.etiqueta}] ${p.metodo} ${p.ruta} SIN llave ${p.llave} configurada`)
@@ -81,7 +91,7 @@ async function pedir<T>(p: {
 
   let res: Response
   try {
-    res = await fetch(p.url, {
+    res = await fetch(url, {
       method: p.metodo,
       headers,
       body: p.cuerpo === undefined ? undefined : JSON.stringify(p.cuerpo),
@@ -138,7 +148,7 @@ export async function obtenerParAceptacion(etiqueta: string): Promise<ResultadoW
   const res = await pedir<MerchantResponse>({
     metodo: 'GET',
     ruta: '/merchants/{public_key}',
-    url: `${BASE}/merchants/${pub}`,
+    path: `/merchants/${pub}`,
     llave: 'ninguna',
     etiqueta,
   })
@@ -191,7 +201,7 @@ export async function crearTokenNequi(
   return pedir<TokenNequi>({
     metodo: 'POST',
     ruta: '/tokens/nequi',
-    url: `${BASE}/tokens/nequi`,
+    path: '/tokens/nequi',
     llave: 'publica',
     cuerpo: { phone_number: telefono },
     etiqueta,
@@ -219,7 +229,7 @@ export async function crearFuenteNequi(
   return pedir<FuenteWompi>({
     metodo: 'POST',
     ruta: '/payment_sources',
-    url: `${BASE}/payment_sources`,
+    path: '/payment_sources',
     llave: 'privada',
     cuerpo: {
       type: 'NEQUI',
@@ -272,7 +282,7 @@ export async function cobrarConFuente(
   return pedir<TransaccionWompi>({
     metodo: 'POST',
     ruta: '/transactions',
-    url: `${BASE}/transactions`,
+    path: '/transactions',
     llave: 'privada',
     cuerpo: {
       amount_in_cents: p.amountInCents,

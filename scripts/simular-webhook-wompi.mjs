@@ -6,6 +6,7 @@
 // USO (con `npm run dev` corriendo):
 //   node scripts/simular-webhook-wompi.mjs --reference <ref> --amount <centavos>
 //        [--status APPROVED|DECLINED|VOIDED|ERROR] [--times N] [--parallel]
+//        [--environment test|prod]
 //
 //   --reference  la referencia que el webhook parsea. Pago MANUAL, mismo formato
 //                que construirReferencia en src/lib/wompi.ts:32-40:
@@ -25,9 +26,14 @@
 //                (Promise.all) con el cuerpo firmado una sola vez: ejercita la
 //                carrera que resuelve aplicar_pago_aprobado (ON CONFLICT).
 //                Con --times 1 (o sin --times) manda uno solo.
+//   --environment event.environment del evento (CIERRE 4). Default: el entorno
+//                de WOMPI_PRIVATE_KEY en .env.local (prv_test_ -> test,
+//                prv_prod_ -> prod). Pasar el OTRO prueba que el webhook
+//                rechaza un evento de otro entorno: HTTP 500 (Wompi
+//                reintentaria) y nada escrito.
 //
-// Seguridad: lee WOMPI_EVENTS_SECRET de .env.local y JAMAS lo imprime (ni su
-// longitud). Solo manda a http://localhost:3000; cualquier otro host se rechaza.
+// Seguridad: lee WOMPI_EVENTS_SECRET y WOMPI_PRIVATE_KEY de .env.local y JAMAS
+// los imprime (ni su longitud); de la llave solo se imprime "entorno=test|prod". Solo manda a http://localhost:3000; cualquier otro host se rechaza.
 
 import { createHash, randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
@@ -60,21 +66,39 @@ function leerArgs(argv) {
   return args
 }
 
-function leerSecreto() {
+// Lee UNA variable de .env.local. Devuelve '' si no esta. Nunca imprime valores.
+function leerVariable(nombre) {
   let contenido
   try {
     contenido = readFileSync(resolve(process.cwd(), '.env.local'), 'utf8')
   } catch {
     salir('no se pudo leer .env.local (correr desde la raiz del repo)')
   }
+  const re = new RegExp(`^\\s*${nombre}\\s*=\\s*(.*)\\s*$`)
   for (const linea of contenido.split(/\r?\n/)) {
-    const m = linea.match(/^\s*WOMPI_EVENTS_SECRET\s*=\s*(.*)\s*$/)
+    const m = linea.match(re)
     if (m) {
       const valor = m[1].replace(/^['"]|['"]$/g, '').trim()
       if (valor) return valor
     }
   }
-  salir('WOMPI_EVENTS_SECRET no esta en .env.local')
+  return ''
+}
+
+function leerSecreto() {
+  const valor = leerVariable('WOMPI_EVENTS_SECRET')
+  if (!valor) salir('WOMPI_EVENTS_SECRET no esta en .env.local')
+  return valor
+}
+
+// Default de event.environment: el entorno de las llaves del servidor local,
+// con la misma regla de prefijos que src/lib/wompiEntorno.ts. Solo se imprime
+// el entorno resultante, jamas la llave ni su longitud.
+function entornoPorDefecto() {
+  const privada = leerVariable('WOMPI_PRIVATE_KEY')
+  if (privada.startsWith('prv_test_')) return 'test'
+  if (privada.startsWith('prv_prod_')) return 'prod'
+  salir('no se pudo derivar el entorno de WOMPI_PRIVATE_KEY: pasa --environment test|prod')
 }
 
 // Espejo de resolverPath + calcularChecksumEvento, src/lib/wompi.ts:230-243.
@@ -103,6 +127,10 @@ const status = args.status ?? 'APPROVED'
 const veces = args.times === undefined ? 1 : Number(args.times)
 if (!Number.isInteger(veces) || veces < 1) salir('--times debe ser un entero >= 1')
 
+const entorno = args.environment ?? entornoPorDefecto()
+if (entorno !== 'test' && entorno !== 'prod') salir('--environment debe ser test o prod')
+console.log(`[simular-webhook] entorno=${entorno}`)
+
 const url = new URL(DESTINO)
 if (url.protocol !== 'http:' || url.hostname !== 'localhost' || url.port !== '3000') {
   salir(`destino rechazado: ${url.href}`)
@@ -130,7 +158,7 @@ const event = {
     properties: ['transaction.id', 'transaction.status', 'transaction.amount_in_cents'],
   },
   timestamp: Math.floor(Date.now() / 1000),
-  environment: 'test',
+  environment: entorno,
 }
 const checksum = calcularChecksumEvento(event, secreto)
 event.signature.checksum = checksum

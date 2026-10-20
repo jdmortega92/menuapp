@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Check, X } from 'lucide-react'
 import Icono from '@/components/ui/Icono'
 import Boton from '@/components/ui/Boton'
@@ -13,6 +13,8 @@ import { formatoPrecio } from '@/lib/precio'
 import { LISTA_PLANES, PLANES, ahorroAnual, precioDe, type Periodo } from '@/lib/planes'
 import { fechaColombia, fechaLargaColombia } from '@/lib/fechas'
 import { fechaCancelacionProgramada } from '@/lib/suscripciones'
+import { calcularPlanExpira } from '@/lib/planExpira'
+import { cobroAutomaticoHabilitado } from '@/lib/frenoCobro'
 import type { Plan } from '@/types'
 
 export default function SuscripcionPage() {
@@ -74,8 +76,23 @@ export default function SuscripcionPage() {
   // en direcciones opuestas: prometer una renovacion que no va a ocurrir deja a
   // alguien en gratis sin avisar, y negar una que SI va a ocurrir es un cobro
   // sorpresa. Es exactamente el par de condiciones que evalua debeCobrarse.
+  // Y el FRENO (CIERRE 4): con el cobro automatico deshabilitado el cron no
+  // cobra a nadie, asi que prometer "Se renueva el X" seria mentir aunque la
+  // fila tenga el opt-in encendido.
+  const cobroHabilitado = cobroAutomaticoHabilitado()
   const renuevaAutomatico =
-    Boolean(rest?.cobro_automatico) && fuentePago?.estado === 'AVAILABLE'
+    cobroHabilitado && Boolean(rest?.cobro_automatico) && fuentePago?.estado === 'AVAILABLE'
+
+  // El toggle mensual/anual arranca en el periodo CONTRATADO una vez que llega
+  // la fila: asi la card del plan actual (con "Renovar") es la que se ve al
+  // aterrizar, tambien desde el CTA "Pagar mi plan" del correo de cobro fallido
+  // para quien tiene plan anual. Solo la primera vez: despues manda el usuario.
+  const periodoInicializado = useRef(false)
+  useEffect(() => {
+    if (periodoInicializado.current || !rest) return
+    periodoInicializado.current = true
+    setPeriodo(periodoActual)
+  }, [rest, periodoActual])
 
   useEffect(() => {
     if (!cargando && !usuario) {
@@ -355,10 +372,14 @@ export default function SuscripcionPage() {
                 Después pasarás a {nombrePlanProgramado}. Conservas todo lo que pagaste hasta esa fecha.
               </div>
               {/* C-04: reactivar NO reenciende el cobro automático (a propósito),
-                  y sin esta línea el plan vencería en silencio. */}
-              <div style={{ fontSize: '12px', color: 'var(--color-warning)', opacity: 0.85, marginTop: '2px' }}>
-                Al reactivar, la renovación automática sigue apagada. Puedes volver a activarla en Método de pago.
-              </div>
+                  y sin esta línea el plan vencería en silencio. Con el freno
+                  puesto (CIERRE 4) no hay renovación automática que activar,
+                  así que la línea se omite: prometería un control que no está. */}
+              {cobroHabilitado && (
+                <div style={{ fontSize: '12px', color: 'var(--color-warning)', opacity: 0.85, marginTop: '2px' }}>
+                  Al reactivar, la renovación automática sigue apagada. Puedes volver a activarla en Método de pago.
+                </div>
+              )}
               <Boton variante="secundario" tamano="sm"
                 onClick={reactivarSuscripcion}
                 style={{ marginTop: '10px' }}
@@ -503,6 +524,34 @@ export default function SuscripcionPage() {
                     {planEnProceso === plan.id ? 'Cambiando...' : plan.id === 'gratis' ? 'Bajar a Gratis' : `Subir a ${plan.nombre}`}
                   </Boton>
                 )}
+
+                {/* RENOVAR (CIERRE 4, C-2). Antes la card del plan actual no tenía
+                    botón, así que quien quería pagar su MISMO plan (por ejemplo
+                    tras un cobro automático fallido, que es justo lo que pide el
+                    correo "Pagar mi plan") no tenía cómo. Usa el checkout de
+                    siempre con el mismo plan+periodo; el webhook lo trata como
+                    renovación y SUMA sobre plan_expira. El nuevo vencimiento se
+                    calcula con la MISMA función que usa el webhook. */}
+                {esActual && plan.id !== 'gratis' && (() => {
+                  const nuevoVencimiento = fechaLargaColombia(
+                    calcularPlanExpira(periodoActual, new Date(), rest?.plan_expira ?? null)
+                  )
+                  return (
+                    <>
+                      <Boton variante="primario"
+                        onClick={() => iniciarPagoWompi(plan.id)}
+                        style={{ width: '100%', marginTop: '10px' }}
+                        disabled={cambiando}>
+                        {planEnProceso === plan.id ? 'Renovando...' : 'Renovar'}
+                      </Boton>
+                      <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '6px', lineHeight: 1.45 }}>
+                        {periodoActual === 'anual' ? 'Se suma un año a tu plan.' : 'Se suma un mes a tu plan.'}
+                        {nuevoVencimiento && ` Nuevo vencimiento: ${nuevoVencimiento}.`}
+                        {hayCambioProgramado && ' Al renovar se cancela la baja programada.'}
+                      </div>
+                    </>
+                  )
+                })()}
               </div>
             </div>
           )
@@ -524,6 +573,7 @@ export default function SuscripcionPage() {
             // así que las dos tienen que estar de acuerdo sobre si hay una
             // cancelación viva. Un solo cálculo, en un solo sitio.
             cancelacionPendiente={hayCambioProgramado}
+            cobroHabilitado={cobroHabilitado}
             onCambioCobro={mutateRestaurante}
           />
         )}

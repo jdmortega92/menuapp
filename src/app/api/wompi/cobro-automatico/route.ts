@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase-server'
 import { createAdminClient } from '@/lib/supabase-admin'
 import { registrarConsentimiento } from '@/lib/consentimientos'
+import { cobroAutomaticoHabilitado } from '@/lib/frenoCobro'
 import { bloqueoDeActivacion, type BloqueoActivacion } from '@/lib/suscripciones'
 
 // F4.c-5 — EL OPT-IN. Enciende y apaga restaurantes.cobro_automatico, que es la
@@ -70,6 +71,20 @@ export async function POST(request: Request) {
       : null
   if (motivoApagado === null) {
     return NextResponse.json({ error: 'Motivo invalido' }, { status: 400 })
+  }
+
+  // FRENO DE EMERGENCIA (CIERRE 4): con el cobro automatico deshabilitado no se
+  // ENCIENDE nada. Apagar sigue funcionando siempre: salir tiene que ser mas
+  // facil que entrar, tambien con el freno puesto.
+  if (activar && !cobroAutomaticoHabilitado()) {
+    console.info('[wompi/cobro-automatico] encendido rechazado: cobro automatico deshabilitado')
+    return NextResponse.json(
+      {
+        error: 'La renovación automática todavía no está disponible. Puedes renovar tu plan a mano desde esta página.',
+        motivo: 'cobro_deshabilitado',
+      },
+      { status: 409 }
+    )
   }
 
   const supabase = await createClient()

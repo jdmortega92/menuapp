@@ -13,6 +13,7 @@ import {
   type WompiNequiToken,
 } from '@/lib/wompi'
 import { credencialesListas, crearFuenteNequi, obtenerParAceptacion } from '@/lib/wompiApi'
+import { entornoWompiActual } from '@/lib/wompiEntorno'
 import { centavosDe, precioDe } from '@/lib/planes'
 import { fechaColombia } from '@/lib/fechas'
 import {
@@ -69,6 +70,33 @@ export async function POST(request: Request) {
   }
 
   // ── Firma OK a partir de aqui: el payload es autentico de Wompi ──
+
+  // ENTORNO (CIERRE 4, E-2), para TODO tipo de evento y antes de cualquier
+  // lectura o escritura: un evento de sandbox no puede otorgar un plan en
+  // produccion ni al reves. Si nuestro propio entorno no se puede resolver,
+  // 500: es un error de configuracion nuestro.
+  //
+  // Un desajuste (o environment ausente / no string) tambien responde 500, NO
+  // 200. La documentacion publica de eventos de Wompi no muestra el campo
+  // environment, asi que sus valores exactos ('test' / 'prod') no estan
+  // confirmados. Y un evento de verdad de OTRO entorno no puede llegar hasta
+  // aqui: cada entorno tiene su propio events secret y la firma de arriba ya lo
+  // habria rechazado. En la practica esta rama solo dispara si la que esta mal
+  // es NUESTRA expectativa; un 200 descartaria en silencio cada pago real. Un
+  // 500 hace que Wompi reintente (30 min, 3 h, 24 h) y deja un log ruidoso con
+  // el valor real. No se escribe nada.
+  const entorno = entornoWompiActual()
+  if (!entorno.ok) {
+    return NextResponse.json({ error: 'Entorno no configurado' }, { status: 500 })
+  }
+  const entornoRecibido = typeof event.environment === 'string' ? event.environment : null
+  if (entornoRecibido !== entorno.entorno) {
+    console.error(
+      `[wompi/eventos] entorno del evento no coincide event=${event.event ?? 'sin tipo'} ` +
+        `environment=${entornoRecibido ?? 'ausente'} esperado=${entorno.entorno}`
+    )
+    return NextResponse.json({ error: 'Entorno no coincide' }, { status: 500 })
+  }
 
   // F4.c-4: nequi_token.updated llega con raiz data.nequi_token, NO
   // data.transaction (verificado en el spike). La verificacion de firma de

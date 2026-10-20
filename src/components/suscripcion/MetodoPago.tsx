@@ -40,6 +40,10 @@ interface Props {
    *  pagina ya la calculo para pintar el banner de retencion con "Reactivar", y
    *  las dos tienen que estar de acuerdo sobre si hay una cancelacion viva. */
   cancelacionPendiente: boolean
+  /** Freno del cobro automatico (CIERRE 4, lib/frenoCobro). false = el cron no
+   *  cobra a nadie: se oculta el interruptor y todo texto que prometa una
+   *  renovacion automatica. Guardar y quitar el metodo siguen funcionando. */
+  cobroHabilitado: boolean
   /** Revalida la fila del restaurante tras encender/apagar. Puede devolver una
    *  promesa (lo hace: es el mutate de SWR) y aqui SE ESPERA — ver
    *  cambiarCobroAutomatico. */
@@ -53,6 +57,7 @@ export default function MetodoPago({
   planExpira,
   cobroAutomatico,
   cancelacionPendiente,
+  cobroHabilitado,
   onCambioCobro,
 }: Props) {
   const { data: fuente, isLoading, mutate } = useFuentePago(restauranteId)
@@ -101,7 +106,8 @@ export default function MetodoPago({
   // cobra (debeCobrarse se niega con plan_programado), así que el copy de cobro
   // futuro tiene que apagarse aunque la bandera siga en true. Es el mismo
   // criterio de /suscripcion, que exige opt-in Y fuente antes de prometer nada.
-  const renuevaDeVerdad = cobroAutomatico && !cancelacionPendiente
+  // Y con el freno puesto (CIERRE 4) tampoco: el cron no cobra a nadie.
+  const renuevaDeVerdad = cobroHabilitado && cobroAutomatico && !cancelacionPendiente
   // Sin consentimiento no se habilita nada: son dos casillas SEPARADAS y
   // ninguna viene marcada. Un "acepto todo" no cumple el requisito.
   const listoParaEnviar =
@@ -262,7 +268,10 @@ export default function MetodoPago({
                 encendido o apagado: los terminos de un cobro recurrente no
                 pueden vivir en un cartel que desaparece justo despues de
                 aceptarlos. Monto de lib/planes, fecha de plan_expira: ni un solo
-                numero escrito a mano. */}
+                numero escrito a mano.
+                Con el freno puesto (CIERRE 4) no hay cobro que divulgar: el
+                bloque y el interruptor de abajo se omiten enteros. */}
+            {cobroHabilitado && (
             <div style={{
               background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-md)',
               padding: '12px', marginTop: '12px', fontSize: '11px',
@@ -283,6 +292,7 @@ export default function MetodoPago({
               <div>Puedes apagarlo aquí mismo cuando quieras, sin perder el tiempo que ya pagaste.</div>
               <div>Método que se usa: <strong style={{ color: 'var(--text-primary)' }}>Nequi {fuente.telefono_enmascarado}</strong>.</div>
             </div>
+            )}
 
             {/* Interruptor. NACE APAGADO para todo el mundo (la columna trae
                 default false, F4.c-3): quien enrolo su Nequi antes de esta fase
@@ -301,7 +311,7 @@ export default function MetodoPago({
                 /api/wompi/cobro-automatico, que un cliente no puede saltarse.
                 Se deshabilita en vez de ocultarse porque el usuario tiene que
                 VER que existe y por qué no puede usarlo ahora. */}
-            {(() => {
+            {cobroHabilitado && (() => {
               const bloqueadoPorCancelacion = cancelacionPendiente && !cobroAutomatico
               const inactivo = cambiandoCobro || bloqueadoPorCancelacion
               return (
@@ -395,11 +405,25 @@ export default function MetodoPago({
         {/* ── Sin fuente: formulario de enrolamiento ── */}
         {!fuente && (
           <>
-            <div style={{ fontSize: '13px', fontWeight: 500 }}>Guarda tu Nequi para renovar más rápido</div>
-            <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '3px', lineHeight: 1.45 }}>
-              Guardas el método una sola vez y no tienes que volver a escribir tus datos cada
-              renovación.
-            </div>
+            {/* Con el freno puesto (CIERRE 4) el método guardado no se usa para
+                renovar (el pago manual va por el checkout de Wompi), así que
+                prometer "renovar más rápido" sería falso: título neutro. */}
+            {cobroHabilitado ? (
+              <>
+                <div style={{ fontSize: '13px', fontWeight: 500 }}>Guarda tu Nequi para renovar más rápido</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '3px', lineHeight: 1.45 }}>
+                  Guardas el método una sola vez y no tienes que volver a escribir tus datos cada
+                  renovación.
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: '13px', fontWeight: 500 }}>Guarda tu Nequi</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '3px', lineHeight: 1.45 }}>
+                  Guardarlo no inicia ningún cobro.
+                </div>
+              </>
+            )}
 
             {/* El enrolamiento NO enciende la renovacion automatica: ese
                 interruptor aparece despues, ya con el metodo guardado (F4.c-5).
@@ -414,15 +438,21 @@ export default function MetodoPago({
               padding: '12px', marginTop: '12px', fontSize: '11px',
               color: 'var(--text-secondary)', lineHeight: 1.6,
             }}>
-              <div>Monto: <strong style={{ color: 'var(--text-primary)' }}>${formatoPrecio(precio)}</strong> {cadencia}</div>
-              <div>
-                Si la activas, el cobro sería el:{' '}
-                <strong style={{ color: 'var(--text-primary)' }}>
-                  {fechaCobro || 'unos días antes de que venza tu plan'}
-                </strong>
-              </div>
-              <div>Guardar el método no inicia ningún cobro: la renovación automática se activa aparte, y viene apagada.</div>
-              <div>Si la activas, tu plan se renovará {cadencia} hasta que tú la apagues.</div>
+              {cobroHabilitado ? (
+                <>
+                  <div>Monto: <strong style={{ color: 'var(--text-primary)' }}>${formatoPrecio(precio)}</strong> {cadencia}</div>
+                  <div>
+                    Si la activas, el cobro sería el:{' '}
+                    <strong style={{ color: 'var(--text-primary)' }}>
+                      {fechaCobro || 'unos días antes de que venza tu plan'}
+                    </strong>
+                  </div>
+                  <div>Guardar el método no inicia ningún cobro: la renovación automática se activa aparte, y viene apagada.</div>
+                  <div>Si la activas, tu plan se renovará {cadencia} hasta que tú la apagues.</div>
+                </>
+              ) : (
+                <div>Guardar el método no inicia ningún cobro.</div>
+              )}
               <div>Cancelar nunca te quita el tiempo que ya pagaste: conservas tu plan hasta la fecha de vencimiento.</div>
               <div>Método que se guarda: <strong style={{ color: 'var(--text-primary)' }}>Nequi</strong> (el número que escribas abajo).</div>
             </div>

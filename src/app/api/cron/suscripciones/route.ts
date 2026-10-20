@@ -19,6 +19,7 @@ import {
 import { centavosDe, precioDe, type Periodo } from '@/lib/planes'
 import { construirConsentimiento, construirReferenciaAutomatica, firmaIntegridad } from '@/lib/wompi'
 import { cobrarConFuente, credencialesListas } from '@/lib/wompiApi'
+import { cobroAutomaticoHabilitado } from '@/lib/frenoCobro'
 import type { Plan } from '@/types'
 
 // F4.b-2: EJECUTOR del ciclo de vida de la suscripcion. Lo invoca Vercel Cron
@@ -347,7 +348,15 @@ export async function GET(request: Request) {
   // Sin llave privada NO se intenta nada: se salta el barrido entero en vez de
   // fallar fila por fila (y ensuciar el latch de todo el mundo con un error de
   // configuracion nuestro).
-  if (credencialesListas('cron/suscripciones', ['privada'])) {
+  //
+  // FRENO DE EMERGENCIA (CIERRE 4): con NEXT_PUBLIC_COBRO_AUTOMATICO distinto
+  // de 'true' el barrido C no corre EN ABSOLUTO: ni reclamo de latch ni llamada
+  // a Wompi. Las filas con cobro_automatico=true simplemente no se cobran.
+  // Los barridos A y B ya corrieron arriba, como siempre.
+  const cobroHabilitado = cobroAutomaticoHabilitado()
+  if (!cobroHabilitado) {
+    console.info('[cron/suscripciones] cobro automatico DESHABILITADO (NEXT_PUBLIC_COBRO_AUTOMATICO != true): barrido de cobros omitido')
+  } else if (credencialesListas('cron/suscripciones', ['privada'])) {
     const secretoIntegridad = (process.env.WOMPI_INTEGRITY_SECRET ?? '').trim()
     console.info(`[cron/suscripciones] WOMPI_INTEGRITY_SECRET len=${secretoIntegridad.length}`)
     if (!secretoIntegridad) {
@@ -590,7 +599,7 @@ export async function GET(request: Request) {
       `correosFallidos=${resumen.correosFallidos}`
   )
 
-  return NextResponse.json({ ok: true, ...resumen }, { status: 200 })
+  return NextResponse.json({ ok: true, ...resumen, cobroAutomaticoHabilitado: cobroHabilitado }, { status: 200 })
 }
 
 /** Suma dias a una fecha calendario. Solo para ACOTAR el filtro SQL del barrido
