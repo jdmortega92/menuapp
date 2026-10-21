@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import type { CSSProperties } from 'react'
 import { X, Star, Plus, Minus } from 'lucide-react'
 import Icono from '@/components/ui/Icono'
 import Modal from '@/components/ui/Modal'
@@ -10,7 +11,7 @@ import { makeCartKey } from '@/lib/cart'
 import { fechaColombia } from '@/lib/fechas'
 import { formatoPrecio } from '@/lib/precio'
 import { getSessionId } from '@/lib/analytics'
-import { tintPlaceholder } from '@/lib/brandTints'
+import { textoSobre } from '@/lib/temaColor'
 
 // Modal de detalle de plato del menú público. La página resuelve el plato y
 // pasa modo (normal/ganador/platoDia); aquí vive la derivación
@@ -31,6 +32,7 @@ export default function PlatoDetalleModal({
   platoDiaVisible,
   color,
   themeClass,
+  themeStyle,
   restauranteId,
   restauranteNombre,
   pedido,
@@ -53,6 +55,7 @@ export default function PlatoDetalleModal({
   platoDiaVisible: boolean
   color: string
   themeClass: string
+  themeStyle: CSSProperties
   restauranteId: string
   restauranteNombre: string
   pedido: Record<string, number>
@@ -147,6 +150,7 @@ export default function PlatoDetalleModal({
       noPadding
       showClose={false}
       themeClass={themeClass}
+      themeStyle={themeStyle}
     >
       {/* Foto grande. Con foto se ve COMPLETA en su proporcion natural (CIERRE
           P1): conviven fotos viejas 16:9 y nuevas 4:3, y la caja fija de 200px
@@ -156,7 +160,7 @@ export default function PlatoDetalleModal({
       <div style={{
         ...(mostrarFotos && plato.foto_url
           ? { background: 'var(--theme-surface-muted)' }
-          : { height: '200px', background: tintPlaceholder(color) }),
+          : { height: '200px', background: 'var(--marca-tinte)' }),
         borderRadius: 'var(--theme-radius-modal) var(--theme-radius-modal) 0 0',
         display: 'flex',
         alignItems: 'center',
@@ -201,7 +205,7 @@ export default function PlatoDetalleModal({
           </div>
           {calificacionesActivo && plato.resenas > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span style={{ color: 'var(--color-rating)', display: 'inline-flex', alignItems: 'center' }}><Icono icono={Star} size={13} fill="currentColor" /></span>
+              <span style={{ color: 'var(--tema-rating)', display: 'inline-flex', alignItems: 'center' }}><Icono icono={Star} size={13} fill="currentColor" /></span>
               <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--theme-text)' }}>{plato.estrellas}</span>
               <span style={{ fontSize: '12px', color: 'var(--theme-text-subtle)' }}>({plato.resenas})</span>
             </div>
@@ -309,7 +313,7 @@ export default function PlatoDetalleModal({
                 </span>
                 <span style={{
                   fontSize: '10px',
-                  color: 'white',
+                  color: textoSobre(color),
                   background: color,
                   padding: '3px 8px',
                   borderRadius: 'var(--theme-radius-chip)',
@@ -332,7 +336,7 @@ export default function PlatoDetalleModal({
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
                   <span style={{ fontSize: '16px', color: 'var(--theme-text-subtle)', textDecoration: 'line-through' }}>${formatoPrecio(base)}</span>
                   <span style={{ fontSize: '22px', fontWeight: 500, color: color }}>${formatoPrecio(pd)}</span>
-                  <span style={{ fontSize: '10px', color: 'white', background: color, padding: '3px 8px', borderRadius: 'var(--theme-radius-chip)', fontWeight: 500 }}>{dSel}% OFF</span>
+                  <span style={{ fontSize: '10px', color: textoSobre(color), background: color, padding: '3px 8px', borderRadius: 'var(--theme-radius-chip)', fontWeight: 500 }}>{dSel}% OFF</span>
                 </div>
               )
             }
@@ -342,7 +346,7 @@ export default function PlatoDetalleModal({
               return (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
                   <span style={{ fontSize: '22px', fontWeight: 500, color: 'var(--theme-text)' }}>${formatoPrecio(base)}</span>
-                  <span style={{ fontSize: '10px', color: 'white', background: color, padding: '3px 8px', borderRadius: 'var(--theme-radius-chip)', fontWeight: 500 }}>2x1</span>
+                  <span style={{ fontSize: '10px', color: textoSobre(color), background: color, padding: '3px 8px', borderRadius: 'var(--theme-radius-chip)', fontWeight: 500 }}>2x1</span>
                   <span style={{ fontSize: '11px', color: color, fontWeight: 500 }}>Lleva 2, paga 1</span>
                 </div>
               )
@@ -377,7 +381,7 @@ export default function PlatoDetalleModal({
                 </span>
                 <span style={{
                   fontSize: '10px',
-                  color: 'white',
+                  color: textoSobre(color),
                   background: color,
                   padding: '3px 8px',
                   borderRadius: 'var(--theme-radius-chip)',
@@ -398,7 +402,7 @@ export default function PlatoDetalleModal({
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
                   <span style={{ fontSize: '16px', color: 'var(--theme-text-subtle)', textDecoration: 'line-through' }}>${formatoPrecio(plato.precio)}</span>
                   <span style={{ fontSize: '22px', fontWeight: 500, color: color }}>${formatoPrecio(pd)}</span>
-                  <span style={{ fontSize: '10px', color: 'white', background: color, padding: '3px 8px', borderRadius: 'var(--theme-radius-chip)', fontWeight: 500 }}>{dNo}% OFF</span>
+                  <span style={{ fontSize: '10px', color: textoSobre(color), background: color, padding: '3px 8px', borderRadius: 'var(--theme-radius-chip)', fontWeight: 500 }}>{dNo}% OFF</span>
                 </div>
               )
             }
@@ -407,7 +411,7 @@ export default function PlatoDetalleModal({
               return (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
                   <span style={{ fontSize: '22px', fontWeight: 500, color: 'var(--theme-text)' }}>${formatoPrecio(plato.precio)}</span>
-                  <span style={{ fontSize: '10px', color: 'white', background: color, padding: '3px 8px', borderRadius: 'var(--theme-radius-chip)', fontWeight: 500 }}>2x1</span>
+                  <span style={{ fontSize: '10px', color: textoSobre(color), background: color, padding: '3px 8px', borderRadius: 'var(--theme-radius-chip)', fontWeight: 500 }}>2x1</span>
                   <span style={{ fontSize: '11px', color: color, fontWeight: 500 }}>Lleva 2, paga 1</span>
                 </div>
               )
@@ -451,7 +455,7 @@ export default function PlatoDetalleModal({
                       borderBottom: i < arr.length - 1 ? '1px solid var(--theme-border)' : 'none',
                     }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                        <div style={{ color: 'var(--color-rating)', display: 'inline-flex', alignItems: 'center', gap: '1px' }}>
+                        <div style={{ color: 'var(--tema-rating)', display: 'inline-flex', alignItems: 'center', gap: '1px' }}>
                           {[1, 2, 3, 4, 5].map(n => (
                             <Icono key={n} icono={Star} size={11} fill={n <= r.estrellas ? 'currentColor' : 'none'} />
                           ))}
@@ -595,7 +599,7 @@ export default function PlatoDetalleModal({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: 'white',
+              color: textoSobre(color),
               cursor: 'pointer',
             }}><Icono icono={Plus} size={16} /></button>
           </div>
@@ -629,7 +633,7 @@ export default function PlatoDetalleModal({
               }} className="tap-cta" style={{
                 flex: 1,
                 background: color,
-                color: 'white',
+                color: textoSobre(color),
                 borderRadius: 'var(--theme-radius-button)',
                 padding: '14px',
                 textAlign: 'center',
@@ -655,6 +659,7 @@ export default function PlatoDetalleModal({
         restauranteNombre={restauranteNombre}
         color={color}
         themeClass={themeClass}
+        themeStyle={themeStyle}
         onClose={() => setPlatoCalificar(null)}
         onResenaCreada={(resena) => setResenasReales(prev => [resena, ...prev].slice(0, 5))}
       />

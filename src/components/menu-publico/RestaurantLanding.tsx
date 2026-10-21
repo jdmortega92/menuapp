@@ -3,7 +3,7 @@
 import { MessageCircle } from 'lucide-react'
 import Icono from '@/components/ui/Icono'
 import { formato12h } from '@/lib/time'
-import { glowBoton, gradientHeader } from '@/lib/brandTints'
+import { textoSobre } from '@/lib/temaColor'
 import { textoTipoNegocio } from '@/lib/tiposNegocio'
 
 // Presentación/landing del restaurante (solo origen enlace web; en QR se entra
@@ -37,7 +37,7 @@ export default function RestaurantLanding({
         height: '200px',
         background: (esBasicoPublico && restaurante.banner_url)
           ? `url(${restaurante.banner_url}) center/cover`
-          : gradientHeader(color),
+          : 'var(--marca-gradiente)',
         position: 'relative',
       }}>
         {esBasicoPublico && restaurante.banner_url && (
@@ -62,7 +62,7 @@ export default function RestaurantLanding({
           borderRadius: '50%',
           background: 'var(--theme-surface)',
           border: '4px solid var(--theme-bg)',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          boxShadow: 'var(--theme-shadow-card)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -130,13 +130,13 @@ export default function RestaurantLanding({
                 gap: '5px',
                 fontSize: '12px',
                 fontWeight: 500,
-                color: 'var(--color-danger)',
+                color: 'var(--tema-peligro)',
               }}>
                 <span style={{
                   width: '7px',
                   height: '7px',
                   borderRadius: '50%',
-                  background: 'var(--color-danger)',
+                  background: 'var(--tema-peligro)',
                 }} />
                 Cerrado hoy
               </span>
@@ -154,13 +154,13 @@ export default function RestaurantLanding({
                   gap: '5px',
                   fontSize: '12px',
                   fontWeight: 500,
-                  color: 'var(--color-green)',
+                  color: 'var(--tema-ok)',
                 }}>
                   <span style={{
                     width: '7px',
                     height: '7px',
                     borderRadius: '50%',
-                    background: 'var(--color-green)',
+                    background: 'var(--tema-ok)',
                   }} />
                   Abierto
                 </span>
@@ -283,7 +283,7 @@ export default function RestaurantLanding({
                     color: 'var(--theme-text)',
                   }}>
                     <span>{dia}</span>
-                    <span style={{ color: h.cerrado ? 'var(--color-danger)' : 'var(--theme-text-muted)' }}>
+                    <span style={{ color: h.cerrado ? 'var(--tema-peligro)' : 'var(--theme-text-muted)' }}>
                       {h.cerrado ? 'Cerrado' : `${formato12h(h.hora_apertura)} — ${formato12h(h.hora_cierre)}`}
                     </span>
                   </div>
@@ -321,7 +321,7 @@ export default function RestaurantLanding({
                 <div style={{ fontSize: '13px', color: 'var(--theme-text)' }}>{restaurante.direccion}</div>
                 <div style={{ fontSize: '12px', color: 'var(--theme-text-muted)', marginTop: '2px' }}>{restaurante.ciudad}</div>
               </div>
-              <span style={{ fontSize: '12px', color: 'var(--color-info)' }}>Ver mapa →</span>
+              <span style={{ fontSize: '12px', color: color, fontWeight: 500 }}>Ver mapa →</span>
             </div>
           )}
         </div>
@@ -351,14 +351,14 @@ export default function RestaurantLanding({
         {/* Botón ver menú */}
         <div onClick={onVerMenu} className="tap-cta" style={{
           background: color,
-          color: 'white',
+          color: textoSobre(color),
           borderRadius: 'var(--theme-radius-button)',
           padding: '16px',
           textAlign: 'center',
           fontSize: '16px',
           fontWeight: 500,
           cursor: 'pointer',
-          boxShadow: glowBoton(color),
+          boxShadow: 'var(--marca-glow)',
         }}>
           Ver menú
         </div>

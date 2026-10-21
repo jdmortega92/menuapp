@@ -1,10 +1,11 @@
 'use client'
 
+import type { CSSProperties } from 'react'
 import { Utensils, X } from 'lucide-react'
 import Icono from '@/components/ui/Icono'
 import Modal from '@/components/ui/Modal'
 import { formatoPrecio } from '@/lib/precio'
-import { tintPlaceholder } from '@/lib/brandTints'
+import { textoSobre } from '@/lib/temaColor'
 
 // Modal de detalle de combo del menú público. Recibe el combo YA enriquecido
 // (comboPlatosEnriquecidos vía enriquecerComboPlatos). `categorias` solo
@@ -16,6 +17,7 @@ export default function ComboDetalleModal({
   color,
   esBasicoPublico,
   themeClass,
+  themeStyle,
   onAgregar,
   onClose,
 }: {
@@ -24,6 +26,7 @@ export default function ComboDetalleModal({
   color: string
   esBasicoPublico: boolean
   themeClass: string
+  themeStyle: CSSProperties
   onAgregar: (cartKey: string) => void
   onClose: () => void
 }) {
@@ -58,6 +61,7 @@ export default function ComboDetalleModal({
       noPadding
       showClose={false}
       themeClass={themeClass}
+      themeStyle={themeStyle}
     >
       {/* Header con nombre y badge de ahorro */}
       <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--theme-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -77,8 +81,8 @@ export default function ComboDetalleModal({
           <span style={{
             fontSize: '11px',
             fontWeight: 500,
-            color: 'white',
-            background: 'var(--color-green)',
+            color: 'var(--tema-ok-sobre)',
+            background: 'var(--tema-ok)',
             padding: '2px 8px',
             borderRadius: '10px',
             flexShrink: 0,
@@ -142,7 +146,7 @@ export default function ComboDetalleModal({
               width: '52px',
               height: '52px',
               borderRadius: 'var(--theme-radius-image)',
-              background: tintPlaceholder(color),
+              background: 'var(--marca-tinte)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -227,7 +231,7 @@ export default function ComboDetalleModal({
             justifyContent: 'space-between',
             alignItems: 'center',
             fontSize: '12px',
-            color: 'var(--color-green)',
+            color: 'var(--tema-ok)',
             fontWeight: 500,
             paddingTop: '6px',
             borderTop: '1px solid var(--theme-border)',
@@ -243,7 +247,7 @@ export default function ComboDetalleModal({
           onClose()
         }} className="tap-cta" style={{
           background: color,
-          color: 'white',
+          color: textoSobre(color),
           borderRadius: 'var(--theme-radius-button)',
           padding: '16px',
           textAlign: 'center',

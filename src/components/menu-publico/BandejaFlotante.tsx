@@ -28,7 +28,7 @@ export default function BandejaFlotante({ totalProductos, itemsPedido, totalPedi
       alignItems: 'center',
       zIndex: 40,
       cursor: 'pointer',
-      boxShadow: '0 8px 30px rgba(0,0,0,0.2)',
+      boxShadow: 'var(--theme-shadow-modal)',
       gap: '12px',
     }}>
       <div style={{ color: 'var(--theme-bg)', flex: 1, minWidth: 0 }}>

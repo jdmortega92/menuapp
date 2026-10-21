@@ -6,7 +6,7 @@ import Icono from '@/components/ui/Icono'
 import QtyControl from '@/components/menu-publico/QtyControl'
 import { makeCartKey } from '@/lib/cart'
 import { formatoPrecio } from '@/lib/precio'
-import { tintPlaceholder } from '@/lib/brandTints'
+import { textoSobre } from '@/lib/temaColor'
 
 // Tarjeta de plato del LISTADO regular (categorías). La tarjeta del resultado
 // de Sorpréndeme es deliberadamente más simple (sin pills de promo, sin
@@ -43,6 +43,7 @@ export default function PlatoCard({
 }) {
   const varianteLockedDelDia = esEstePlatoElDia && platoDia.varianteId && platoDia.variante ? platoDia.variante : null
   const platoTieneVariantes = plato.variantes && plato.variantes.length > 0
+  const sobreMarca = textoSobre(color)
   return (
     <div className="tap-card" style={{
       background: 'var(--theme-surface)',
@@ -61,7 +62,7 @@ export default function PlatoCard({
         borderRadius: 'var(--theme-radius-image)',
         flexShrink: 0,
         cursor: plato.disponible ? 'pointer' : 'default',
-        background: tintPlaceholder(color),
+        background: 'var(--marca-tinte)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -104,18 +105,18 @@ export default function PlatoCard({
                 <>
                   <span style={{ fontSize: '12px', color: 'var(--theme-text-subtle)', textDecoration: 'line-through' }}>${formatoPrecio(varianteLockedDelDia.precio)}</span>
                   <span style={{ fontSize: '13px', fontWeight: 500, color: color }}>${formatoPrecio(platoDia.precioEspecial)}</span>
-                  <span style={{ fontSize: '10px', color: 'white', background: color, padding: '2px 6px', borderRadius: 'var(--theme-radius-chip)', fontWeight: 500 }}>Plato del día</span>
+                  <span style={{ fontSize: '10px', color: sobreMarca, background: color, padding: '2px 6px', borderRadius: 'var(--theme-radius-chip)', fontWeight: 500 }}>Plato del día</span>
                 </>
               ) : platoTieneVariantes ? (
                 <>
                   <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--theme-text)' }}>desde ${formatoPrecio(plato.precio)}</span>
-                  <span style={{ fontSize: '10px', color: 'white', background: color, padding: '2px 6px', borderRadius: 'var(--theme-radius-chip)', fontWeight: 500 }}>Plato del día</span>
+                  <span style={{ fontSize: '10px', color: sobreMarca, background: color, padding: '2px 6px', borderRadius: 'var(--theme-radius-chip)', fontWeight: 500 }}>Plato del día</span>
                 </>
               ) : (
                 <>
                   <span style={{ fontSize: '12px', color: 'var(--theme-text-subtle)', textDecoration: 'line-through' }}>${formatoPrecio(plato.precio)}</span>
                   <span style={{ fontSize: '13px', fontWeight: 500, color: color }}>${formatoPrecio(platoDia.precioEspecial)}</span>
-                  <span style={{ fontSize: '10px', color: 'white', background: color, padding: '2px 6px', borderRadius: 'var(--theme-radius-chip)', fontWeight: 500 }}>Plato del día</span>
+                  <span style={{ fontSize: '10px', color: sobreMarca, background: color, padding: '2px 6px', borderRadius: 'var(--theme-radius-chip)', fontWeight: 500 }}>Plato del día</span>
                 </>
               )
             ) : (() => {
@@ -135,7 +136,7 @@ export default function PlatoCard({
                     <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--theme-text)' }}>
                       {platoTieneVariantes ? 'desde ' : ''}${formatoPrecio(plato.precio)}
                     </span>
-                    <span style={{ fontSize: '10px', color: 'white', background: color, padding: '2px 6px', borderRadius: 'var(--theme-radius-chip)', fontWeight: 500 }}>Ofertas</span>
+                    <span style={{ fontSize: '10px', color: sobreMarca, background: color, padding: '2px 6px', borderRadius: 'var(--theme-radius-chip)', fontWeight: 500 }}>Ofertas</span>
                   </>
                 )
               }
@@ -146,7 +147,7 @@ export default function PlatoCard({
                     <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--theme-text)' }}>
                       {platoTieneVariantes ? 'desde ' : ''}${formatoPrecio(plato.precio)}
                     </span>
-                    <span style={{ fontSize: '10px', color: 'white', background: color, padding: '2px 6px', borderRadius: 'var(--theme-radius-chip)', fontWeight: 500 }}>2x1</span>
+                    <span style={{ fontSize: '10px', color: sobreMarca, background: color, padding: '2px 6px', borderRadius: 'var(--theme-radius-chip)', fontWeight: 500 }}>2x1</span>
                     <span style={{ fontSize: '10px', color: color, fontWeight: 500 }}>Lleva 2, paga 1</span>
                   </>
                 )
@@ -166,7 +167,7 @@ export default function PlatoCard({
                 return (
                   <>
                     <span style={{ fontSize: '13px', fontWeight: 500, color: color }}>desde ${formatoPrecio(Math.round(minDesc))}</span>
-                    <span style={{ fontSize: '10px', color: 'white', background: color, padding: '2px 6px', borderRadius: 'var(--theme-radius-chip)', fontWeight: 500 }}>{pillText}</span>
+                    <span style={{ fontSize: '10px', color: sobreMarca, background: color, padding: '2px 6px', borderRadius: 'var(--theme-radius-chip)', fontWeight: 500 }}>{pillText}</span>
                   </>
                 )
               }
@@ -177,12 +178,12 @@ export default function PlatoCard({
                 <>
                   <span style={{ fontSize: '12px', color: 'var(--theme-text-subtle)', textDecoration: 'line-through' }}>${formatoPrecio(plato.precio)}</span>
                   <span style={{ fontSize: '13px', fontWeight: 500, color: color }}>${formatoPrecio(precioDesc)}</span>
-                  <span style={{ fontSize: '10px', color: 'white', background: color, padding: '2px 6px', borderRadius: 'var(--theme-radius-chip)', fontWeight: 500 }}>{pillText}</span>
+                  <span style={{ fontSize: '10px', color: sobreMarca, background: color, padding: '2px 6px', borderRadius: 'var(--theme-radius-chip)', fontWeight: 500 }}>{pillText}</span>
                 </>
               )
             })()}
             {calificacionesActivo && plato.resenas > 0 && (
-              <span style={{ fontSize: '10px', color: 'var(--color-rating)', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+              <span style={{ fontSize: '10px', color: 'var(--tema-rating-texto)', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
                 <Icono icono={Star} size={11} fill="currentColor" /> {plato.estrellas} <span style={{ color: 'var(--theme-text-subtle)' }}>({plato.resenas})</span>
               </span>
             )}
@@ -191,7 +192,7 @@ export default function PlatoCard({
             ? (plato.variantes && plato.variantes.length > 0
                 ? null // Card click abre el modal; sin Qty inline para platos con variantes
                 : <QtyControl {...qtyProps(esEstePlatoElDia ? makeCartKey(plato.id, undefined, 'dia') : plato.id)} />)
-            : <span style={{ fontSize: '10px', color: 'var(--color-danger)', fontWeight: 500 }}>Agotado</span>}
+            : <span style={{ fontSize: '10px', color: 'var(--tema-peligro)', fontWeight: 500 }}>Agotado</span>}
         </div>
       </div>
     </div>

@@ -10,7 +10,9 @@ import { formatoPrecio } from '@/lib/precio'
 // Tarjeta destacada del Plato Ganador. El gate de visibilidad (Pro + activo +
 // platoGanadorVisible + sin búsqueda) vive en la página. Las cart keys llevan
 // source 'ganador' (precio congelado al agregar — contrato en lib/cart).
-// Paleta fija dorada (no usa el color del restaurante).
+// Paleta fija dorada (no usa el color del restaurante). Las --ganador-* las pone
+// lib/estiloTema: los --gold-* de siempre sobre fondo claro, dorado profundo
+// sobre fondo oscuro (CIERRE P2a).
 export default function PlatoGanadorHero({
   platoGanador,
   todosLosPlatos,
@@ -27,16 +29,16 @@ export default function PlatoGanadorHero({
   return (
     <div style={{ padding: '0 16px 10px' }}>
       <div onClick={onOpenDetalle} className="tap-card" style={{
-        background: `linear-gradient(135deg, var(--gold-bg-start) 0%, var(--gold-bg-end) 100%)`,
-        border: '1px solid var(--gold-border)',
+        background: `linear-gradient(135deg, var(--ganador-bg-start) 0%, var(--ganador-bg-end) 100%)`,
+        border: '1px solid var(--ganador-borde)',
         borderRadius: 'var(--theme-radius-card)',
         boxShadow: 'var(--theme-shadow-card)',
         padding: '12px',
         cursor: 'pointer',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
-          <span style={{ color: 'var(--gold-ink)', display: 'inline-flex' }}><Icono icono={Star} size={16} fill="currentColor" /></span>
-          <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--gold-ink)', letterSpacing: '0.5px' }}>{platoGanador.titulo?.toUpperCase() || 'RECOMENDADO DEL CHEF'}</span>
+          <span style={{ color: 'var(--ganador-tinta)', display: 'inline-flex' }}><Icono icono={Star} size={16} fill="currentColor" /></span>
+          <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ganador-tinta)', letterSpacing: '0.5px' }}>{platoGanador.titulo?.toUpperCase() || 'RECOMENDADO DEL CHEF'}</span>
         </div>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
           <div style={{
@@ -44,7 +46,7 @@ export default function PlatoGanadorHero({
             height: '56px',
             borderRadius: 'var(--theme-radius-image)',
             flexShrink: 0,
-            background: 'var(--gold-tint)',
+            background: 'var(--ganador-tinte)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -53,7 +55,7 @@ export default function PlatoGanadorHero({
             {esBasicoPublico && platoGanador.foto_url ? (
               <img src={platoGanador.foto_url} alt={platoGanador.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             ) : (
-              <span style={{ fontSize: '20px', fontWeight: 500, color: 'var(--gold-ink)' }}>{platoGanador.nombre?.charAt(0)}</span>
+              <span style={{ fontSize: '20px', fontWeight: 500, color: 'var(--ganador-tinta)' }}>{platoGanador.nombre?.charAt(0)}</span>
             )}
           </div>
           <div style={{ flex: 1 }}>
@@ -63,7 +65,7 @@ export default function PlatoGanadorHero({
                 <div style={{
                   fontSize: '14px',
                   fontWeight: 500,
-                  color: '#1A1A18',
+                  color: 'var(--ganador-texto)',
                 }}>
                   {platoGanador.nombre}{varianteLocked ? ` · ${varianteLocked.nombre}` : ''}
                 </div>
@@ -72,7 +74,7 @@ export default function PlatoGanadorHero({
             {platoGanador.descripcionEspecial && (
               <div style={{
                 fontSize: '11px',
-                color: '#6B6A65',
+                color: 'var(--ganador-texto-muted)',
                 marginTop: '2px',
                 fontStyle: 'italic',
                 overflowWrap: 'break-word',
@@ -93,14 +95,14 @@ export default function PlatoGanadorHero({
                 const cartKeyGanador = makeCartKey(platoGanador.id, varianteLocked.id, 'ganador')
                 return (
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
-                    <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--gold-ink)' }}>${formatoPrecio(varianteLocked.precio)}</span>
+                    <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--ganador-tinta)' }}>${formatoPrecio(varianteLocked.precio)}</span>
                     <QtyControl {...qtyProps(cartKeyGanador)} />
                   </div>
                 )
               }
               return (
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
-                  <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--gold-ink)' }}>{ganadorTieneVariantes ? 'desde ' : ''}${formatoPrecio(platoGanador.precio)}</span>
+                  <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--ganador-tinta)' }}>{ganadorTieneVariantes ? 'desde ' : ''}${formatoPrecio(platoGanador.precio)}</span>
                   {ganadorTieneVariantes ? null : <QtyControl {...qtyProps(makeCartKey(platoGanador.id, undefined, 'ganador'))} />}
                 </div>
               )

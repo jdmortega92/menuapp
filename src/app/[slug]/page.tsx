@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import type { MouseEvent } from 'react'
+import type { CSSProperties, MouseEvent } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import { Dices, X, ChevronDown, ChevronUp, Utensils, UtensilsCrossed } from 'lucide-react'
 import Icono from '@/components/ui/Icono'
@@ -16,7 +16,8 @@ import PlatoDetalleModal from '@/components/menu-publico/PlatoDetalleModal'
 import BandejaFlotante from '@/components/menu-publico/BandejaFlotante'
 import RestaurantLanding from '@/components/menu-publico/RestaurantLanding'
 import { formato12h } from '@/lib/time'
-import { tintPlaceholder, washSutil, borderFuerte, borderSutil, gradientHeader } from '@/lib/brandTints'
+import { TEMAS_BASE, textoSobre, type TemaBaseId } from '@/lib/temaColor'
+import { estiloMenuPublico } from '@/lib/estiloTema'
 import { useMenuVisibility } from '@/hooks/useMenuVisibility'
 import { usePromoIndices } from '@/hooks/usePromoIndices'
 import { fechaColombia } from '@/lib/fechas'
@@ -131,10 +132,23 @@ export default function MenuPublicoPage() {
   const temaConfigurado = restaurante?.tema || 'claro'
   const temaValido = ['claro', 'oscuro', 'natural', 'premium'].includes(temaConfigurado)
   const temaRequierePro = ['oscuro', 'natural', 'premium'].includes(temaConfigurado)
-  const tema = (temaRequierePro && planRest !== 'pro')
+  const tema = ((temaRequierePro && planRest !== 'pro')
     ? 'claro'
-    : (temaValido ? temaConfigurado : 'claro')
+    : (temaValido ? temaConfigurado : 'claro')) as TemaBaseId
   const themeClass = `theme-${tema}`
+  // Variables de color que dependen del fondo y de la marca (CIERRE P2a): se
+  // calculan UNA vez y viajan junto a themeClass a la raíz y a cada Modal.
+  const themeStyle = useMemo(() => estiloMenuPublico(tema, color) as CSSProperties, [tema, color])
+  // Texto sobre la marca (chips, pills, + y CTAs): blanco o casi negro, el que contraste.
+  const sobreMarca = textoSobre(color)
+
+  // El body pinta el fondo del tema mientras se ve el menú: el overscroll/rebote
+  // no muestra el crema del admin detrás de un tema oscuro.
+  useEffect(() => {
+    const anterior = document.body.style.backgroundColor
+    document.body.style.backgroundColor = TEMAS_BASE[tema].bg
+    return () => { document.body.style.backgroundColor = anterior }
+  }, [tema])
   const esProPublico = planRest === 'pro'
   const esBasicoPublico = planRest === 'basico' || planRest === 'pro'
   // Fotos de PLATOS en el público (STRATEGIC.2): pagos siempre; gratis solo si la
@@ -287,7 +301,7 @@ export default function MenuPublicoPage() {
     )
   }
   return (
-    <div className={themeClass} style={{ background: 'var(--theme-bg)', minHeight: '100vh' }}>
+    <div className={themeClass} style={{ ...themeStyle, background: 'var(--theme-bg)', minHeight: '100vh' }}>
       <div style={{ maxWidth: '500px', minWidth: '320px', margin: '0 auto', paddingBottom: totalProductos > 0 ? '140px' : '20px' }}>
         {/* Presentación del restaurante (solo enlace web) */}
         {!mostrarMenu && (
@@ -310,7 +324,7 @@ export default function MenuPublicoPage() {
             height: '140px',
             background: (esBasicoPublico && restaurante.banner_url)
               ? `url(${restaurante.banner_url}) center/cover`
-              : gradientHeader(color),
+              : 'var(--marca-gradiente)',
             position: 'relative',
           }}>
             {/* Overlay sutil para legibilidad si hay banner */}
@@ -333,7 +347,7 @@ export default function MenuPublicoPage() {
             borderRadius: '50%',
             background: 'var(--theme-surface)',
             border: '4px solid var(--theme-bg)',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            boxShadow: 'var(--theme-shadow-card)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -395,7 +409,7 @@ export default function MenuPublicoPage() {
                 return (
                   <>
                     <span>·</span>
-                    <span style={{ color: 'var(--color-danger)', fontWeight: 500 }}>● Cerrado hoy</span>
+                    <span style={{ color: 'var(--tema-peligro)', fontWeight: 500 }}>● Cerrado hoy</span>
                   </>
                 )
               }
@@ -405,7 +419,7 @@ export default function MenuPublicoPage() {
                 <>
                   <span>·</span>
                   <span style={{
-                    color: abiertoAhora ? 'var(--color-green)' : 'var(--theme-text-subtle)',
+                    color: abiertoAhora ? 'var(--tema-ok)' : 'var(--theme-text-subtle)',
                     fontWeight: 500,
                   }}>
                     ● {abiertoAhora ? 'Abierto ahora' : `Cierra a las ${formato12h(horarioHoy.hora_cierre)}`}
@@ -440,8 +454,8 @@ export default function MenuPublicoPage() {
 
         {/* Filtros */}
         <div style={{ padding: '4px 16px 10px', display: 'flex', gap: '6px', overflowX: 'auto' }}>
-          <div onClick={() => setCategoriaAbierta(categoriaAbierta ? null : 'open')} style={{ padding: '6px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 500, background: color, color: 'white', cursor: 'pointer', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>Categorías <Icono icono={categoriaAbierta ? ChevronUp : ChevronDown} size={12} /></div>
-          {esProPublico && config?.combos_activo && combosVisibles.length > 0 && <div onClick={() => setMostrarCombos(!mostrarCombos)} style={{ padding: '6px 12px', borderRadius: '20px', fontSize: '11px', border: mostrarCombos ? 'none' : '1px solid var(--theme-border)', color: mostrarCombos ? 'white' : 'var(--theme-text-muted)', background: mostrarCombos ? color : 'var(--theme-surface)', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all var(--transicion-ui)' }}>Combos</div>}
+          <div onClick={() => setCategoriaAbierta(categoriaAbierta ? null : 'open')} style={{ padding: '6px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 500, background: color, color: sobreMarca, cursor: 'pointer', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>Categorías <Icono icono={categoriaAbierta ? ChevronUp : ChevronDown} size={12} /></div>
+          {esProPublico && config?.combos_activo && combosVisibles.length > 0 && <div onClick={() => setMostrarCombos(!mostrarCombos)} style={{ padding: '6px 12px', borderRadius: '20px', fontSize: '11px', border: mostrarCombos ? 'none' : '1px solid var(--theme-border)', color: mostrarCombos ? sobreMarca : 'var(--theme-text-muted)', background: mostrarCombos ? color : 'var(--theme-surface)', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all var(--transicion-ui)' }}>Combos</div>}
         </div>
 
         {/* Dropdown categorías */}
@@ -503,7 +517,7 @@ export default function MenuPublicoPage() {
               padding: '12px',
               textAlign: 'center',
               cursor: 'pointer',
-              background: mostrarSorpresa ? washSutil(color) : 'transparent',
+              background: mostrarSorpresa ? 'var(--marca-lavado-sutil)' : 'transparent',
             }}>
               <span style={{ fontSize: '13px', color: mostrarSorpresa ? color : 'var(--theme-text-muted)', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
                 <Icono icono={Dices} size={18} /> {mostrarSorpresa ? 'Generar otra combinación' : 'Sorpréndeme — ¿No sabes qué pedir?'}
@@ -516,8 +530,8 @@ export default function MenuPublicoPage() {
         {sorprendemeResultado && mostrarSorpresa && (
           <div style={{ padding: '0 16px 14px' }}>
             <div style={{
-              background: washSutil(color),
-              border: borderSutil(color),
+              background: 'var(--marca-lavado-sutil)',
+              border: 'var(--marca-borde-sutil)',
               borderRadius: 'var(--theme-radius-card)',
               padding: '12px',
             }}>
@@ -545,7 +559,7 @@ export default function MenuPublicoPage() {
                     height: '48px',
                     borderRadius: 'var(--theme-radius-image)',
                     flexShrink: 0,
-                    background: tintPlaceholder(color),
+                    background: 'var(--marca-tinte)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -585,18 +599,18 @@ export default function MenuPublicoPage() {
                             <>
                               <span style={{ fontSize: '12px', color: 'var(--theme-text-subtle)', textDecoration: 'line-through' }}>${formatoPrecio(varianteLockedDelDia.precio)}</span>
                               <span style={{ fontSize: '13px', fontWeight: 500, color: color }}>${formatoPrecio(platoDia.precioEspecial)}</span>
-                              <span style={{ fontSize: '10px', color: 'white', background: color, padding: '2px 6px', borderRadius: 'var(--theme-radius-chip)', fontWeight: 500 }}>Plato del día</span>
+                              <span style={{ fontSize: '10px', color: sobreMarca, background: color, padding: '2px 6px', borderRadius: 'var(--theme-radius-chip)', fontWeight: 500 }}>Plato del día</span>
                             </>
                           ) : platoTieneVariantes ? (
                             <>
                               <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--theme-text)' }}>desde ${formatoPrecio(plato.precio)}</span>
-                              <span style={{ fontSize: '10px', color: 'white', background: color, padding: '2px 6px', borderRadius: 'var(--theme-radius-chip)', fontWeight: 500 }}>Plato del día</span>
+                              <span style={{ fontSize: '10px', color: sobreMarca, background: color, padding: '2px 6px', borderRadius: 'var(--theme-radius-chip)', fontWeight: 500 }}>Plato del día</span>
                             </>
                           ) : (
                             <>
                               <span style={{ fontSize: '12px', color: 'var(--theme-text-subtle)', textDecoration: 'line-through' }}>${formatoPrecio(plato.precio)}</span>
                               <span style={{ fontSize: '13px', fontWeight: 500, color: color }}>${formatoPrecio(platoDia.precioEspecial)}</span>
-                              <span style={{ fontSize: '10px', color: 'white', background: color, padding: '2px 6px', borderRadius: 'var(--theme-radius-chip)', fontWeight: 500 }}>Plato del día</span>
+                              <span style={{ fontSize: '10px', color: sobreMarca, background: color, padding: '2px 6px', borderRadius: 'var(--theme-radius-chip)', fontWeight: 500 }}>Plato del día</span>
                             </>
                           )}
                         </div>
@@ -641,7 +655,7 @@ export default function MenuPublicoPage() {
             {combosVisibles.map((combo: any) => (
               <div key={combo.id} onClick={() => setComboDetalle(combo)} className="tap-card" style={{
                 background: 'var(--theme-surface)',
-                border: borderFuerte(color),
+                border: 'var(--marca-borde-fuerte)',
                 borderRadius: 'var(--theme-radius-card)',
                 boxShadow: 'var(--theme-shadow-card)',
                 padding: '12px',
@@ -687,7 +701,7 @@ export default function MenuPublicoPage() {
                     }}>
                       ${formatoPrecio(combo.precioIndividual)}
                     </span>
-                    <span style={{ fontSize: '11px', color: 'var(--color-green)', fontWeight: 500 }}>-${formatoPrecio(combo.precioIndividual - combo.precio)}</span>
+                    <span style={{ fontSize: '11px', color: 'var(--tema-ok)', fontWeight: 500 }}>-${formatoPrecio(combo.precioIndividual - combo.precio)}</span>
                   </div>
                   <div onClick={(e) => e.stopPropagation()}>
                     <QtyControl {...qtyProps(combo.id)} />
@@ -706,6 +720,7 @@ export default function MenuPublicoPage() {
             color={color}
             esBasicoPublico={esBasicoPublico}
             themeClass={themeClass}
+            themeStyle={themeStyle}
             onAgregar={agregarAlPedido}
             onClose={() => setComboDetalle(null)}
           />
@@ -753,17 +768,20 @@ export default function MenuPublicoPage() {
         {/* Aviso platos no disponibles en pedido */}
         {totalProductos > 0 && itemsPedido.some(i => !platosVisiblesIds.has(i.plato.id) && !combosVisibles.some((c: any) => c.id === i.plato.id)) && (
           <div style={{ padding: '0 16px 10px' }}>
+            {/* Superficie del tema + acento de aviso (antes: crema fijo con texto del
+                tema encima, ilegible en Oscuro). */}
             <div style={{
-              background: 'var(--color-warning-light)',
-              border: '1px solid var(--color-warning)',
+              background: 'var(--theme-surface)',
+              border: '1px solid var(--tema-aviso)',
+              borderLeft: '3px solid var(--tema-aviso)',
               borderRadius: 'var(--theme-radius-card)',
               padding: '12px',
             }}>
-              <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--color-warning)', marginBottom: '4px' }}>Algunos platos ya no están disponibles</div>
+              <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--tema-aviso)', marginBottom: '4px' }}>Algunos platos ya no están disponibles</div>
               <div style={{ fontSize: '11px', color: 'var(--theme-text-muted)', marginBottom: '8px' }}>Estos platos pertenecen a categorías fuera de horario y se eliminarán del pedido.</div>
               <div onClick={() => {
                 limpiarNoDisponibles((id) => platosVisiblesIds.has(id) || combosVisibles.some((c: any) => c.id === id))
-              }} style={{ fontSize: '12px', color: 'var(--color-warning)', fontWeight: 500, cursor: 'pointer' }}>
+              }} style={{ fontSize: '12px', color: 'var(--tema-aviso)', fontWeight: 500, cursor: 'pointer' }}>
                 Limpiar platos no disponibles →
               </div>
             </div>
@@ -795,6 +813,7 @@ export default function MenuPublicoPage() {
           qrMesa={qrMesa}
           color={color}
           themeClass={themeClass}
+          themeStyle={themeStyle}
           whatsappActivo={config?.whatsapp_activo}
         />
         {/* Modal detalle plato (con calificar anidado, ver PlatoDetalleModal) */}
@@ -814,6 +833,7 @@ export default function MenuPublicoPage() {
               platoDiaVisible={!!platoDiaVisible}
               color={color}
               themeClass={themeClass}
+              themeStyle={themeStyle}
               restauranteId={restaurante.id}
               restauranteNombre={restaurante.nombre}
               pedido={pedido}

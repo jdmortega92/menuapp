@@ -207,6 +207,15 @@
   font-family: var(--theme-font-body);
 }
 
+/* Placeholders de inputs del menú público con el tono sutil del tema (antes: el
+   gris por defecto del navegador, igual en todos los temas). color-scheme lo pone
+   el style inline de la raíz (lib/estiloTema) según la luminancia del fondo. */
+.theme-claro ::placeholder, .theme-oscuro ::placeholder,
+.theme-natural ::placeholder, .theme-premium ::placeholder {
+  color: var(--theme-text-subtle);
+  opacity: 1;
+}
+
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 html, body {

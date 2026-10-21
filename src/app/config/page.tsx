@@ -18,6 +18,8 @@ import { isPasswordValid, getPasswordError } from '@/lib/passwordValidation'
 import PhoneInput from '@/components/ui/PhoneInput'
 import BottomNav from '@/components/BottomNav'
 import { TIPOS_NEGOCIO, MAX_TIPO_DETALLE, tipoDetalleParaGuardar } from '@/lib/tiposNegocio'
+import { TEMAS_BASE, textoSobre, type TemaBaseId } from '@/lib/temaColor'
+import { gradientHeader, tintPlaceholder } from '@/lib/brandTints'
 
 // ── Helpers del selector de color (COLOR-PICKER restyle) ──
 // Luminancia percibida aproximada (sRGB ponderado) para decidir el color del
@@ -203,6 +205,10 @@ export default function ConfigPage() {
     { color: '#47566A', nombre: 'Pizarra' },
     { color: '#1A1A18', nombre: 'Negro' },
   ]
+
+  // Colores del tema elegido: la vista previa usa los MISMOS tintes y texto-sobre-
+  // marca que el menú público (CIERRE P2a), para que se vea igual.
+  const coloresPreview = TEMAS_BASE[tema as TemaBaseId] ?? TEMAS_BASE.claro
 
   const temas = [
     { id: 'claro', nombre: 'Claro', desc: 'Minimalista, versátil', plan: 'gratis' },
@@ -557,8 +563,8 @@ export default function ConfigPage() {
               <div style={{ marginBottom: '16px' }}>
                 <label className="label">Vista previa</label>
                 <div style={{ display: 'flex', gap: '8px', marginTop: '6px', alignItems: 'center' }}>
-                  <div style={{ padding: '8px 16px', borderRadius: '20px', background: colorPrincipal, color: 'white', fontSize: '12px', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>Categorías <Icono icono={ChevronDown} size={12} /></div>
-                  <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: colorPrincipal, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '14px' }}>+</div>
+                  <div style={{ padding: '8px 16px', borderRadius: '20px', background: colorPrincipal, color: textoSobre(colorPrincipal), fontSize: '12px', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>Categorías <Icono icono={ChevronDown} size={12} /></div>
+                  <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: colorPrincipal, display: 'flex', alignItems: 'center', justifyContent: 'center', color: textoSobre(colorPrincipal), fontSize: '14px' }}>+</div>
                   <span style={{ fontSize: '12px', color: colorPrincipal, fontWeight: 500 }}>Enlace</span>
                 </div>
               </div>
@@ -648,7 +654,7 @@ export default function ConfigPage() {
                         width: '100%',
                         aspectRatio: '3/1',
                         borderRadius: 'var(--theme-radius-image)',
-                        background: `linear-gradient(135deg, ${colorPrincipal}40, ${colorPrincipal}15)`,
+                        background: gradientHeader(colorPrincipal, coloresPreview.bg),
                         marginBottom: '-24px',
                       }} />
                     )}
@@ -721,7 +727,7 @@ export default function ConfigPage() {
                         width: '44px',
                         height: '44px',
                         borderRadius: 'var(--theme-radius-image)',
-                        background: `linear-gradient(135deg, ${colorPrincipal}30, ${colorPrincipal}10)`,
+                        background: tintPlaceholder(colorPrincipal, coloresPreview.surface),
                         flexShrink: 0,
                         display: 'flex',
                         alignItems: 'center',
@@ -756,7 +762,7 @@ export default function ConfigPage() {
                         height: '28px',
                         borderRadius: '50%',
                         background: colorPrincipal,
-                        color: 'white',
+                        color: textoSobre(colorPrincipal),
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',

@@ -19,6 +19,12 @@ interface ModalProps {
    */
   themeClass?: string
   /**
+   * Variables de color del menú público (lib/estiloTema), aplicadas en el MISMO
+   * wrapper que themeClass: como la clase redefine las --theme-*, sin esto un
+   * modal pisaría lo que la página definió en su raíz (CIERRE P2a).
+   */
+  themeStyle?: React.CSSProperties
+  /**
    * Nivel de apilamiento del modal (modal stack). Por default 0 (z-index base 60/70).
    * Usa 1 para modales que deben aparecer encima de otro modal abierto.
    * Cada nivel suma 20 al z-index para mantener separación visual clara.
@@ -34,6 +40,7 @@ export default function Modal({
   showClose = true,
   noPadding = false,
   themeClass,
+  themeStyle,
   stackLevel = 0,
 }: ModalProps) {
   // Inicialización perezosa: detecta la pantalla ANTES del primer render
@@ -90,7 +97,7 @@ export default function Modal({
   const zIndexContainer = 70 + (stackLevel * 20)
 
   return (
-    <div className={themeClass}>
+    <div className={themeClass} style={themeStyle}>
       {/* Backdrop */}
       <div
         onClick={onClose}
@@ -119,7 +126,7 @@ export default function Modal({
             maxHeight: '85vh',
             background: backgroundModal,
             borderRadius: radioModal,
-            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.25)',
+            boxShadow: usarTema ? 'var(--theme-shadow-modal)' : '0 20px 60px rgba(0, 0, 0, 0.25)',
             overflow: 'auto',
             animation: 'modalFadeScale 0.25s ease-out',
           } : {

@@ -1,12 +1,12 @@
 'use client'
 
 import { useState } from 'react'
+import type { CSSProperties } from 'react'
 import { mutate } from 'swr'
 import { Check, Star } from 'lucide-react'
 import Icono from '@/components/ui/Icono'
 import Modal from '@/components/ui/Modal'
 import { createClient } from '@/lib/supabase-browser'
-import { tintPlaceholder } from '@/lib/brandTints'
 
 // Modal de calificación (se apila SOBRE el detalle de plato: stackLevel={1}).
 // Estado del formulario (estrellas/tags/comentario/enviada) vive AQUÍ: el
@@ -21,6 +21,7 @@ export default function CalificarModal({
   restauranteNombre,
   color,
   themeClass,
+  themeStyle,
   onClose,
   onResenaCreada,
 }: {
@@ -32,6 +33,7 @@ export default function CalificarModal({
   restauranteNombre: string
   color: string
   themeClass: string
+  themeStyle: CSSProperties
   onClose: () => void
   onResenaCreada: (resena: any) => void
 }) {
@@ -92,6 +94,7 @@ export default function CalificarModal({
         maxWidth={440}
         showClose={false}
         themeClass={themeClass}
+        themeStyle={themeStyle}
         stackLevel={1}
       >
         <div style={{ textAlign: 'center', padding: '20px 0' }}>
@@ -121,11 +124,12 @@ export default function CalificarModal({
       title="Calificar plato"
       maxWidth={500}
       themeClass={themeClass}
+      themeStyle={themeStyle}
       stackLevel={1}
     >
       {/* Plato que va a calificar */}
       <div style={{ background: 'var(--theme-surface-muted)', border: '1px solid var(--theme-border)', borderRadius: 'var(--theme-radius-card)', padding: '12px', display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
-        <div style={{ width: '48px', height: '48px', borderRadius: '8px', background: tintPlaceholder(color), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', fontWeight: 500, color: color, flexShrink: 0, overflow: 'hidden' }}>
+        <div style={{ width: '48px', height: '48px', borderRadius: '8px', background: 'var(--marca-tinte)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', fontWeight: 500, color: color, flexShrink: 0, overflow: 'hidden' }}>
           {mostrarFotos && plato.foto_url ? (
             <img src={plato.foto_url} alt={plato.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           ) : plato.nombre.charAt(0)}
@@ -146,7 +150,7 @@ export default function CalificarModal({
               background: 'transparent', border: 'none',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               cursor: 'pointer',
-              color: n <= calEstrellas ? 'var(--color-rating)' : 'var(--theme-border-strong)',
+              color: n <= calEstrellas ? 'var(--tema-rating)' : 'var(--theme-border-strong)',
               transition: 'transform var(--transicion-ui)',
               transform: n <= calEstrellas ? 'scale(1.1)' : 'scale(1)',
             }}><Icono icono={Star} size={32} fill={n <= calEstrellas ? 'currentColor' : 'none'} /></button>
@@ -182,7 +186,7 @@ export default function CalificarModal({
               fontSize: '13px', fontFamily: 'var(--theme-font-body)', outline: 'none', resize: 'none', minHeight: '80px',
               background: 'var(--theme-surface)', color: 'var(--theme-text)',
             }} />
-          <span style={{ position: 'absolute', right: '12px', bottom: '8px', fontSize: '10px', color: calComentario.length > 180 ? 'var(--color-warning)' : 'var(--theme-text-subtle)' }}>
+          <span style={{ position: 'absolute', right: '12px', bottom: '8px', fontSize: '10px', color: calComentario.length > 180 ? 'var(--tema-aviso)' : 'var(--theme-text-subtle)' }}>
             {calComentario.length}/200
           </span>
         </div>

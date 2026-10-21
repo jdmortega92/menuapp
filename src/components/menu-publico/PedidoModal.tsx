@@ -1,9 +1,11 @@
 'use client'
 
+import type { CSSProperties } from 'react'
 import { Plus, Minus } from 'lucide-react'
 import Icono from '@/components/ui/Icono'
 import Modal from '@/components/ui/Modal'
 import { formatoPrecio } from '@/lib/precio'
+import { textoSobre } from '@/lib/temaColor'
 
 // Modal "Tu pedido" del menú público. El estado mostrarPedido vive en la página
 // (llega como isOpen). CTA según contexto: QR → mostrar al mesero; web con
@@ -23,6 +25,7 @@ export default function PedidoModal({
   qrMesa,
   color,
   themeClass,
+  themeStyle,
   whatsappActivo,
 }: {
   isOpen: boolean
@@ -38,6 +41,7 @@ export default function PedidoModal({
   qrMesa: string | null
   color: string
   themeClass: string
+  themeStyle: CSSProperties
   whatsappActivo: boolean | undefined
 }) {
   return (
@@ -48,9 +52,10 @@ export default function PedidoModal({
       maxWidth={500}
       noPadding
       themeClass={themeClass}
+      themeStyle={themeStyle}
     >
       {esQR && (
-        <div style={{ padding: '12px 20px', background: 'var(--color-info-light)', fontSize: '12px', color: 'var(--color-info)' }}>
+        <div style={{ padding: '12px 20px', background: 'var(--tema-info-fondo)', fontSize: '12px', color: 'var(--tema-info)' }}>
           Mesa {qrMesa?.replace('mesa', '')} · Muéstrale este resumen al mesero
         </div>
       )}
@@ -78,7 +83,7 @@ export default function PedidoModal({
                 fontFamily: 'var(--theme-font-body)',
               }}>
                 {item.promo ? (
-                  <><span style={{ textDecoration: 'line-through', marginRight: '4px' }}>${formatoPrecio(item.variante ? item.variante.precio : item.plato.precio)}</span><span style={{ color: color, fontWeight: 500 }}>${formatoPrecio(item.promo.precioUnitario)} c/u</span> <span style={{ fontSize: '10px', color: 'var(--color-green)' }}>({item.promo.etiqueta})</span></>
+                  <><span style={{ textDecoration: 'line-through', marginRight: '4px' }}>${formatoPrecio(item.variante ? item.variante.precio : item.plato.precio)}</span><span style={{ color: color, fontWeight: 500 }}>${formatoPrecio(item.promo.precioUnitario)} c/u</span> <span style={{ fontSize: '10px', color: 'var(--tema-ok)' }}>({item.promo.etiqueta})</span></>
                 ) : `$${formatoPrecio(item.variante ? item.variante.precio : item.plato.precio)} c/u`}
               </div>
             </div>
@@ -105,7 +110,7 @@ export default function PedidoModal({
               }}>
                 {item.cantidad}
               </span>
-              <button type="button" onClick={() => onAgregar(item.cartKey)} aria-label="Agregar uno" className="tap-control tap-target-44" style={{ width: '26px', height: '26px', borderRadius: '50%', border: 'none', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', cursor: 'pointer' }}><Icono icono={Plus} size={14} /></button>
+              <button type="button" onClick={() => onAgregar(item.cartKey)} aria-label="Agregar uno" className="tap-control tap-target-44" style={{ width: '26px', height: '26px', borderRadius: '50%', border: 'none', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: textoSobre(color), cursor: 'pointer' }}><Icono icono={Plus} size={14} /></button>
             </div>
             <div style={{
               fontSize: '13px',
