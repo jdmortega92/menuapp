@@ -498,6 +498,23 @@ Decision 2026-07-03: Julian mantiene $15k/$29k mensual ($150k/$290k anual, ~2 me
 
 ## Items
 
+### AUD-P2 Motor de color, contraste y tema personalizado Pro (CIERRE P2a + P2b) - CLOSED
+- **Closed**: 2026-10-27 (P2a desplegado 2026-10-20, P2b 2026-10-27). La migracion 20261020000004_tema_personalizado.sql se aplico en produccion ANTES del deploy de P2b.
+- **Origen**: pedido de Julian: un tema personalizado para que el menu combine con la marca de cada restaurante y se destaque visualmente.
+- **Decisiones de Julian**: el texto sobre el color de marca queda blanco hasta 3:1 (umbral WCAG para texto grande/negrita y UI), si no, texto oscuro; los colores semanticos mantienen la regla estricta de 4.5:1; el tema personalizado es solo Pro; fondo obligatorio, color de tarjetas opcional; el choque de marca bloquea el guardado por debajo de 3:1 (con tonos sugeridos) y solo avisa entre 3:1 y 4.5:1; los presets que no se leerian se ocultan, no se marcan; mensajes de choque sin cifras; 6 fondos curados.
+- **P2a (motor)**: src/lib/temaColor.ts - luminancia y contraste WCAG, textoSobre / textoSobreEstricto, TEMAS_BASE (copia de los cuatro temas con un test que falla si se desincroniza de globals.css), paletaTema (deriva todos los colores --theme-* de un fondo y una superficie opcional, con garantias de contraste), marcaSobreFondo (contraste + sugerencias del mismo matiz). lib/brandTints ahora devuelve tintes opacos calculados contra el fondo real (mismo look en temas claros, visibles en oscuros). lib/estiloTema arma las variables inline (--marca-*, semanticos --tema-*, --ganador-*). Modal recibe themeStyle para que los modales nunca pierdan las variables de la pagina.
+- **P2a (arreglos en el menu publico)**: texto sobre superficies de marca via textoSobre; colores semanticos ajustados para leerse en todos los temas (mas oscuros en temas claros); la caja de platos no disponibles se lee en oscuro (estaba rota); placa Ganador dorado oscuro sobre fondos oscuros; sombras decorativas del tema; color-scheme, color de placeholder y fondo del body siguen al tema; "Ver mapa" usa el estilo de enlace de marca (D-01 en el menu publico); la vista previa de /config usa las mismas formulas que el menu real.
+- **P2b (tema personalizado)**: columnas restaurantes.tema_fondo y tema_superficie con CHECK de hex; CHECK de hex sobre color_principal y CHECK de los cuatro temas sobre tema (cierra la validacion solo-cliente de color_principal, cuyo valor termina en el CSS publico); GRANT UPDATE de las dos columnas nuevas a authenticated (regla de AUD-2). resolverTema: paleta propia solo para Pro con un fondo valido; los valores guardados se conservan cuando el plan baja. choqueMarca: ok / aviso / bloqueo contra fondo y tarjetas, mas sugerencias.
+- **P2b (/config)**: Personalizacion reordenada (temas, un bloque Colores con color de marca + colores propios, mensaje de choque, vista previa en vivo); 6 presets de fondo (Crema, Arena, Verde bosque, Azul noche, Vino, Cafe oscuro) que caben en una fila en el telefono; los presets que no se leerian se ocultan con una linea de aviso; Datos y Personalizacion guardan por separado y muestran el error de Supabase en vez de "Guardado" (parte de UI-2.0); componente nuevo SelectorColor; el CTA de WhatsApp conserva #25D366 con texto oscuro (antes blanco a ~2:1).
+- **Evidencia**: migracion 0a/0b/0c 0 filas; 5 constraints; authenticated UPDATE true, INSERT false, anon false; probe a OK rows=1, b a f 23514 (incluye un string de inyeccion CSS, un color de marca rgb() y un tema desconocido). Tests 469 -> 568. Smoke visual de Julian: los cuatro temas con naranja, Dorado y Negro; fondos propios (Vino, oscuro, claro); presets ocultos; guardados separados; CTA de WhatsApp; "Volver a los colores del tema".
+- **Pendiente**:
+  - La pantalla de carga siempre es claro, asi que un tema propio puede destellar claro antes de cargar.
+  - La tinta dorada de la placa Ganador clara esta en ~3.1:1; se mantuvo por el look dorado.
+  - Los presets de Tarjetas no se filtran; una tarjeta que choca la cubre el mensaje de choque.
+  - Los restaurantes existentes cuya combinacion guardada ahora bloquea solo lo ven la proxima vez que guardan Personalizacion; su menu publico no cambia.
+  - El resto de UI-2.0 (estados de error en toda la app) -> cierre 10.
+- **Commit**: 4f64efe (P2a), 5175195 (P2b).
+
 ### AUD-P1 Producto para la demo: foto completa, tipo de negocio, Sorprendeme y calificaciones (CIERRE P1 + P1.1) - CLOSED
 - **Closed**: 2026-10-20. La migracion 20261020000003_restaurantes_tipo_detalle.sql se aplico en produccion ANTES del deploy.
 - **Origen**: hallazgos de Julian armando el restaurante demo (La Cocina del Morro), confirmados con una investigacion de solo lectura.
