@@ -3,10 +3,8 @@ import { timingSafeEqual } from 'node:crypto'
 import { createAdminClient } from '@/lib/supabase-admin'
 import {
   calcularChecksumEvento,
-  calcularPlanExpira,
   enmascararTelefono,
   esReferenciaAutomatica,
-  esRenovacion,
   parsearReferencia,
   periodoDeReferenciaAutomatica,
   type WompiEvento,
@@ -14,13 +12,10 @@ import {
 } from '@/lib/wompi'
 import { credencialesListas, crearFuenteNequi, obtenerParAceptacion } from '@/lib/wompiApi'
 import { entornoWompiActual } from '@/lib/wompiEntorno'
-import { centavosDe, precioDe } from '@/lib/planes'
-import { fechaColombia } from '@/lib/fechas'
-import {
-  notificarCobroFallido,
-  notificarPlanActivo,
-  notificarRenovacionCobrada,
-} from '@/lib/email/notificaciones'
+import { precioDe } from '@/lib/planes'
+import { notificarCobroFallido } from '@/lib/email/notificaciones'
+import { aplicarTransaccionAprobada } from '@/lib/pagos/aplicarTransaccion'
+import { respuestaWebhook } from '@/lib/pagos/transaccion'
 
 // PIECE 3 (F4.a-2): webhook de eventos de Wompi. SIN sesion ni cookies (lo
 // llama Wompi server-to-server). Se verifica la firma con WOMPI_EVENTS_SECRET
@@ -121,153 +116,18 @@ export async function POST(request: Request) {
   }
   const { restauranteId, plan, periodo } = parsed
 
-  const admin = createAdminClient()
-
-  // Idempotencia: la factura con numero == reference es la huella del evento.
-  const { data: existente } = await admin
-    .from('facturas')
-    .select('id, estado')
-    .eq('numero', reference)
-    .maybeSingle()
-
   if (status === 'APPROVED') {
-    // Defensa en profundidad: el monto debe coincidir con el precio real.
-    const esperadoCents = centavosDe(plan, periodo)
-    if (transaction.amount_in_cents !== esperadoCents) {
-      // 200 a proposito (reintentar no cambia el monto), pero como ERROR con
-      // todo lo necesario para reconciliar a mano (C-6): un APPROVED con monto
-      // distinto es plata cobrada sin plan otorgado.
-      console.error(
-        `[wompi/eventos] monto no coincide, no se otorga plan reference=${reference} ` +
-          `restaurante=${restauranteId} esperado=${esperadoCents} recibido=${transaction.amount_in_cents}`
-      )
-      return NextResponse.json({ recibido: true }, { status: 200 })
-    }
-    // Ya procesado: no re-escribir ni duplicar factura.
-    if (existente?.estado === 'aprobada') {
-      return NextResponse.json({ recibido: true, idempotente: true }, { status: 200 })
-    }
-
-    // Estado ANTERIOR de la fila: plan/periodo/vencimiento para decidir si esto
-    // es una renovacion, y usuario_id como unica fuente valida del destinatario.
-    const { data: restPrev } = await admin
-      .from('restaurantes')
-      .select('plan, periodo_plan, plan_expira, usuario_id')
-      .eq('id', restauranteId)
-      .maybeSingle()
-    if (!restPrev) {
-      // Reintentar no crea el restaurante: 200 y queda en el log para revisar.
-      console.error(`[wompi/eventos] restaurante no existe reference=${reference} restaurante=${restauranteId}`)
-      return NextResponse.json({ recibido: true }, { status: 200 })
-    }
-    const planAnterior = (restPrev?.plan as string | undefined) ?? 'gratis'
-    const usuarioId = restPrev?.usuario_id as string | undefined
-
-    // F4.b-1 (bug B): renovar lo MISMO acumula sobre el vencimiento vigente (no
-    // se queman los dias que quedaban); upgrade o cambio de periodo arrancan
-    // ciclo nuevo desde hoy (decision F4, sin prorrateo).
-    const renovacion = esRenovacion({
-      plan,
-      periodo,
-      planActual: restPrev?.plan as string | undefined,
-      periodoActual: restPrev?.periodo_plan as string | undefined,
-    })
-    const planExpira = calcularPlanExpira(
-      periodo,
-      new Date(),
-      renovacion ? (restPrev?.plan_expira as string | null | undefined) : null
-    )
-    // FACTURA + PLAN EN UNA SOLA TRANSACCION (CIERRE 3, C-1 / D-HIGH-2).
-    // Antes: UPDATE del plan y DESPUES insert de la factura, con el error del
-    // insert tragado. Como la factura es la unica huella de idempotencia, un
-    // insert fallido convertia cada reentrega de Wompi en otro mes gratis, y dos
-    // entregas concurrentes podian extender las dos. Ahora la funcion
-    // aplicar_pago_aprobado (supabase/migrations/20261020000002) inserta la
-    // factura con ON CONFLICT (numero) DO NOTHING y solo si entro actualiza el
-    // plan, condicionado a que la fila siga como se leyo arriba. Todo o nada.
-    // Un pago CANCELA cualquier bajada agendada: quien paga no se esta bajando.
-    const [ano, mes] = fechaColombia().split('-').map(Number)
-    const { data: resultado, error: rpcErr } = await admin.rpc('aplicar_pago_aprobado', {
-      p_restaurante_id: restauranteId,
-      p_numero: reference,
-      p_monto: transaction.amount_in_cents! / 100,
-      p_metodo_pago: transaction.payment_method_type ?? 'wompi',
-      p_periodo_mes: mes,
-      p_periodo_ano: ano,
-      p_fecha_pago: fechaColombia(),
-      p_plan: plan,
-      p_periodo: periodo,
-      p_plan_expira: planExpira,
-      // El estado ANTERIOR tal cual se leyo: la funcion solo escribe si la fila
-      // sigue igual, asi que lo que se calculo arriba sigue siendo valido.
-      p_prev_plan: restPrev.plan ?? null,
-      p_prev_periodo: restPrev.periodo_plan ?? null,
-      p_prev_plan_expira: restPrev.plan_expira ?? null,
-    })
-    if (rpcErr) {
-      if (rpcErr.code === 'MA409') {
-        // La fila cambio entre la lectura y la escritura (otro evento, el cron).
-        // No se escribio nada; el reintento de Wompi recalcula sobre la fila nueva.
-        console.warn(`[wompi/eventos] conflicto, Wompi reintentara reference=${reference} restaurante=${restauranteId}`)
-      } else {
-        console.error(`[wompi/eventos] aplicar_pago_aprobado fallo reference=${reference}:`, rpcErr.message)
-      }
-      return NextResponse.json({ error: 'DB' }, { status: 500 }) // Wompi reintenta
-    }
-    if (resultado === 'duplicado') {
-      // Otra entrega del MISMO evento ya escribio factura y plan: ni plan ni correo.
-      return NextResponse.json({ recibido: true, idempotente: true }, { status: 200 })
-    }
-    if (resultado !== 'aplicado') {
-      console.error(`[wompi/eventos] aplicar_pago_aprobado devolvio un valor inesperado reference=${reference}: ${String(resultado)}`)
-      return NextResponse.json({ error: 'DB' }, { status: 500 })
-    }
-
-    // Email (server-callable, sin sesion). No romper el webhook si falla.
-    // El destinatario sale SIEMPRE de NUESTROS datos: restaurante -> usuario_id ->
-    // auth.users (via service role). JAMAS de transaction.customer_email: quien
-    // paga en el formulario de Wompi puede ser un contador o socio, no el dueno de
-    // la cuenta. Misma regla de identidad que /api/emails (nunca desde el body).
-    // Si no se resuelve el correo, no se envia nada (fail-closed).
-    let emailDueno: string | undefined
-    if (usuarioId) {
-      const { data: authData, error: authErr } = await admin.auth.admin.getUserById(usuarioId)
-      if (authErr) console.error('[wompi/eventos] lookup del dueno fallo:', authErr.message)
-      emailDueno = authData?.user?.email ?? undefined
-    }
-    // Se loguea el RESULTADO, nunca el valor: un no-envio debe ser diagnosticable.
-    console.info(
-      `[wompi/eventos] destinatario resuelto=${Boolean(emailDueno)} restaurante=${restauranteId}` +
-        (usuarioId ? '' : ' (sin usuario_id)')
-    )
-    if (emailDueno) {
-      try {
-        // F4.c-5: un COBRO AUTOMATICO no es un cambio de plan y no puede usar el
-        // correo de cambio de plan. Con plan_nuevo === plan_anterior, cambioPlan
-        // cae en su rama de cambio de periodo y responde "Solo cambió la
-        // facturación de tu suscripción" — falso en una renovacion, y ademas
-        // callaria justo lo unico que importa: que le sacamos plata a alguien
-        // que no estaba mirando. Se elige por la FORMA de la referencia, que la
-        // emitimos nosotros; payment_source_id tambien lo distinguiria, pero un
-        // pago manual desde una fuente guardada tambien lo traeria.
-        if (esReferenciaAutomatica(reference)) {
-          await notificarRenovacionCobrada({
-            to: emailDueno,
-            plan,
-            periodo,
-            monto: precioDe(plan, periodo),
-            planExpira,
-          })
-        } else {
-          await notificarPlanActivo({ to: emailDueno, plan, periodo, planAnterior })
-        }
-      } catch {
-        console.error('[wompi/eventos] envio de email fallo (plan ya activo)')
-      }
-    }
-
-    return NextResponse.json({ recibido: true, plan }, { status: 200 })
+    // CIERRE 5a: el camino APPROVED vive en lib/pagos/aplicarTransaccion,
+    // compartido con el retorno del checkout (/api/wompi/confirmar-pago). Aqui
+    // solo se traduce su resultado a EXACTAMENTE las respuestas de siempre: 200
+    // donde reintentar no arregla nada (monto/moneda, restaurante inexistente,
+    // duplicado), 500 donde Wompi debe reintentar (conflicto MA409, error de DB).
+    const resultado = await aplicarTransaccionAprobada(transaction, 'webhook')
+    const r = respuestaWebhook(resultado)
+    return NextResponse.json(r.body, { status: r.status })
   }
+
+  const admin = createAdminClient()
 
   // ── No aprobado: DECLINED / VOIDED / ERROR ───────────────────────────────
   // JAMAS se otorga el plan, y — F4.c-5 — JAMAS SE ESCRIBE NI SE ACTUALIZA UNA

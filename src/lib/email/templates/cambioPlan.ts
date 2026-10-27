@@ -23,6 +23,22 @@ export interface CambioPlanParams {
   /** Bajada DIFERIDA (F4.b-1): 'YYYY-MM-DD' en que se aplicará el cambio. Solo
    *  aplica a bajadas; sin ella el copy sigue siendo el inmediato de siempre. */
   fecha_cambio?: string
+  /** Renovación: el plan_expira que se le pasó a aplicar_pago_aprobado. */
+  plan_expira?: string
+}
+
+export type VarianteCambioPlan = 'renovacion' | 'cambio_periodo' | 'subida' | 'bajada'
+
+/** Qué correo corresponde. RENOVACIÓN = mismo plan Y mismo periodo, la MISMA
+ *  regla que esRenovacion (lib/wompi) usa para extender plan_expira: pagar otra
+ *  vez lo mismo (botón Renovar) jamás puede decir "solo cambió la facturación".
+ *  Sin periodo_anterior no se puede afirmar que es renovación y se conserva el
+ *  comportamiento de siempre. */
+export function varianteCambioPlan(p: Pick<CambioPlanParams, 'plan_nuevo' | 'plan_anterior' | 'periodo_nuevo' | 'periodo_anterior'>): VarianteCambioPlan {
+  if (p.plan_nuevo === p.plan_anterior && p.periodo_nuevo) {
+    return p.periodo_anterior === p.periodo_nuevo ? 'renovacion' : 'cambio_periodo'
+  }
+  return (RANGO_PLAN[p.plan_nuevo] ?? 0) > (RANGO_PLAN[p.plan_anterior] ?? 0) ? 'subida' : 'bajada'
 }
 
 // Correo de cambio de plan (F3): copy distinto según la dirección.
@@ -30,12 +46,35 @@ export interface CambioPlanParams {
 // Bajada: confirma el cambio, avisa qué deja de verse y deja la puerta abierta.
 // Mismo plan con periodo distinto: solo cambia la facturación, copy propio
 // sin lista de funciones (no se desbloqueó ni ocultó nada).
-export function cambioPlan({ plan_nuevo, plan_anterior, periodo_nuevo, fecha_cambio }: CambioPlanParams): EmailRenderizado {
-  const esSubida = (RANGO_PLAN[plan_nuevo] ?? 0) > (RANGO_PLAN[plan_anterior] ?? 0)
+export function cambioPlan({ plan_nuevo, plan_anterior, periodo_nuevo, periodo_anterior, fecha_cambio, plan_expira }: CambioPlanParams): EmailRenderizado {
+  const variante = varianteCambioPlan({ plan_nuevo, plan_anterior, periodo_nuevo, periodo_anterior })
+  const esSubida = variante === 'subida'
   const nombreNuevo = NOMBRE_PLAN[plan_nuevo] ?? plan_nuevo
   const urlSuscripcion = `${PUBLIC_BASE_URL}/suscripcion`
 
-  if (plan_nuevo === plan_anterior && periodo_nuevo) {
+  // Renovación (mismo plan y periodo, p.ej. botón Renovar): sin lista de
+  // funciones ni aviso de activar — no se desbloqueó nada. La fecha usa el MISMO
+  // helper que /suscripcion para plan_expira, así el correo y la app dicen el
+  // mismo día.
+  if (variante === 'renovacion') {
+    const titulo = `Tu plan ${nombreNuevo} quedó renovado`
+    const fecha = plan_expira ? fechaLargaColombia(plan_expira) : ''
+    const detalle = fecha
+      ? `Recibimos tu pago. Tu plan ${nombreNuevo} sigue activo hasta el ${fecha}.`
+      : `Recibimos tu pago. Tu plan ${nombreNuevo} sigue activo.`
+
+    const html = envolverHtml(`
+          <h1 style="font-size:20px;color:#2A2523;margin:0 0 12px;">${escaparHtml(titulo)}</h1>
+          <p style="font-size:14px;line-height:1.6;color:#2A2523;margin:0 0 24px;">${escaparHtml(detalle)}</p>
+          <a href="${urlSuscripcion}" style="font-size:14px;color:#E85D24;font-weight:bold;text-decoration:none;">Ver mi plan &rarr;</a>
+    `)
+
+    const text = [titulo, '', detalle, '', `Ver mi plan: ${urlSuscripcion}`].join('\n')
+
+    return { subject: titulo, html, text }
+  }
+
+  if (variante === 'cambio_periodo') {
     const titulo = `Tu plan ${nombreNuevo} ahora es ${periodo_nuevo}`
     const detalle = `Solo cambió la facturación de tu suscripción: desde tu próximo cobro será ${periodo_nuevo}. Tus funciones siguen exactamente igual.`
 
@@ -56,6 +95,11 @@ export function cambioPlan({ plan_nuevo, plan_anterior, periodo_nuevo, fecha_cam
 
   if (esSubida) {
     const funciones = FUNCIONES_PLAN[plan_nuevo] ?? []
+    // CIERRE 5a: varias funciones nuevas arrancan apagadas o hay que
+    // configurarlas; sin este aviso el correo decía "desbloqueado" y el dueño no
+    // sabía por qué no aparecían en su menú.
+    const urlConfig = `${PUBLIC_BASE_URL}/config`
+    const avisoActivar = 'Algunas arrancan apagadas: actívalas en Configuración para que aparezcan en tu menú.'
     const listaHtml = funciones
       .map((f) => `<span style="color:#E85D24;font-weight:bold;">&#10003;</span> ${escaparHtml(f)}`)
       .join('<br>')
@@ -65,7 +109,10 @@ export function cambioPlan({ plan_nuevo, plan_anterior, periodo_nuevo, fecha_cam
           <p style="font-size:14px;line-height:1.6;color:#2A2523;margin:0 0 20px;">
             Tu plan ya está activo. Desde ahora tienes desbloqueado:
           </p>
-          <p style="font-size:14px;line-height:1.9;color:#2A2523;margin:0 0 24px;">${listaHtml}</p>
+          <p style="font-size:14px;line-height:1.9;color:#2A2523;margin:0 0 16px;">${listaHtml}</p>
+          <p style="font-size:14px;line-height:1.6;color:#2A2523;margin:0 0 24px;">
+            ${escaparHtml(avisoActivar)} <a href="${urlConfig}" style="color:#E85D24;font-weight:bold;text-decoration:none;">Ir a Configuración &rarr;</a>
+          </p>
           <a href="${urlSuscripcion}" style="display:inline-block;background-color:#E85D24;color:#ffffff;font-size:14px;font-weight:bold;text-decoration:none;padding:12px 24px;border-radius:8px;">Ver mi plan</a>
     `)
 
@@ -75,6 +122,8 @@ export function cambioPlan({ plan_nuevo, plan_anterior, periodo_nuevo, fecha_cam
       'Tu plan ya está activo. Desde ahora tienes desbloqueado:',
       '',
       ...funciones.map((f) => `- ${f}`),
+      '',
+      `${avisoActivar} ${urlConfig}`,
       '',
       `Ver mi plan: ${urlSuscripcion}`,
     ].join('\n')

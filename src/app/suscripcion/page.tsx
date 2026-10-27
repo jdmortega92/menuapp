@@ -15,7 +15,32 @@ import { fechaColombia, fechaLargaColombia } from '@/lib/fechas'
 import { fechaCancelacionProgramada } from '@/lib/suscripciones'
 import { calcularPlanExpira } from '@/lib/planExpira'
 import { cobroAutomaticoHabilitado } from '@/lib/frenoCobro'
+import {
+  desbloqueosConfirmados,
+  leerPlanAntesDePagar,
+  serializarPlanAntesDePagar,
+  type FuncionPorActivar,
+} from '@/lib/desbloqueos'
 import type { Plan } from '@/types'
+
+// Plan que tenia la cuenta al salir al checkout (CIERRE 5a). El webhook suele
+// aplicar el pago ANTES de que el dueno vuelva, y entonces el retorno recibe
+// 'duplicado' sin planAnterior: este valor es lo que permite saber si fue una
+// subida y mostrar lo que se desbloqueo. Se guarda como JSON {plan, ts}
+// (lib/desbloqueos): mas de 2 horas o no parseable = no se cree. Solo
+// conveniencia: si falta, no hay aviso.
+const CLAVE_PLAN_ANTES_DE_PAGAR = 'menuapp:planAntesDePagar'
+
+// Retorno del checkout: 10 intentos cada 3 s (~30 s) mientras Wompi diga PENDING.
+const INTENTOS_CONFIRMACION = 10
+const ESPERA_CONFIRMACION_MS = 3000
+
+type Confirmacion =
+  | { estado: 'confirmando' }
+  | { estado: 'aprobado'; plan: string; planExpira: string | null; desbloqueos: FuncionPorActivar[] }
+  | { estado: 'en_proceso' }
+  | { estado: 'rechazado' }
+  | { estado: 'error' }
 
 export default function SuscripcionPage() {
   const router = useRouter()
@@ -25,6 +50,12 @@ export default function SuscripcionPage() {
   // los tres botones mostraban el label de carga a la vez. null = nada en vuelo.
   const [planEnProceso, setPlanEnProceso] = useState<Plan | null>(null)
   const [pagoProcesando, setPagoProcesando] = useState(false)
+  // Confirmacion activa del pago al volver del checkout con ?id= (CIERRE 5a).
+  const [confirmacion, setConfirmacion] = useState<Confirmacion | null>(null)
+  // Una sola corrida por carga: StrictMode monta dos veces en dev y la URL ya
+  // quedo limpia en la primera, asi que una cancelacion en el cleanup dejaria
+  // el banner colgado en "Confirmando".
+  const confirmacionIniciada = useRef(false)
   // Reactivar no es un cambio de plan: flag propio, fuera de planEnProceso.
   const [reactivando, setReactivando] = useState(false)
   // CONFIRM-SUSCRIPCION: bajar a Gratis termina la relacion comercial y hasta
@@ -112,7 +143,10 @@ export default function SuscripcionPage() {
   // borrarla); de eso se encarga el back-arrow propio del header, que empuja
   // /dashboard en vez de confiar en el historial.
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get('estado') === 'procesando') {
+    const params = new URLSearchParams(window.location.search)
+    // Con ?id= la confirmacion activa (efecto de abajo) es la que manda.
+    if (params.get('id')) return
+    if (params.get('estado') === 'procesando') {
       setPagoProcesando(true)
       mutateRestaurante()
       const url = new URL(window.location.href)
@@ -120,6 +154,72 @@ export default function SuscripcionPage() {
       window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`)
     }
   }, [mutateRestaurante])
+
+  // Retorno con ?id=<transaccion> (CIERRE 5a): se le pregunta a Wompi por la
+  // transaccion via /api/wompi/confirmar-pago y, si es APPROVED, se aplica por el
+  // mismo camino del webhook (idempotente). PENDING: reintenta ~30 s. Luego se
+  // quitan id/env/estado de la URL para que un refresh no lo vuelva a correr.
+  useEffect(() => {
+    if (confirmacionIniciada.current) return
+    const idTransaccion = new URLSearchParams(window.location.search).get('id')
+    if (!idTransaccion) return
+    confirmacionIniciada.current = true
+    router.replace('/suscripcion', { scroll: false })
+    setConfirmacion({ estado: 'confirmando' })
+
+    const confirmar = async (): Promise<{ estado?: string; plan?: string; plan_expira?: string | null; planAnterior?: string | null }> => {
+      try {
+        const res = await fetch('/api/wompi/confirmar-pago', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: idTransaccion }),
+        })
+        if (res.ok) return await res.json()
+        // 404 / 400: no hay nada que confirmar con ese id. 5xx: transitorio.
+        return { estado: res.status >= 500 ? 'pendiente' : 'error' }
+      } catch {
+        return { estado: 'pendiente' }
+      }
+    }
+
+    void (async () => {
+      for (let intento = 0; intento < INTENTOS_CONFIRMACION; intento++) {
+        const r = await confirmar()
+        if (r.estado === 'pendiente') {
+          if (intento < INTENTOS_CONFIRMACION - 1) await new Promise(res => setTimeout(res, ESPERA_CONFIRMACION_MS))
+          continue
+        }
+        // Plan anterior para el aviso de desbloqueo, SOLO de fuentes confiables y
+        // sin default a 'gratis': (1) el que devolvio la ruta cuando ESTE camino
+        // aplico el pago (la fila antes del RPC); si no (p.ej. 'duplicado'), (2)
+        // el registro {plan, ts} guardado justo antes del checkout, si tiene
+        // menos de 2 horas. sessionStorage es solo para este aviso: si falla o
+        // viene vacio, el pago se confirma igual y no hay lista.
+        let planAntes: string | null = typeof r.planAnterior === 'string' ? r.planAnterior : null
+        if (!planAntes) {
+          try {
+            planAntes = leerPlanAntesDePagar(window.sessionStorage.getItem(CLAVE_PLAN_ANTES_DE_PAGAR), Date.now())
+          } catch { planAntes = null }
+        }
+        try { window.sessionStorage.removeItem(CLAVE_PLAN_ANTES_DE_PAGAR) } catch { /* sin storage */ }
+        if (r.estado === 'aprobado' && r.plan) {
+          setConfirmacion({
+            estado: 'aprobado',
+            plan: r.plan,
+            planExpira: r.plan_expira ?? null,
+            desbloqueos: desbloqueosConfirmados(planAntes, r.plan),
+          })
+          await mutateRestaurante()
+        } else if (r.estado === 'rechazado') {
+          setConfirmacion({ estado: 'rechazado' })
+        } else {
+          setConfirmacion({ estado: 'error' })
+        }
+        return
+      }
+      setConfirmacion({ estado: 'en_proceso' })
+    })()
+  }, [router, mutateRestaurante])
 
   // El banner es transitorio, no permanente: si la fila revalidada ya muestra un
   // plan pago vigente, el webhook confirmo y no hay nada que "estar confirmando".
@@ -283,7 +383,9 @@ export default function SuscripcionPage() {
         return
       }
       // Redirige al Checkout de Wompi. El plan NO se escribe optimista: el
-      // webhook /api/wompi/eventos lo activa cuando la transaccion es APPROVED.
+      // webhook /api/wompi/eventos o el retorno (/api/wompi/confirmar-pago) lo
+      // activan cuando la transaccion es APPROVED.
+      try { window.sessionStorage.setItem(CLAVE_PLAN_ANTES_DE_PAGAR, serializarPlanAntesDePagar(planActual, Date.now())) } catch { /* opcional */ }
       window.location.href = data.url
     } catch (err) {
       console.error('[suscripcion] error iniciando pago:', err)
@@ -341,6 +443,78 @@ export default function SuscripcionPage() {
           <span onClick={() => router.push('/dashboard')} style={{ fontSize: '18px', color: 'var(--text-secondary)', cursor: 'pointer' }}>←</span>
           <span style={{ fontSize: '18px', fontWeight: 500 }}>Mi suscripción</span>
         </div>
+
+        {/* Confirmacion del pago al volver del checkout (CIERRE 5a) */}
+        {confirmacion && (() => {
+          const estilo = confirmacion.estado === 'aprobado'
+            ? { fondo: 'var(--color-green-light)', borde: 'var(--color-green)', tinta: 'var(--color-green-dark)' }
+            : confirmacion.estado === 'rechazado'
+              ? { fondo: 'var(--color-danger-light)', borde: 'var(--color-danger)', tinta: 'var(--color-danger)' }
+              : { fondo: 'var(--bg-tertiary)', borde: 'var(--border-medium)', tinta: 'var(--text-primary)' }
+          const nombrePlan = confirmacion.estado === 'aprobado'
+            ? (PLANES[confirmacion.plan as Plan]?.nombre ?? confirmacion.plan)
+            : ''
+          const fecha = confirmacion.estado === 'aprobado' && confirmacion.planExpira
+            ? fechaLargaColombia(confirmacion.planExpira)
+            : ''
+          return (
+            <div style={{ padding: '0 20px', marginBottom: '12px' }}>
+              <div role="status" style={{
+                background: estilo.fondo, border: `1px solid ${estilo.borde}`,
+                borderRadius: 'var(--radius-md)', padding: '12px 14px',
+                fontSize: '13px', color: estilo.tinta, lineHeight: 1.5,
+              }}>
+                {confirmacion.estado === 'confirmando' && <div style={{ fontWeight: 500 }}>Confirmando tu pago...</div>}
+                {confirmacion.estado === 'en_proceso' && (
+                  <div>Tu pago está en proceso. Te avisaremos por correo cuando se confirme.</div>
+                )}
+                {confirmacion.estado === 'error' && (
+                  <div>No pudimos confirmar tu pago todavía. Si ya pagaste, tu plan se actualizará en unos minutos.</div>
+                )}
+                {confirmacion.estado === 'rechazado' && (
+                  <>
+                    <div style={{ fontWeight: 500 }}>Tu pago no fue aprobado. No se te cobró nada.</div>
+                    <Boton variante="secundario" tamano="sm" style={{ marginTop: '10px' }}
+                      onClick={() => {
+                        setConfirmacion(null)
+                        document.getElementById('planes')?.scrollIntoView({ behavior: 'smooth' })
+                      }}>
+                      Intentar de nuevo
+                    </Boton>
+                  </>
+                )}
+                {confirmacion.estado === 'aprobado' && (
+                  <>
+                    <div style={{ fontWeight: 500 }}>
+                      {fecha
+                        ? `¡Listo! Tu plan ${nombrePlan} quedó pago hasta el ${fecha}.`
+                        : `¡Listo! Tu plan ${nombrePlan} quedó pago.`}
+                    </div>
+                    {confirmacion.desbloqueos.length > 0 && (
+                      <div style={{ marginTop: '10px', color: 'var(--text-primary)' }}>
+                        <div style={{ fontWeight: 500, marginBottom: '4px' }}>Esto se desbloqueó:</div>
+                        <ul style={{ margin: 0, paddingLeft: '18px' }}>
+                          {confirmacion.desbloqueos.map(f => (
+                            <li key={f.nombre} style={{ fontSize: '12px', marginBottom: '2px' }}>
+                              {f.nombre} ·{' '}
+                              <span onClick={() => router.push(f.href)} role="link"
+                                style={{ color: 'var(--color-accent)', cursor: 'pointer', fontWeight: 500 }}>
+                                {f.accion}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                        <div style={{ fontSize: '12px', marginTop: '6px', color: 'var(--text-secondary)' }}>
+                          Actívalas para que aparezcan en tu menú.
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          )
+        })()}
 
         {/* Pago en proceso (retorno desde Wompi) */}
         {pagoProcesando && (
@@ -456,6 +630,7 @@ export default function SuscripcionPage() {
         </div>
 
         {/* Planes */}
+        <div id="planes" />
         {planes.map((plan) => {
           // "Actual" exige plan Y periodo: con el toggle en anual, un pro mensual
           // NO es el plan actual (y por eso debe poder contratarse).

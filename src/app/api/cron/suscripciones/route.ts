@@ -77,9 +77,9 @@ export async function GET(request: Request) {
   // ── Guardia del secreto ──
   // .trim(): un valor pegado en Vercel con espacio/newline pasaria el chequeo de
   // "existe" y romperia la comparacion (misma clase de bug que ya nos mordio en
-  // wompi/checkout). Se loguea el NOMBRE y la LONGITUD, jamas el valor.
+  // wompi/checkout). Solo se loguea que FALTA (S-1, CIERRE 5a): ni el valor
+  // ni su longitud.
   const secret = (process.env.CRON_SECRET ?? '').trim()
-  console.info(`[cron/suscripciones] CRON_SECRET len=${secret.length}`)
   if (!secret) {
     console.error('[cron/suscripciones] falta CRON_SECRET')
     return NextResponse.json({ error: 'No configurado' }, { status: 500 })
@@ -358,7 +358,6 @@ export async function GET(request: Request) {
     console.info('[cron/suscripciones] cobro automatico DESHABILITADO (NEXT_PUBLIC_COBRO_AUTOMATICO != true): barrido de cobros omitido')
   } else if (credencialesListas('cron/suscripciones', ['privada'])) {
     const secretoIntegridad = (process.env.WOMPI_INTEGRITY_SECRET ?? '').trim()
-    console.info(`[cron/suscripciones] WOMPI_INTEGRITY_SECRET len=${secretoIntegridad.length}`)
     if (!secretoIntegridad) {
       // Sin firma Wompi responde 422 ("Firma de integridad requerida no
       // enviada"): mejor no tocar a nadie que quemarle el latch a cada fila.

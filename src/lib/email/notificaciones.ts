@@ -16,11 +16,17 @@ export async function notificarPlanActivo(p: {
   plan: Plan
   periodo: Periodo
   planAnterior?: string
+  /** Periodo de la fila ANTES del pago: con el plan, decide si es renovación. */
+  periodoAnterior?: string | null
+  /** plan_expira que se escribió (lo muestra el correo de renovación). */
+  planExpira?: string
 }) {
   const contenido = cambioPlan({
     plan_nuevo: p.plan,
     plan_anterior: p.planAnterior ?? 'gratis',
     periodo_nuevo: p.periodo,
+    periodo_anterior: p.periodoAnterior ?? undefined,
+    plan_expira: p.planExpira,
   })
   return enviarEmail({ to: p.to, ...contenido })
 }

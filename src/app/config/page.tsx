@@ -174,6 +174,13 @@ export default function ConfigPage() {
   }, [cargandoAuth, usuario, router])
 
   const [seccionActiva, setSeccionActiva] = useState<string | null>(null)
+  // Enlace directo a una sección (?seccion=funciones|personalizacion), p.ej. desde
+  // el aviso de "Esto se desbloqueó" al confirmar un pago (CIERRE 5a). Se lee de
+  // window, como /suscripcion, para no exigir un boundary Suspense.
+  useEffect(() => {
+    const s = new URLSearchParams(window.location.search).get('seccion')
+    if (s === 'funciones' || s === 'personalizacion') setSeccionActiva(s)
+  }, [])
   // Datos y Personalización guardan por separado (CIERRE P2b); cada una muestra
   // su propio error de Supabase en vez de "Guardado".
   const [guardandoDatos, setGuardandoDatos] = useState(false)

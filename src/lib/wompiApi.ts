@@ -1,5 +1,6 @@
-import { leerClaimsAceptacion, type ClaimsAceptacion } from './wompi'
+import { leerClaimsAceptacion, type ClaimsAceptacion, type WompiTransaction } from './wompi'
 import { entornoWompiActual } from './wompiEntorno'
+import { esIdTransaccionValido } from './pagos/transaccion'
 
 // ── Llamadas HTTP a la API de Wompi (F4.c-4) ─────────────────────────────
 // SEPARADO de lib/wompi.ts A PROPOSITO: ese modulo es puro y unit-testeable
@@ -17,6 +18,9 @@ import { entornoWompiActual } from './wompiEntorno'
 //        sin auth -> 401 INVALID_ACCESS_TOKEN; con pub_test_ -> 401 "Solicitud
 //        no autorizada"; con prv_test_ -> 201. Igual el GET de la fuente.
 //   POST /v1/transactions            -> PRIVADA. No se usa en F4.c-4 (es F4.c-5).
+//   GET  /v1/transactions/{id}       -> PRIVADA (consulta de una transaccion; el
+//        retorno del checkout, CIERRE 5a). Sin llave o con la publica Wompi
+//        responde 404 NOT_FOUND_ERROR aun si la transaccion existe (smoke 5a).
 //
 // La regla de fondo: TOKENIZAR es publico, GUARDAR y COBRAR son privados.
 //
@@ -38,13 +42,13 @@ function valorDe(llave: Llave): string {
   return ''
 }
 
-/** Verifica SOLO las credenciales que la operacion necesita de verdad. Se
- *  loguea la LONGITUD de cada una, jamas el valor: un valor truncado o con un
- *  newline pegado pasa el guard de "existe" y solo se delata por su longitud. */
+/** Verifica SOLO las credenciales que la operacion necesita de verdad. Solo se
+ *  loguea CUALES faltan (S-1, CIERRE 5a): ni el valor ni su longitud — la
+ *  longitud de un secreto tambien es informacion sobre el secreto. */
 export function credencialesListas(etiqueta: string, necesita: Llave[]): boolean {
-  const detalle = necesita.map((l) => `${l}=${valorDe(l).length}`).join(' ')
-  console.info(`[${etiqueta}] creds len: ${detalle}`)
-  return necesita.every((l) => valorDe(l).length > 0)
+  const faltan = necesita.filter((l) => valorDe(l).length === 0)
+  if (faltan.length > 0) console.error(`[${etiqueta}] falta la llave: ${faltan.join(', ')}`)
+  return faltan.length === 0
 }
 
 /** Resultado uniforme: las rutas deciden que responder, nadie lanza. */
@@ -77,13 +81,9 @@ async function pedir<T>(p: {
   }
 
   // Este sello es la linea que hace diagnosticable un 401 de un vistazo: dice
-  // QUE llave se uso en QUE ruta y con que longitud. Sin el, un 401 no
-  // distingue entre llave equivocada, ausente o truncada — que fue exactamente
-  // el bug de la primera version (tokenizacion firmada con la privada).
-  const sello =
-    p.llave === 'ninguna'
-      ? `${p.metodo} ${p.ruta} llave=ninguna`
-      : `${p.metodo} ${p.ruta} llave=${p.llave}(len=${credencial.length})`
+  // QUE llave se uso en QUE ruta — el bug de la primera version fue firmar la
+  // tokenizacion con la privada. Sin longitudes (S-1, CIERRE 5a).
+  const sello = `${p.metodo} ${p.ruta} llave=${p.llave}`
 
   const headers: Record<string, string> = {}
   if (p.cuerpo !== undefined) headers['Content-Type'] = 'application/json'
@@ -293,6 +293,35 @@ export async function cobrarConFuente(
       recurrent: true,
       signature: p.signature,
     },
+    etiqueta,
+  })
+}
+
+// ── Consulta de una transaccion (CIERRE 5a) ──────────────────────────────
+// LLAVE PRIVADA. Wompi ya no sirve GET /transactions/{id} sin llave ni con la
+// publica: responde 404 NOT_FOUND_ERROR aun para transacciones que existen
+// (verificado en el smoke de 5a contra sandbox con 12147249-1792514092-65778,
+// APPROVED en el dashboard). La usa el retorno del checkout para no depender de
+// que el webhook llegue a tiempo, y solo desde route handlers (server).
+// El id se valida ANTES de armar la URL (va en el path): solo
+// '<digitos>-<digitos>-<digitos>'. La ruta del log no lleva el id. Sin llave
+// privada no se llama a Wompi y solo se loguea cual falta (S-1).
+
+export async function obtenerTransaccion(
+  id: string,
+  etiqueta: string
+): Promise<ResultadoWompi<WompiTransaction>> {
+  if (!esIdTransaccionValido(id)) {
+    return { ok: false, status: 400, mensaje: 'Id de transaccion invalido' }
+  }
+  if (!credencialesListas(etiqueta, ['privada'])) {
+    return { ok: false, status: 500, mensaje: 'Falta la llave privada' }
+  }
+  return pedir<WompiTransaction>({
+    metodo: 'GET',
+    ruta: '/transactions/{id}',
+    path: `/transactions/${id}`,
+    llave: 'privada',
     etiqueta,
   })
 }

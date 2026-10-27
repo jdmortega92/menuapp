@@ -51,21 +51,16 @@ export async function POST(request: Request) {
   }
 
   // Se hace trim: un valor con espacios/newline pegado en Vercel pasaria el
-  // check de "existe" pero rompe la firma. Se loguea el nombre y la LONGITUD
-  // (nunca el valor) para distinguir vacio (len=0) de truncado (len corto pero
-  // != esperado). La longitud se loguea SIEMPRE, no solo al faltar: un valor
-  // truncado pasa el guard de "existe" y solo se detecta por su longitud.
+  // check de "existe" pero rompe la firma. Solo se loguea que FALTA (S-1,
+  // CIERRE 5a): ni el valor ni su longitud.
   const secret = (process.env.WOMPI_INTEGRITY_SECRET ?? '').trim()
   const publicKey = (process.env.NEXT_PUBLIC_WOMPI_PUBLIC_KEY ?? '').trim()
-  console.info(
-    `[wompi/checkout] creds len: WOMPI_INTEGRITY_SECRET=${secret.length} NEXT_PUBLIC_WOMPI_PUBLIC_KEY=${publicKey.length}`
-  )
   if (!secret) {
-    console.error(`[wompi/checkout] falta WOMPI_INTEGRITY_SECRET (len=${secret.length})`)
+    console.error('[wompi/checkout] falta WOMPI_INTEGRITY_SECRET')
     return NextResponse.json({ error: 'Pasarela no configurada' }, { status: 500 })
   }
   if (!publicKey) {
-    console.error(`[wompi/checkout] falta NEXT_PUBLIC_WOMPI_PUBLIC_KEY (len=${publicKey.length})`)
+    console.error('[wompi/checkout] falta NEXT_PUBLIC_WOMPI_PUBLIC_KEY')
     return NextResponse.json({ error: 'Pasarela no configurada' }, { status: 500 })
   }
 

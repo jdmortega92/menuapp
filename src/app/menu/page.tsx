@@ -74,6 +74,11 @@ export default function MiMenuPage() {
   )
   const puedeSubirFoto = calcularPuedeSubirFoto(plan as Plan, fuePago, fotosUsadas)
   const [tabActiva, setTabActiva] = useState<'platos' | 'combos' | 'sorprendeme'>('platos')
+  // Enlace directo a la pestaña Sorpréndeme (?tab=sorprendeme), desde el aviso de
+  // "Esto se desbloqueó" al confirmar un pago (CIERRE 5a).
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('tab') === 'sorprendeme') setTabActiva('sorprendeme')
+  }, [])
   const [busqueda, setBusqueda] = useState('')
   // Puntero del form "Nueva categoría" — el borrador y su cuarteto viven en
   // CategoriaForm (fresh-mount por apertura). onClose estable para React.memo.
