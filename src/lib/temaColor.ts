@@ -223,11 +223,12 @@ export interface MarcaSobreFondo {
   sugerencias: string[]
 }
 
-/** Contraste de la marca como texto sobre un fondo + sugerencias (aviso de P2b). */
-export function marcaSobreFondo(marca: string, fondo: string): MarcaSobreFondo {
+/** Contraste de la marca como texto sobre un fondo (o varios: cuenta el MENOR) +
+ *  sugerencias que llegan a 4.5:1 contra todos (aviso de P2b). */
+export function marcaSobreFondo(marca: string, fondo: string | string[]): MarcaSobreFondo {
   const m = exigirHex(marca)
-  const f = exigirHex(fondo)
-  const c = contraste(m, f)
+  const fs = (Array.isArray(fondo) ? fondo : [fondo]).map(exigirHex)
+  const c = contrasteMin(m, fs)
   if (c >= 4.5) return { contraste: c, cumple: true, sugerencias: [] }
   const [r, g, b] = hexARgb(m)
   const lOriginal = rgbAHsl(r, g, b)[2]
@@ -235,7 +236,7 @@ export function marcaSobreFondo(marca: string, fondo: string): MarcaSobreFondo {
   for (const objetivo of [4.5, 6, 7.5]) {
     // Ambas direcciones; gana la que menos se aleja de la luminosidad original.
     // Se descartan los extremos (casi blanco / casi negro): ya no son "el mismo color".
-    const candidatos = [tonoQueCumple(m, [f], objetivo, true), tonoQueCumple(m, [f], objetivo, false)]
+    const candidatos = [tonoQueCumple(m, fs, objetivo, true), tonoQueCumple(m, fs, objetivo, false)]
       .filter((x): x is string => !!x)
       .filter((x) => { const [rr, gg, bb] = hexARgb(x); const l = rgbAHsl(rr, gg, bb)[2]; return l > 0.03 && l < 0.97 })
       .sort((a, b2) => {

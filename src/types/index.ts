@@ -54,6 +54,12 @@ export interface Restaurante {
   idioma: string
   color_principal: string
   tema: 'claro' | 'oscuro' | 'natural' | 'premium'
+  /** Tema personalizado (CIERRE P2b, solo Pro): fondo '#RRGGBB'; el resto de la
+   *  paleta se deriva (lib/temaColor.paletaTema). Null = colores del tema base.
+   *  Se conserva aunque el plan baje: al volver a Pro reaparece. */
+  tema_fondo?: string | null
+  /** Color de tarjetas opcional ('#RRGGBB'); solo con tema_fondo. Null = derivado. */
+  tema_superficie?: string | null
   created_at: string
   periodo_plan?: string
   codigo_referido?: string

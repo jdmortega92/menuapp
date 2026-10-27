@@ -16,8 +16,9 @@ import PlatoDetalleModal from '@/components/menu-publico/PlatoDetalleModal'
 import BandejaFlotante from '@/components/menu-publico/BandejaFlotante'
 import RestaurantLanding from '@/components/menu-publico/RestaurantLanding'
 import { formato12h } from '@/lib/time'
-import { TEMAS_BASE, textoSobre, type TemaBaseId } from '@/lib/temaColor'
+import { TEMAS_BASE, textoSobre } from '@/lib/temaColor'
 import { estiloMenuPublico } from '@/lib/estiloTema'
+import { resolverTema } from '@/lib/temaPersonalizado'
 import { useMenuVisibility } from '@/hooks/useMenuVisibility'
 import { usePromoIndices } from '@/hooks/usePromoIndices'
 import { fechaColombia } from '@/lib/fechas'
@@ -128,17 +129,24 @@ export default function MenuPublicoPage() {
   const color = restaurante?.color_principal || '#E85D24'
   const planRest = restaurante?.plan || 'gratis'
 
-  // Tema del menú público (Claro es default; Oscuro/Natural/Premium requieren Pro)
-  const temaConfigurado = restaurante?.tema || 'claro'
-  const temaValido = ['claro', 'oscuro', 'natural', 'premium'].includes(temaConfigurado)
-  const temaRequierePro = ['oscuro', 'natural', 'premium'].includes(temaConfigurado)
-  const tema = ((temaRequierePro && planRest !== 'pro')
-    ? 'claro'
-    : (temaValido ? temaConfigurado : 'claro')) as TemaBaseId
+  // Tema del menú público (lib/temaPersonalizado.resolverTema): Claro es default;
+  // Oscuro/Natural/Premium y los colores propios (tema_fondo/tema_superficie,
+  // CIERRE P2b) requieren Pro. Sin Pro los colores propios se ignoran, no se borran.
+  const { base: tema, paleta } = useMemo(() => resolverTema({
+    tema: restaurante?.tema,
+    plan: planRest,
+    temaFondo: restaurante?.tema_fondo,
+    temaSuperficie: restaurante?.tema_superficie,
+  }), [restaurante?.tema, planRest, restaurante?.tema_fondo, restaurante?.tema_superficie])
   const themeClass = `theme-${tema}`
   // Variables de color que dependen del fondo y de la marca (CIERRE P2a): se
-  // calculan UNA vez y viajan junto a themeClass a la raíz y a cada Modal.
-  const themeStyle = useMemo(() => estiloMenuPublico(tema, color) as CSSProperties, [tema, color])
+  // calculan UNA vez y viajan junto a themeClass a la raíz y a cada Modal. Con
+  // paleta propia, incluyen además todas las --theme-* de color (pisan la clase).
+  const themeStyle = useMemo(
+    () => estiloMenuPublico(tema, color, paleta ?? undefined) as CSSProperties,
+    [tema, color, paleta],
+  )
+  const fondoTema = paleta?.bg ?? TEMAS_BASE[tema].bg
   // Texto sobre la marca (chips, pills, + y CTAs): blanco o casi negro, el que contraste.
   const sobreMarca = textoSobre(color)
 
@@ -146,9 +154,9 @@ export default function MenuPublicoPage() {
   // no muestra el crema del admin detrás de un tema oscuro.
   useEffect(() => {
     const anterior = document.body.style.backgroundColor
-    document.body.style.backgroundColor = TEMAS_BASE[tema].bg
+    document.body.style.backgroundColor = fondoTema
     return () => { document.body.style.backgroundColor = anterior }
-  }, [tema])
+  }, [fondoTema])
   const esProPublico = planRest === 'pro'
   const esBasicoPublico = planRest === 'basico' || planRest === 'pro'
   // Fotos de PLATOS en el público (STRATEGIC.2): pagos siempre; gratis solo si la

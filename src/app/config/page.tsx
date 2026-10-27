@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { ChevronDown, Lock, ImagePlus, ArrowRight, Check } from 'lucide-react'
 import Icono from '@/components/ui/Icono'
 import Boton from '@/components/ui/Boton'
@@ -18,28 +18,11 @@ import { isPasswordValid, getPasswordError } from '@/lib/passwordValidation'
 import PhoneInput from '@/components/ui/PhoneInput'
 import BottomNav from '@/components/BottomNav'
 import { TIPOS_NEGOCIO, MAX_TIPO_DETALLE, tipoDetalleParaGuardar } from '@/lib/tiposNegocio'
-import { TEMAS_BASE, textoSobre, type TemaBaseId } from '@/lib/temaColor'
+import { TEMAS_BASE, esFondoOscuro, luminancia, normalizeHex, textoSobre } from '@/lib/temaColor'
 import { gradientHeader, tintPlaceholder } from '@/lib/brandTints'
-
-// ── Helpers del selector de color (COLOR-PICKER restyle) ──
-// Luminancia percibida aproximada (sRGB ponderado) para decidir el color del
-// check sobre un swatch: fondo claro -> check oscuro, fondo oscuro -> blanco.
-function esColorClaro(hex: string): boolean {
-  const h = hex.replace('#', '')
-  if (h.length !== 6) return false
-  const r = parseInt(h.slice(0, 2), 16)
-  const g = parseInt(h.slice(2, 4), 16)
-  const b = parseInt(h.slice(4, 6), 16)
-  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6
-}
-
-// Valida #RRGGBB (el # inicial es opcional al teclear) y normaliza a
-// '#RRGGBB' mayusculas — el formato que persiste restaurantes.color_principal.
-const HEX_6 = /^#?([0-9a-fA-F]{6})$/
-function normalizarHex(v: string): string | null {
-  const m = v.trim().match(HEX_6)
-  return m ? `#${m[1].toUpperCase()}` : null
-}
+import { estiloMenuPublico } from '@/lib/estiloTema'
+import { choqueMarca, fondosDelTema, resolverTema } from '@/lib/temaPersonalizado'
+import SelectorColor from '@/components/ui/SelectorColor'
 
 export default function ConfigPage() {
   const router = useRouter()
@@ -68,15 +51,13 @@ export default function ConfigPage() {
   const [direccion, setDireccion] = useState('')
   const [descripcion, setDescripcion] = useState('')
   const [colorPrincipal, setColorPrincipal] = useState('#E85D24')
-  // Borrador del campo hex (COLOR-PICKER restyle): null = espejo de
-  // colorPrincipal; string = lo que el usuario esta tecleando. Se propaga a
-  // colorPrincipal SOLO cuando valida (#RRGGBB) y se descarta al salir del
-  // campo — sin efectos de sincronizacion.
-  const [hexDraft, setHexDraft] = useState<string | null>(null)
-  // El picker nativo sobrevive OCULTO como fallback ("más colores..."): el
-  // camino primario es la paleta curada + el campo hex.
-  const inputColorNativoRef = useRef<HTMLInputElement>(null)
   const [tema, setTema] = useState('claro')
+  // Colores propios (CIERRE P2b, Pro). El switch apagado conserva lo elegido en
+  // pantalla (volver a prenderlo lo recupera) pero guarda null; "Volver a los
+  // colores del tema" lo borra. temaSuperficie null = tarjetas automáticas.
+  const [usarColoresPropios, setUsarColoresPropios] = useState(false)
+  const [temaFondo, setTemaFondo] = useState<string | null>(null)
+  const [temaSuperficie, setTemaSuperficie] = useState<string | null>(null)
   const [toggles, setToggles] = useState({
     whatsapp_activo: true,
     combos_activo: false,
@@ -113,7 +94,10 @@ export default function ConfigPage() {
   // components/ui/CropModal (compartido con /menu desde Fase 3).
   const [cropModal, setCropModal] = useState<{ imagen: string; tipo: 'logo' | 'banner' } | null>(null)
 
-  // Seed form state from restaurante row + email from usuario
+  // Seed form state from restaurante row + email from usuario. Dos efectos, uno
+  // por sección guardable (CIERRE P2b): cada uno depende SOLO de sus columnas, así
+  // guardar la apariencia (que refresca `rest`) no pisa lo que el dueño esté
+  // escribiendo sin guardar en Datos, y viceversa.
   useEffect(() => {
     if (!rest || !usuario) return
     setNombre(rest.nombre || '')
@@ -123,10 +107,20 @@ export default function ConfigPage() {
     setWhatsapp(rest.whatsapp || '')
     setDireccion(rest.direccion || '')
     setDescripcion(rest.descripcion || '')
+    setEmail(usuario.email || '')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rest?.id, rest?.nombre, rest?.tipo, rest?.tipo_detalle, rest?.ciudad, rest?.whatsapp, rest?.direccion, rest?.descripcion, usuario?.email])
+
+  useEffect(() => {
+    if (!rest) return
     setColorPrincipal(rest.color_principal || '#E85D24')
     setTema(rest.tema || 'claro')
-    setEmail(usuario.email || '')
-  }, [rest, usuario])
+    const fondo = normalizeHex(rest.tema_fondo)
+    setTemaFondo(fondo)
+    setTemaSuperficie(fondo ? normalizeHex(rest.tema_superficie) : null)
+    setUsarColoresPropios(!!fondo)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rest?.id, rest?.color_principal, rest?.tema, rest?.tema_fondo, rest?.tema_superficie])
 
   // Seed form state from config_restaurante
   useEffect(() => {
@@ -180,8 +174,14 @@ export default function ConfigPage() {
   }, [cargandoAuth, usuario, router])
 
   const [seccionActiva, setSeccionActiva] = useState<string | null>(null)
-  const [guardando, setGuardando] = useState(false)
-  const [guardado, setGuardado] = useState(false)
+  // Datos y Personalización guardan por separado (CIERRE P2b); cada una muestra
+  // su propio error de Supabase en vez de "Guardado".
+  const [guardandoDatos, setGuardandoDatos] = useState(false)
+  const [guardadoDatos, setGuardadoDatos] = useState(false)
+  const [errorDatos, setErrorDatos] = useState<string | null>(null)
+  const [guardandoApariencia, setGuardandoApariencia] = useState(false)
+  const [guardadoApariencia, setGuardadoApariencia] = useState(false)
+  const [errorApariencia, setErrorApariencia] = useState<string | null>(null)
 
   // Paleta curada (esto es DATA de producto, no tokens de UI: unicos hex
   // permitidos fuera de globals.css). 17 colores aptos para restaurante y
@@ -206,9 +206,50 @@ export default function ConfigPage() {
     { color: '#1A1A18', nombre: 'Negro' },
   ]
 
-  // Colores del tema elegido: la vista previa usa los MISMOS tintes y texto-sobre-
-  // marca que el menú público (CIERRE P2a), para que se vea igual.
-  const coloresPreview = TEMAS_BASE[tema as TemaBaseId] ?? TEMAS_BASE.claro
+  // Fondos curados para "Colores propios" (CIERRE P2b; DATA de producto, como
+  // coloresPreset). También se ofrecen para las tarjetas. 6 a propósito: 6 × 36px
+  // + 5 × 8px = 256px caben en una línea en un teléfono de 375px (~279px útiles).
+  const fondosPreset = [
+    { color: '#F3E9D2', nombre: 'Crema' },
+    { color: '#E6D5B8', nombre: 'Arena' },
+    { color: '#1F3D2B', nombre: 'Verde bosque' },
+    { color: '#14213D', nombre: 'Azul noche' },
+    { color: '#4A1C24', nombre: 'Vino' },
+    { color: '#3B2A20', nombre: 'Café oscuro' },
+  ]
+
+  // Tema tal como lo verá el comensal con lo que hay en pantalla: la MISMA
+  // resolución (gating por plan) y los MISMOS tintes / texto-sobre-marca que el
+  // menú público, para que la vista previa se vea igual.
+  const temaResuelto = resolverTema({
+    tema, plan,
+    temaFondo: usarColoresPropios ? temaFondo : null,
+    temaSuperficie: usarColoresPropios ? temaSuperficie : null,
+  })
+  const paletaPropia = temaResuelto.paleta
+  const coloresPreview = paletaPropia ?? TEMAS_BASE[temaResuelto.base]
+  const estiloPreview = estiloMenuPublico(temaResuelto.base, colorPrincipal, paletaPropia ?? undefined) as React.CSSProperties
+  // Choque de la marca (como texto) con fondo y tarjetas del tema elegido.
+  const fondosChoque = fondosDelTema(temaResuelto)
+  const choque = choqueMarca(colorPrincipal, fondosChoque.bg, fondosChoque.surface)
+  // El dueño eligió tarjetas y paletaTema tuvo que acercarlas al fondo para que
+  // el texto se lea: se muestra y se GUARDA el color ajustado.
+  const superficieAjustada = !!(temaSuperficie && paletaPropia?.superficieAjustada)
+  // Presets que caerían en el bloqueo (< 3:1), marcados de antemano para que el
+  // dueño no tropiece con él: marca contra el tema resuelto actual; fondo contra
+  // la marca actual (con las tarjetas elegidas, como se resolvería al guardar).
+  const marcaBloqueada = (hex: string) =>
+    choqueMarca(hex, fondosChoque.bg, fondosChoque.surface).nivel === 'bloqueo'
+  const fondoBloqueado = (hex: string) => {
+    const f = fondosDelTema(resolverTema({ tema, plan, temaFondo: hex, temaSuperficie }))
+    return choqueMarca(colorPrincipal, f.bg, f.surface).nivel === 'bloqueo'
+  }
+  // Aviso: "un tono más claro/oscuro" según hacia dónde van los tonos sugeridos
+  // (si no hay sugerencias, según el fondo). Solo se calcula en aviso: ahí la
+  // marca y las sugerencias son hex válidos.
+  const tonoSugeridoMasClaro = choque.nivel === 'aviso' && (choque.sugerencias.length > 0
+    ? luminancia(choque.sugerencias[0]) > luminancia(colorPrincipal)
+    : esFondoOscuro(coloresPreview.bg))
 
   const temas = [
     { id: 'claro', nombre: 'Claro', desc: 'Minimalista, versátil', plan: 'gratis' },
@@ -372,29 +413,66 @@ export default function ConfigPage() {
     }
   }
 
-  async function guardarCambios() {
+  // Datos del restaurante: SOLO sus columnas (CIERRE P2b separó el guardado; la
+  // apariencia va por guardarApariencia).
+  async function guardarDatos() {
     if (!rest?.id) return
-    setGuardando(true)
+    setGuardandoDatos(true)
+    setErrorDatos(null)
+    const supabase = createClient()
+    const { error } = await supabase.from('restaurantes').update({
+      nombre, tipo, ciudad, whatsapp, direccion, descripcion,
+      // null si el tipo no es 'otro': cambiar de tipo limpia el detalle.
+      tipo_detalle: tipoDetalleParaGuardar(tipo, tipoDetalle),
+    }).eq('id', rest.id)
+    setGuardandoDatos(false)
+    if (error) {
+      setErrorDatos(`No se pudo guardar: ${error.message}`)
+      return
+    }
+    await mutateRestaurante()
+    setGuardadoDatos(true)
+    setTimeout(() => setGuardadoDatos(false), 2000)
+  }
+
+  // Personalización: color de marca, tema y colores propios.
+  async function guardarApariencia() {
+    if (!rest?.id) return
+    // Bloqueo por choque de marca (< 3:1): SOLO del lado del cliente, a propósito.
+    // Saltárselo solo afecta la legibilidad del menú del propio dueño; no es un
+    // límite de seguridad ni de plan (esos viven en la base). Nunca bloquea Datos.
+    if (choque.nivel === 'bloqueo') return
+    setGuardandoApariencia(true)
+    setErrorApariencia(null)
     const supabase = createClient()
 
     // Validación defensiva: si el tema requiere Pro y el usuario no es Pro, degradar a Claro
     const temaRequierePro = ['oscuro', 'natural', 'premium'].includes(tema)
     const temaFinal = (temaRequierePro && !esPro) ? 'claro' : tema
 
-    await supabase.from('restaurantes').update({
-      nombre, tipo, ciudad, whatsapp, direccion, descripcion,
-      // null si el tipo no es 'otro': cambiar de tipo limpia el detalle.
-      tipo_detalle: tipoDetalleParaGuardar(tipo, tipoDetalle),
-      color_principal: colorPrincipal, tema: temaFinal,
-    }).eq('id', rest.id)
+    const cambios: Record<string, string | null> = { color_principal: colorPrincipal, tema: temaFinal }
+    // Colores propios: solo Pro. Para Gratis/Básico las columnas NI SE MANDAN, así
+    // lo guardado sobrevive a un bajón de plan y reaparece al volver a Pro.
+    if (esPro) {
+      const fondo = usarColoresPropios ? normalizeHex(temaFondo) : null
+      cambios.tema_fondo = fondo
+      // Tarjetas elegidas: se guarda el color YA ajustado por paletaTema.
+      cambios.tema_superficie = fondo && temaSuperficie && paletaPropia ? paletaPropia.surface : null
+    }
+
+    const { error } = await supabase.from('restaurantes').update(cambios).eq('id', rest.id)
+    setGuardandoApariencia(false)
+    if (error) {
+      setErrorApariencia(`No se pudo guardar: ${error.message}`)
+      return
+    }
     await mutateRestaurante()
 
     // Sincronizar estado local si se degradó
     if (temaFinal !== tema) setTema(temaFinal)
 
-    setGuardando(false)
-    setGuardado(true)
-    setTimeout(() => setGuardado(false), 2000)
+    setGuardadoApariencia(true)
+    setTimeout(() => setGuardadoApariencia(false), 2000)
   }
   if (cargandoAuth || cargandoConfig) {
     return (
@@ -473,9 +551,12 @@ export default function ConfigPage() {
                   </span>
                 </div>
               </div>
-              <Boton onClick={guardarCambios} style={{ width: '100%' }}>
-                {guardando ? 'Guardando...' : guardado ? <><Icono icono={Check} size={14} /> Guardado</> : 'Guardar cambios'}
+              <Boton onClick={guardarDatos} disabled={guardandoDatos} style={{ width: '100%' }}>
+                {guardandoDatos ? 'Guardando...' : guardadoDatos ? <><Icono icono={Check} size={14} /> Guardado</> : 'Guardar cambios'}
               </Boton>
+              {errorDatos && (
+                <div style={{ fontSize: '12px', color: 'var(--color-danger)', marginTop: '8px' }}>{errorDatos}</div>
+              )}
             </div>
           )}
         </div>
@@ -498,76 +579,6 @@ export default function ConfigPage() {
           </div>
           {seccionActiva === 'personalizacion' && esBasico && (
             <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-light)', borderTop: 'none', borderRadius: '0 0 12px 12px', padding: '14px', animation: 'fadeInUp 0.2s ease' }}>
-
-              {/* Color principal — paleta curada + campo hex; el picker nativo
-                  queda oculto tras "más colores..." (fallback, no camino primario) */}
-              <div style={{ marginBottom: '16px' }}>
-                <label className="label">Color principal</label>
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '6px' }}>
-                  {coloresPreset.map(c => (
-                    <div key={c.color} onClick={() => { setColorPrincipal(c.color); setHexDraft(null) }} style={{
-                      width: '36px', height: '36px', borderRadius: 'var(--radio-boton)', background: c.color, cursor: 'pointer',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      color: esColorClaro(c.color) ? 'var(--text-primary)' : 'white',
-                      boxShadow: colorPrincipal === c.color ? `0 0 0 2px var(--bg-primary), 0 0 0 4px ${c.color}` : 'none',
-                      transition: 'box-shadow 0.15s ease',
-                    }} title={c.nombre}>
-                      {colorPrincipal === c.color && <Icono icono={Check} size={16} />}
-                    </div>
-                  ))}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px' }}>
-                  <div style={{ width: '32px', height: '32px', borderRadius: 'var(--radio-boton)', background: colorPrincipal, border: '1px solid var(--border-light)', flexShrink: 0 }} />
-                  <input
-                    className="input"
-                    value={hexDraft ?? colorPrincipal}
-                    onChange={(e) => {
-                      const v = e.target.value
-                      setHexDraft(v)
-                      const norm = normalizarHex(v)
-                      if (norm) setColorPrincipal(norm)
-                    }}
-                    onBlur={() => setHexDraft(null)}
-                    maxLength={7}
-                    placeholder="#RRGGBB"
-                    spellCheck={false}
-                    aria-label="Color en formato hexadecimal"
-                    style={{
-                      width: '110px',
-                      borderColor: hexDraft !== null && normalizarHex(hexDraft) === null ? 'var(--color-danger)' : undefined,
-                    }}
-                  />
-                  <Boton variante="terciario" tono="neutro" tamano="sm"
-                    onClick={() => inputColorNativoRef.current?.click()}
-                    style={{ padding: '0 8px' }}>
-                    más colores...
-                  </Boton>
-                  <input
-                    ref={inputColorNativoRef}
-                    type="color"
-                    value={colorPrincipal}
-                    onChange={(e) => { setColorPrincipal(normalizarHex(e.target.value) ?? colorPrincipal); setHexDraft(null) }}
-                    aria-hidden="true"
-                    tabIndex={-1}
-                    style={{ position: 'absolute', width: 0, height: 0, opacity: 0, pointerEvents: 'none' }}
-                  />
-                </div>
-                {hexDraft !== null && normalizarHex(hexDraft) === null && (
-                  <div style={{ fontSize: '11px', color: 'var(--color-danger)', marginTop: '4px' }}>
-                    Formato: #RRGGBB (6 dígitos hexadecimales)
-                  </div>
-                )}
-              </div>
-
-              {/* Vista previa del color */}
-              <div style={{ marginBottom: '16px' }}>
-                <label className="label">Vista previa</label>
-                <div style={{ display: 'flex', gap: '8px', marginTop: '6px', alignItems: 'center' }}>
-                  <div style={{ padding: '8px 16px', borderRadius: '20px', background: colorPrincipal, color: textoSobre(colorPrincipal), fontSize: '12px', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>Categorías <Icono icono={ChevronDown} size={12} /></div>
-                  <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: colorPrincipal, display: 'flex', alignItems: 'center', justifyContent: 'center', color: textoSobre(colorPrincipal), fontSize: '14px' }}>+</div>
-                  <span style={{ fontSize: '12px', color: colorPrincipal, fontWeight: 500 }}>Enlace</span>
-                </div>
-              </div>
 
               {/* Tema */}
               <div style={{ marginBottom: '16px' }}>
@@ -624,160 +635,293 @@ export default function ConfigPage() {
                     )
                   })}
                 </div>
+              </div>
 
-                {/* Preview en vivo del tema */}
-                <div style={{ marginTop: '14px' }}>
-                  <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                    Vista previa
-                  </div>
-                  <div className={`theme-${tema}`} style={{
-                    borderRadius: '12px',
-                    overflow: 'hidden',
-                    border: '1px solid var(--border-light)',
-                    background: 'var(--theme-bg)',
-                    padding: '16px',
-                    transition: 'all 0.25s ease',
-                  }}>
-                    {/* Banner del preview */}
-                    {bannerUrl ? (
-                      <div style={{
-                        width: '100%',
-                        aspectRatio: '3/1',
-                        borderRadius: 'var(--theme-radius-image)',
-                        overflow: 'hidden',
-                        marginBottom: '-24px',
-                      }}>
-                        <img src={bannerUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              {/* Colores (CIERRE P2b): color principal y colores propios en UNA
+                  tarjeta; el choque de marca justo debajo, antes de la vista previa. */}
+              <div style={{ marginBottom: '16px' }}>
+                <label className="label">Colores</label>
+                <div style={{
+                  marginTop: '6px', padding: '12px', borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border-light)',
+                }}>
+                  {/* Color principal — paleta curada + campo hex; el picker nativo
+                      queda oculto tras "más colores..." (ui/SelectorColor) */}
+                  <label className="label">Color principal</label>
+                  <SelectorColor valor={colorPrincipal} onChange={setColorPrincipal}
+                    presets={coloresPreset} etiquetaHex="Color en formato hexadecimal"
+                    presetBloqueado={marcaBloqueada}
+                    avisoOcultos="Algunos colores no aparecen porque no se leerían sobre este fondo." />
+
+                  {/* Colores propios (Pro): fondo obligatorio + tarjetas opcionales;
+                      texto, bordes y tintes los deriva lib/temaColor.paletaTema.
+                      Fuentes, radios y títulos siguen siendo los del tema elegido. */}
+                  <div style={{ marginTop: '16px', paddingTop: '14px', borderTop: '1px solid var(--border-light)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', opacity: esPro ? 1 : 0.55 }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ fontSize: '13px', fontWeight: 500 }}>Usar colores propios</span>
+                          <span className="badge badge-warning">Pro</span>
+                        </div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                          Elige el fondo de tu menú; el texto y los bordes se ajustan solos para leerse bien.
+                        </div>
+                        {!esPro && (
+                          <Boton
+                            variante="terciario"
+                            tamano="sm"
+                            onClick={() => router.push('/suscripcion')}
+                            style={{ padding: '0 8px', marginTop: '6px' }}
+                          >
+                            Desbloquear con Plan Pro <Icono icono={ArrowRight} size={12} />
+                          </Boton>
+                        )}
                       </div>
-                    ) : (
-                      <div style={{
-                        width: '100%',
-                        aspectRatio: '3/1',
-                        borderRadius: 'var(--theme-radius-image)',
-                        background: gradientHeader(colorPrincipal, coloresPreview.bg),
-                        marginBottom: '-24px',
-                      }} />
-                    )}
-
-                    {/* Logo circular */}
-                    <div style={{
-                      width: '48px',
-                      height: '48px',
-                      borderRadius: '50%',
-                      background: 'var(--theme-surface)',
-                      border: '3px solid var(--theme-bg)',
-                      overflow: 'hidden',
-                      marginLeft: '4px',
-                      position: 'relative',
-                      zIndex: 1,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}>
-                      {logoUrl ? (
-                        <img src={logoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      ) : (
-                        <span style={{
-                          fontSize: '16px',
-                          fontWeight: 500,
-                          color: 'var(--theme-text)',
-                          fontFamily: 'var(--theme-font-display)',
+                      {esPro ? (
+                        <div onClick={() => {
+                          if (!usarColoresPropios && !temaFondo) setTemaFondo(TEMAS_BASE[temaResuelto.base].bg)
+                          setUsarColoresPropios(!usarColoresPropios)
+                        }} role="switch" aria-checked={usarColoresPropios} aria-label="Usar colores propios" style={{
+                          width: '36px', height: '20px', borderRadius: '10px', flexShrink: 0, marginLeft: '8px',
+                          background: usarColoresPropios ? 'var(--color-accent)' : 'var(--border-light)',
+                          position: 'relative', cursor: 'pointer', transition: 'background var(--transicion-ui)',
                         }}>
-                          {(nombre || 'TR').charAt(0).toUpperCase()}
-                        </span>
+                          <div style={{
+                            width: '16px', height: '16px', borderRadius: '50%', background: 'white',
+                            position: 'absolute', top: '2px',
+                            left: usarColoresPropios ? '18px' : '2px',
+                            transition: 'left 0.2s',
+                          }} />
+                        </div>
+                      ) : (
+                        <span style={{ display: 'inline-flex', color: 'var(--text-tertiary)', marginLeft: '8px' }}><Icono icono={Lock} size={16} /></span>
                       )}
                     </div>
 
-                    {/* Nombre y meta */}
-                    <div style={{ marginTop: '10px', marginBottom: '12px' }}>
-                      <div style={{
+                    {esPro && usarColoresPropios && temaFondo && (
+                      <div style={{ marginTop: '12px' }}>
+                        <label className="label">Fondo</label>
+                        <SelectorColor valor={temaFondo} onChange={setTemaFondo}
+                          presets={fondosPreset} etiquetaHex="Color de fondo en formato hexadecimal"
+                          presetBloqueado={fondoBloqueado}
+                          avisoOcultos="Algunos colores no aparecen porque tu color principal no se leería sobre ellos." />
+
+                        <label className="label" style={{ marginTop: '14px' }}>Tarjetas</label>
+                        <div style={{ display: 'flex', gap: '6px', marginTop: '6px' }}>
+                          {([
+                            { id: 'auto', label: 'Automático' },
+                            { id: 'propio', label: 'Elegir color' },
+                          ] as const).map(op => {
+                            const activo = op.id === 'auto' ? temaSuperficie === null : temaSuperficie !== null
+                            return (
+                              <div key={op.id}
+                                onClick={() => setTemaSuperficie(op.id === 'auto' ? null : (temaSuperficie ?? paletaPropia?.surface ?? temaFondo))}
+                                className={`pill${activo ? ' active' : ''}`}>
+                                {op.label}
+                              </div>
+                            )
+                          })}
+                        </div>
+                        {temaSuperficie !== null && (
+                          <SelectorColor valor={temaSuperficie} onChange={setTemaSuperficie}
+                            presets={fondosPreset} etiquetaHex="Color de tarjetas en formato hexadecimal" />
+                        )}
+                        {superficieAjustada && paletaPropia && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', color: 'var(--text-secondary)', marginTop: '8px' }}>
+                            <div style={{ width: '16px', height: '16px', borderRadius: '4px', background: paletaPropia.surface, border: '1px solid var(--border-light)', flexShrink: 0 }} />
+                            Ajustamos un poco el color de las tarjetas para que el texto se lea ({paletaPropia.surface}).
+                          </div>
+                        )}
+
+                        <Boton variante="terciario" tono="neutro" tamano="sm"
+                          onClick={() => { setTemaFondo(null); setTemaSuperficie(null); setUsarColoresPropios(false) }}
+                          style={{ padding: '0 8px', marginTop: '10px' }}>
+                          Volver a los colores del tema
+                        </Boton>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Choque del color principal con fondo y tarjetas: < 3:1 bloquea
+                    guardar la apariencia; 3–4.5:1 solo avisa. Sin cifras de
+                    contraste en el texto (quedan en código y tests). Las
+                    sugerencias se aplican SOLO si el dueño toca una. */}
+                {choque.nivel === 'ok' ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: 'var(--color-green)', marginTop: '8px' }}>
+                    <Icono icono={Check} size={12} /> El color principal se lee bien sobre este fondo
+                  </div>
+                ) : (
+                  <div style={{ marginTop: '10px', fontSize: '12px', color: choque.nivel === 'bloqueo' ? 'var(--color-danger)' : 'var(--text-secondary)' }}>
+                    {choque.nivel === 'bloqueo'
+                      ? 'Tu color principal no se lee sobre este fondo. Elige uno de los tonos sugeridos o cambia el fondo para poder guardar.'
+                      : `Tu color principal se lee con dificultad sobre este fondo. Puedes guardar, pero un tono más ${tonoSugeridoMasClaro ? 'claro' : 'oscuro'} se leerá mejor.`}
+                    {choque.sugerencias.length > 0 && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Tonos sugeridos:</span>
+                        {choque.sugerencias.map(sug => (
+                          <div key={sug} onClick={() => setColorPrincipal(sug)} title={sug} role="button" aria-label={`Usar ${sug} como color principal`}
+                            style={{ width: '28px', height: '28px', borderRadius: 'var(--radio-boton)', background: sug, cursor: 'pointer', border: '1px solid var(--border-light)' }} />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Preview en vivo del tema (mismos tintes y paleta que el menú público) */}
+              <div style={{ marginBottom: '16px' }}>
+                <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Vista previa
+                </div>
+                <div className={`theme-${temaResuelto.base}`} style={{
+                  ...estiloPreview,
+                  borderRadius: '12px',
+                  overflow: 'hidden',
+                  border: '1px solid var(--border-light)',
+                  background: 'var(--theme-bg)',
+                  padding: '16px',
+                  transition: 'all 0.25s ease',
+                }}>
+                  {/* Banner del preview */}
+                  {bannerUrl ? (
+                    <div style={{
+                      width: '100%',
+                      aspectRatio: '3/1',
+                      borderRadius: 'var(--theme-radius-image)',
+                      overflow: 'hidden',
+                      marginBottom: '-24px',
+                    }}>
+                      <img src={bannerUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    </div>
+                  ) : (
+                    <div style={{
+                      width: '100%',
+                      aspectRatio: '3/1',
+                      borderRadius: 'var(--theme-radius-image)',
+                      background: gradientHeader(colorPrincipal, coloresPreview.bg),
+                      marginBottom: '-24px',
+                    }} />
+                  )}
+
+                  {/* Logo circular */}
+                  <div style={{
+                    width: '48px',
+                    height: '48px',
+                    borderRadius: '50%',
+                    background: 'var(--theme-surface)',
+                    border: '3px solid var(--theme-bg)',
+                    overflow: 'hidden',
+                    marginLeft: '4px',
+                    position: 'relative',
+                    zIndex: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}>
+                    {logoUrl ? (
+                      <img src={logoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      <span style={{
                         fontSize: '16px',
+                        fontWeight: 500,
                         color: 'var(--theme-text)',
                         fontFamily: 'var(--theme-font-display)',
-                        fontWeight: 'var(--theme-title-weight)' as any,
-                        letterSpacing: 'var(--theme-title-letter-spacing)',
-                        textTransform: 'var(--theme-title-transform)' as any,
-                        lineHeight: 1.2,
                       }}>
-                        {nombre || 'Tu Restaurante'}
+                        {(nombre || 'TR').charAt(0).toUpperCase()}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Nombre y meta */}
+                  <div style={{ marginTop: '10px', marginBottom: '12px' }}>
+                    <div style={{
+                      fontSize: '16px',
+                      color: 'var(--theme-text)',
+                      fontFamily: 'var(--theme-font-display)',
+                      fontWeight: 'var(--theme-title-weight)' as any,
+                      letterSpacing: 'var(--theme-title-letter-spacing)',
+                      textTransform: 'var(--theme-title-transform)' as any,
+                      lineHeight: 1.2,
+                    }}>
+                      {nombre || 'Tu Restaurante'}
+                    </div>
+                    <div style={{
+                      fontSize: '11px',
+                      color: 'var(--theme-text-muted)',
+                      fontFamily: 'var(--theme-font-body)',
+                      marginTop: '4px',
+                    }}>
+                      Restaurante · {ciudad || 'Tu ciudad'}
+                    </div>
+                  </div>
+
+                  {/* Tarjeta de plato ficticia */}
+                  <div style={{
+                    background: 'var(--theme-surface)',
+                    borderRadius: 'var(--theme-radius-card)',
+                    border: '1px solid var(--theme-border)',
+                    padding: '10px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    boxShadow: 'var(--theme-shadow-card)',
+                  }}>
+                    {/* Foto placeholder */}
+                    <div style={{
+                      width: '44px',
+                      height: '44px',
+                      borderRadius: 'var(--theme-radius-image)',
+                      background: tintPlaceholder(colorPrincipal, coloresPreview.surface),
+                      flexShrink: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '18px',
+                      fontWeight: 500,
+                      color: colorPrincipal,
+                    }}>
+                      H
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{
+                        fontSize: '13px',
+                        fontWeight: 500,
+                        color: 'var(--theme-text)',
+                        fontFamily: 'var(--theme-font-body)',
+                      }}>
+                        Hamburguesa Clásica
                       </div>
                       <div style={{
                         fontSize: '11px',
                         color: 'var(--theme-text-muted)',
                         fontFamily: 'var(--theme-font-body)',
-                        marginTop: '4px',
+                        marginTop: '2px',
                       }}>
-                        Restaurante · {ciudad || 'Tu ciudad'}
+                        $25.000
                       </div>
                     </div>
-
-                    {/* Tarjeta de plato ficticia */}
+                    {/* Botón + con color del usuario */}
                     <div style={{
-                      background: 'var(--theme-surface)',
-                      borderRadius: 'var(--theme-radius-card)',
-                      border: '1px solid var(--theme-border)',
-                      padding: '10px',
+                      width: '28px',
+                      height: '28px',
+                      borderRadius: '50%',
+                      background: colorPrincipal,
+                      color: textoSobre(colorPrincipal),
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '10px',
-                      boxShadow: 'var(--theme-shadow-card)',
+                      justifyContent: 'center',
+                      fontSize: '16px',
+                      fontWeight: 500,
+                      flexShrink: 0,
                     }}>
-                      {/* Foto placeholder */}
-                      <div style={{
-                        width: '44px',
-                        height: '44px',
-                        borderRadius: 'var(--theme-radius-image)',
-                        background: tintPlaceholder(colorPrincipal, coloresPreview.surface),
-                        flexShrink: 0,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '18px',
-                        fontWeight: 500,
-                        color: colorPrincipal,
-                      }}>
-                        H
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{
-                          fontSize: '13px',
-                          fontWeight: 500,
-                          color: 'var(--theme-text)',
-                          fontFamily: 'var(--theme-font-body)',
-                        }}>
-                          Hamburguesa Clásica
-                        </div>
-                        <div style={{
-                          fontSize: '11px',
-                          color: 'var(--theme-text-muted)',
-                          fontFamily: 'var(--theme-font-body)',
-                          marginTop: '2px',
-                        }}>
-                          $25.000
-                        </div>
-                      </div>
-                      {/* Botón + con color del usuario */}
-                      <div style={{
-                        width: '28px',
-                        height: '28px',
-                        borderRadius: '50%',
-                        background: colorPrincipal,
-                        color: textoSobre(colorPrincipal),
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '16px',
-                        fontWeight: 500,
-                        flexShrink: 0,
-                      }}>
-                        +
-                      </div>
+                      +
                     </div>
                   </div>
+                </div>
 
-                  <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '6px', textAlign: 'center' }}>
-                    Así se verá tu menú con el tema seleccionado
-                  </div>
+                <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '6px', textAlign: 'center' }}>
+                  Así se verá tu menú con el tema seleccionado
                 </div>
               </div>
 
@@ -842,9 +986,17 @@ export default function ConfigPage() {
                 </div>
               </div>
 
-              <Boton onClick={guardarCambios} style={{ width: '100%' }}>
-                {guardando ? 'Guardando...' : guardado ? <><Icono icono={Check} size={14} /> Guardado</> : 'Guardar cambios'}
+              <Boton onClick={guardarApariencia} disabled={guardandoApariencia || choque.nivel === 'bloqueo'} style={{ width: '100%' }}>
+                {guardandoApariencia ? 'Guardando...' : guardadoApariencia ? <><Icono icono={Check} size={14} /> Guardado</> : 'Guardar cambios'}
               </Boton>
+              {choque.nivel === 'bloqueo' && (
+                <div style={{ fontSize: '12px', color: 'var(--color-danger)', marginTop: '8px' }}>
+                  No se puede guardar la apariencia: tu color principal no se lee sobre este fondo. Elige uno de los tonos sugeridos arriba o cambia el fondo.
+                </div>
+              )}
+              {errorApariencia && (
+                <div style={{ fontSize: '12px', color: 'var(--color-danger)', marginTop: '8px' }}>{errorApariencia}</div>
+              )}
             </div>
           )}
         </div>

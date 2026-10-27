@@ -168,7 +168,8 @@ export default function PedidoModal({
           <div style={{ marginTop: '16px', textAlign: 'center' }}>
             <div onClick={onPedir} className="tap-cta" style={{
               background: '#25D366',
-              color: 'white',
+              // Verde de WhatsApp intacto; texto oscuro (~8.8:1) en vez de blanco (1.98:1).
+              color: textoSobre('#25D366'),
               borderRadius: 'var(--theme-radius-button)',
               padding: '16px',
               fontSize: '15px',
