@@ -498,6 +498,32 @@ Decision 2026-07-03: Julian mantiene $15k/$29k mensual ($150k/$290k anual, ~2 me
 
 ## Items
 
+### AUD-5a Confirmacion del pago al volver de Wompi (CIERRE 5a) - CLOSED
+- **Closed**: 2026-10-27. Sin SQL.
+- **Hecho**:
+  - Modulo compartido lib/pagos/aplicarTransaccion: el webhook y la nueva ruta POST /api/wompi/confirmar-pago aplican el pago por el mismo camino idempotente (aplicar_pago_aprobado). El correo sale solo en 'aplicado'.
+  - confirmar-pago: identidad por sesion, 404 si la referencia no es del restaurante, estados aprobado / pendiente / rechazado / error.
+  - /suscripcion confirma al volver (cada 3 s, 10 intentos), con avisos y lista de desbloqueos con enlaces directos (/config?seccion=funciones|personalizacion, /menu?tab=sorprendeme).
+  - Correo de subida con la linea "Algunas arrancan apagadas" y enlace a /config.
+  - S-1: sin longitudes de credenciales en los logs.
+- **Hallazgos del smoke corregidos antes del commit**:
+  - Renovar (mismo plan y periodo) mandaba el correo de cambio de periodo, bug desde el cierre 4. Nueva variante "Tu plan X quedo renovado" con la nueva fecha. Los cobros automaticos ya usaban renovacionCobrada.
+  - Wompi ya no responde GET /v1/transactions/{id} sin llave ni con la llave publica: devuelve 404 NOT_FOUND_ERROR aunque la transaccion exista. Ahora se consulta con la llave privada, solo en servidor. La documentacion de Wompi en ingles todavia dice llave publica.
+  - La lista de desbloqueos asumia plan gratis cuando no habia plan anterior. Ahora solo aparece si el plan subio con certeza (desbloqueosConfirmados; sessionStorage guarda JSON plan + ts y vence a las 2 horas).
+  - Moneda ausente ya no bloquea; solo bloquea si viene distinta de COP.
+- **Smoke**:
+  - Local: webhook aplicado, idempotente y monto invalido; duplicado sin lista; id inexistente; pago ajeno 404.
+  - Produccion: Renovar con 4242 aprobado y un solo correo; subida de Gratis a Basico con 4 desbloqueos; rechazo con 4111 sin cambios ni correo; logs sin len=, sin errores ni advertencias.
+  - Tests 568 -> 677.
+- **Seguridad**: llaves secret de Supabase y de Resend rotadas tras quedar visibles en una captura; las viejas eliminadas.
+- **Pendiente**:
+  - Cierre 5b: la reconciliacion del cron reutiliza obtenerTransaccion (llave privada).
+  - Cierre 7: enlaces de los correos (NEXT_PUBLIC_APP_URL).
+  - Cierre 10: unificar los nombres de funciones entre el correo de subida y el aviso de desbloqueo.
+  - Cierre 12: borrar las cuentas de prueba jdmortega92+p1 y jdmortega92+p2 si existe (restaurante 6e293a8d-b4bc-4d53-ae15-c2340cb0218e de la prueba de subida) y revisar la factura sub_c8a8c0d2-5887-4dd2-a37a-266fe4b856bf_pro_mensual_1792500527319 del 20 de octubre.
+  - funcionesPorActivar conserva el default null -> gratis fuera del camino del pago; evaluar quitarlo.
+- **Commit**: ef8254f.
+
 ### AUD-P2 Motor de color, contraste y tema personalizado Pro (CIERRE P2a + P2b) - CLOSED
 - **Closed**: 2026-10-27 (P2a desplegado 2026-10-20, P2b 2026-10-27). La migracion 20261020000004_tema_personalizado.sql se aplico en produccion ANTES del deploy de P2b.
 - **Origen**: pedido de Julian: un tema personalizado para que el menu combine con la marca de cada restaurante y se destaque visualmente.
