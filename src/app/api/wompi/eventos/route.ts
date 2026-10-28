@@ -12,9 +12,8 @@ import {
 } from '@/lib/wompi'
 import { credencialesListas, crearFuenteNequi, obtenerParAceptacion } from '@/lib/wompiApi'
 import { entornoWompiActual } from '@/lib/wompiEntorno'
-import { precioDe } from '@/lib/planes'
-import { notificarCobroFallido } from '@/lib/email/notificaciones'
 import { aplicarTransaccionAprobada } from '@/lib/pagos/aplicarTransaccion'
+import { fallarCobroAutomatico } from '@/lib/pagos/cobroFallido'
 import { respuestaWebhook } from '@/lib/pagos/transaccion'
 
 // PIECE 3 (F4.a-2): webhook de eventos de Wompi. SIN sesion ni cookies (lo
@@ -162,9 +161,10 @@ export async function POST(request: Request) {
   return NextResponse.json({ recibido: true, status }, { status: 200 })
 
   // ── Cierre de un cobro automatico que NO prospero (F4.c-5) ───────────────
-  // Simetrico al camino de fallo del cron: misma marca en fuentes_pago y mismo
-  // correo. La diferencia es QUIEN falla — el cron cubre "no se pudo ni
-  // iniciar" y esto cubre "se inicio y Wompi lo rechazo" — y por eso los dos
+  // Mismo camino de fallo que el cron y la conciliacion (lib/pagos/cobroFallido,
+  // CIERRE 5b): misma marca en fuentes_pago y mismo correo. La diferencia es
+  // QUIEN falla — el cron cubre "no se pudo ni iniciar" (4xx) y esto cubre
+  // "se inicio y Wompi lo rechazo" — y por eso los dos
   // avisos son EXCLUYENTES: el cron solo notifica cuando no llego a haber
   // transaccion, asi que nadie recibe los dos por el mismo intento.
   async function registrarCobroAutomaticoFallido(
@@ -203,35 +203,11 @@ export async function POST(request: Request) {
     }
 
     // COMPARE-AND-SWAP, y aqui hace de IDEMPOTENCIA: Wompi reentrega el mismo
-    // evento hasta recibir 200, y antes era la factura la que absorbia el
-    // duplicado. Ahora que no se escribe factura, el que dedupe es este update:
-    // solo la PRIMERA entrega encuentra la fila sin marcar, y solo esa manda el
-    // correo. (ultimo_cobro_estado es NULL en filas viejas y `<> 'FALLIDO'` no
-    // matchea NULL en SQL, por eso el OR explicito.)
-    const { data: marcada, error: errMarca } = await admin
-      .from('fuentes_pago')
-      .update({
-        ultimo_cobro_estado: 'FALLIDO',
-        // Causa corta y de NUESTRO vocabulario: nunca el cuerpo de Wompi, que
-        // puede traer datos del usuario.
-        ultimo_cobro_error: `webhook ${estadoWompi}`.slice(0, 60),
-        ultimo_cobro_en: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', fuente.id)
-      .eq('ultimo_cobro_periodo', periodoFacturado)
-      .or('ultimo_cobro_estado.is.null,ultimo_cobro_estado.neq.FALLIDO')
-      .select('id')
-
-    if (errMarca) {
-      console.error('[wompi/eventos] marca de cobro fallido no se pudo escribir:', errMarca.message)
-      return
-    }
-    if (!marcada || marcada.length === 0) {
-      console.info(`[wompi/eventos] cobro fallido ya registrado restaurante=${restaurante} (reentrega)`)
-      return
-    }
-
+    // evento hasta recibir 200 y solo la PRIMERA entrega encuentra la fila sin
+    // marcar, y solo esa manda el correo. Desde CIERRE 5b el CAS es el
+    // compartido (solo desde NULL, INICIADO o REVISION): un DECLINED que llegue
+    // despues de un APPROVED ya no puede tapar la marca APROBADO.
+    //
     // EL LATCH NO SE SUELTA. ultimo_cobro_periodo se queda como esta, a
     // proposito: la politica v1 es SIN escalera de reintentos (F4-DECISIONES).
     // Soltarlo haria que el cron reintentara cada dia que quede de ventana, y
@@ -239,35 +215,21 @@ export async function POST(request: Request) {
     // chocarian con el 422 "referencia ya usada" de Wompi — mismo resultado,
     // pero con un correo de fallo por dia. El unico camino que mueve el periodo
     // es un APPROVED, que cambia plan_expira: o sea, exito real.
-    console.error(
-      `[wompi/eventos] cobro automatico FALLIDO restaurante=${restaurante} ` +
-        `periodo=${periodoFacturado} status=${estadoWompi}`
-    )
-
-    const { data: restCobro } = await admin
-      .from('restaurantes')
-      .select('usuario_id')
-      .eq('id', restaurante)
-      .maybeSingle()
-    const usuarioCobro = restCobro?.usuario_id as string | undefined
-    if (!usuarioCobro) return
-    const { data: authCobro } = await admin.auth.admin.getUserById(usuarioCobro)
-    const destino = authCobro?.user?.email ?? undefined
-    if (!destino) {
-      console.error(`[wompi/eventos] sin destinatario para cobro fallido restaurante=${restaurante}`)
-      return
-    }
-    try {
-      await notificarCobroFallido({
-        to: destino,
-        plan: planCobrado,
-        monto: precioDe(planCobrado, periodoCobrado),
-        // El plan sigue vivo hasta el periodo que se intento cobrar: es la
-        // fecha que hace accionable el correo.
-        planExpira: periodoFacturado,
-      })
-    } catch {
-      console.error(`[wompi/eventos] email de cobro fallido no se envio restaurante=${restaurante}`)
+    const r = await fallarCobroAutomatico(admin, {
+      fuenteId: fuente.id as string,
+      restauranteId: restaurante,
+      periodoFacturado,
+      destino: 'FALLIDO',
+      // Causa corta y de NUESTRO vocabulario: nunca el cuerpo de Wompi.
+      motivo: `webhook ${estadoWompi}`,
+      etiqueta: 'wompi/eventos',
+      aviso: { plan: planCobrado, periodo: periodoCobrado },
+    })
+    if (r.marca === 'marcado') {
+      console.error(
+        `[wompi/eventos] cobro automatico FALLIDO restaurante=${restaurante} ` +
+          `periodo=${periodoFacturado} status=${estadoWompi}`
+      )
     }
   }
 }

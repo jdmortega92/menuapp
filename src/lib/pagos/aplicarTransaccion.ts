@@ -2,7 +2,9 @@
 // cliente de service role. Lo llaman:
 //   - el webhook /api/wompi/eventos (origen 'webhook'), que traduce el resultado
 //     a EXACTAMENTE las respuestas HTTP de antes (lib/pagos/transaccion.respuestaWebhook);
-//   - el retorno del checkout /api/wompi/confirmar-pago (origen 'retorno').
+//   - el retorno del checkout /api/wompi/confirmar-pago (origen 'retorno');
+//   - la conciliacion del cron, lib/pagos/conciliarCobros (origen 'conciliacion',
+//     CIERRE 5b), cuando el GET a Wompi muestra un APPROVED que el webhook no trajo.
 // Es idempotente por construccion: la factura con numero == reference es la
 // huella, y aplicar_pago_aprobado la inserta con ON CONFLICT (numero) DO NOTHING,
 // asi que el segundo que llegue (webhook o retorno) recibe 'duplicado' y no
@@ -14,18 +16,21 @@ import {
   esReferenciaAutomatica,
   esRenovacion,
   parsearReferencia,
+  periodoDeReferenciaAutomatica,
   type WompiTransaction,
 } from '@/lib/wompi'
 import { centavosDe, precioDe } from '@/lib/planes'
 import { fechaColombia } from '@/lib/fechas'
 import { notificarPlanActivo, notificarRenovacionCobrada } from '@/lib/email/notificaciones'
-import { motivoMontoInvalido, type ResultadoAplicar } from './transaccion'
+import { esIdTransaccionValido, motivoMontoInvalido, type ResultadoAplicar } from './transaccion'
+import { FILTRO_ORIGEN_APROBADO } from './cobroEstado'
 
-export type OrigenPago = 'webhook' | 'retorno'
+export type OrigenPago = 'webhook' | 'retorno' | 'conciliacion'
 
 const ETIQUETA: Record<OrigenPago, string> = {
   webhook: 'wompi/eventos',
   retorno: 'wompi/confirmar-pago',
+  conciliacion: 'cron/conciliacion',
 }
 
 /** Aplica una transaccion APPROVED. El llamador garantiza status === 'APPROVED'
@@ -74,7 +79,10 @@ export async function aplicarTransaccionAprobada(
     .eq('numero', reference)
     .maybeSingle()
   // Ya procesado: no re-escribir ni duplicar factura.
-  if (existente?.estado === 'aprobada') return { tipo: 'duplicado' }
+  if (existente?.estado === 'aprobada') {
+    await marcarCobroAutomaticoAprobado(admin, transaction, restauranteId, etq)
+    return { tipo: 'duplicado' }
+  }
 
   // Estado ANTERIOR de la fila: plan/periodo/vencimiento para decidir si esto
   // es una renovacion, y usuario_id como unica fuente valida del destinatario.
@@ -141,11 +149,15 @@ export async function aplicarTransaccionAprobada(
     return { tipo: 'error' }
   }
   // Otra entrega (o el otro camino) ya escribio factura y plan: ni plan ni correo.
-  if (resultado === 'duplicado') return { tipo: 'duplicado' }
+  if (resultado === 'duplicado') {
+    await marcarCobroAutomaticoAprobado(admin, transaction, restauranteId, etq)
+    return { tipo: 'duplicado' }
+  }
   if (resultado !== 'aplicado') {
     console.error(`[${etq}] aplicar_pago_aprobado devolvio un valor inesperado reference=${reference}: ${String(resultado)}`)
     return { tipo: 'error' }
   }
+  await marcarCobroAutomaticoAprobado(admin, transaction, restauranteId, etq)
 
   // Email SOLO con 'aplicado' (quien aplico es quien avisa). No rompe el flujo
   // si falla. El destinatario sale SIEMPRE de NUESTROS datos: restaurante ->
@@ -195,4 +207,55 @@ export async function aplicarTransaccionAprobada(
   }
 
   return { tipo: 'aplicado', plan, periodo, planAnterior, planExpira }
+}
+
+// ── Marca de exito del cobro automatico (CIERRE 5b) ──────────────────────
+// La UNICA escritura de ultimo_cobro_estado = 'APROBADO'. Va aqui, en el camino
+// compartido, porque es el unico sitio que vio el desenlace (webhook, retorno o
+// conciliacion). Con 'aplicado' Y con 'duplicado': si el webhook aplico el plan
+// pero esta marca fallo, la reentrega o la conciliacion la completan.
+// Solo para referencias automaticas: un pago manual no reclamo ningun periodo.
+// Desde cualquier estado menos APROBADO: un APPROVED es plata cobrada y gana
+// sobre FALLIDO o REVISION. Best-effort: el plan ya quedo bien y un fallo aqui
+// no cambia el resultado (la fila queda como estaba y la conciliacion la mira).
+// Exportada para la conciliacion (CIERRE 5b): cuando la factura aprobada ya
+// existe, la conciliacion completa ESTA misma marca, con el mismo CAS.
+export type MarcaAprobado = 'marcado' | 'sin_cambio' | 'error'
+
+export async function marcarCobroAutomaticoAprobado(
+  admin: ReturnType<typeof createAdminClient>,
+  transaction: Pick<WompiTransaction, 'id' | 'reference'>,
+  restauranteId: string,
+  etq: string
+): Promise<MarcaAprobado> {
+  const reference = transaction.reference
+  if (typeof reference !== 'string' || !esReferenciaAutomatica(reference)) return 'sin_cambio'
+  const periodoFacturado = periodoDeReferenciaAutomatica(reference)
+  if (!periodoFacturado) return 'sin_cambio'
+  try {
+    const { data: marcada, error } = await admin
+      .from('fuentes_pago')
+      .update({
+        ultimo_cobro_estado: 'APROBADO',
+        ultimo_cobro_error: null,
+        ...(esIdTransaccionValido(transaction.id) ? { ultimo_cobro_tx_id: transaction.id } : {}),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('restaurante_id', restauranteId)
+      .eq('ultimo_cobro_periodo', periodoFacturado)
+      .or(FILTRO_ORIGEN_APROBADO)
+      .select('id')
+    if (error) {
+      console.error(`[${etq}] marca APROBADO no se pudo escribir restaurante=${restauranteId}:`, error.message)
+      return 'error'
+    }
+    if (marcada && marcada.length > 0) {
+      console.info(`[${etq}] cobro automatico APROBADO restaurante=${restauranteId} periodo=${periodoFacturado}`)
+      return 'marcado'
+    }
+    return 'sin_cambio'
+  } catch {
+    console.error(`[${etq}] marca APROBADO lanzo restaurante=${restauranteId}`)
+    return 'error'
+  }
 }

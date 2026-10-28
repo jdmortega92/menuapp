@@ -11,21 +11,27 @@ import {
   DIAS_ANTES_DE_COBRAR,
   type FuenteCobrable,
 } from '@/lib/suscripciones'
-import {
-  notificarPlanVencido,
-  notificarCambioAplicado,
-  notificarCobroFallido,
-} from '@/lib/email/notificaciones'
-import { centavosDe, precioDe, type Periodo } from '@/lib/planes'
+import { notificarPlanVencido, notificarCambioAplicado } from '@/lib/email/notificaciones'
+import { enviarAlertaRevision } from '@/lib/email/alertaAdmin'
+import { centavosDe, type Periodo } from '@/lib/planes'
 import { construirConsentimiento, construirReferenciaAutomatica, firmaIntegridad } from '@/lib/wompi'
 import { cobrarConFuente, credencialesListas } from '@/lib/wompiApi'
+import { entornoWompiActual } from '@/lib/wompiEntorno'
 import { cobroAutomaticoHabilitado } from '@/lib/frenoCobro'
+import { clasificarPost, MOTIVO_SIN_TX_ID } from '@/lib/pagos/cobroEstado'
+import { fallarCobroAutomatico } from '@/lib/pagos/cobroFallido'
+import { conciliarCobros, type ResumenConciliacion } from '@/lib/pagos/conciliarCobros'
+import type { FilaRevision } from '@/lib/pagos/conciliacion'
 import type { Plan } from '@/types'
 
 // F4.b-2: EJECUTOR del ciclo de vida de la suscripcion. Lo invoca Vercel Cron
 // (GET diario, "0 5 * * *" UTC = medianoche COT; ver vercel.json). Es el UNICO
 // escritor del estado efectivo: los gates del producto siguen leyendo rest.plan
 // tal cual, sin logica de fechas en ningun lado (una sola fuente de verdad).
+//
+// CONCILIACION PRIMERO (CIERRE 5b): antes de A/B/C, y aunque el freno del cobro
+// este puesto, se revisan los cobros INICIADO de hace mas de una hora con un GET
+// a Wompi (lib/pagos/conciliarCobros). Solo lee y cierra: jamas cobra.
 //
 // Tres barridos, todos RECONCILIADORES (<= y <, nunca "== hoy"): Vercel no
 // reintenta una corrida fallida y la entrega es best-effort (puede saltarse o
@@ -69,8 +75,11 @@ interface Resumen {
   expirados: number
   cobrosIniciados: number
   cobrosFallidos: number
+  /** Cobros del barrido C con resultado desconocido o sin tx id (CIERRE 5b). */
+  cobrosRevision: number
   fallidos: number
   correosFallidos: number
+  conciliacion: ResumenConciliacion | null
 }
 
 export async function GET(request: Request) {
@@ -112,9 +121,15 @@ export async function GET(request: Request) {
     expirados: 0,
     cobrosIniciados: 0,
     cobrosFallidos: 0,
+    cobrosRevision: 0,
     fallidos: 0,
     correosFallidos: 0,
+    conciliacion: null,
   }
+  // Filas que entraron a REVISION en ESTA corrida (conciliacion y barrido C):
+  // salen en UN correo a ALERTAS_EMAIL al final. Los logs de Vercel Hobby
+  // duran ~1 hora; REVISION no puede vivir solo ahi.
+  const alertas: FilaRevision[] = []
 
   // Destinatario SIEMPRE desde nuestros datos: usuario_id -> auth.users. Jamas
   // de un payload. Misma regla que /api/emails y el webhook de Wompi.
@@ -128,6 +143,15 @@ export async function GET(request: Request) {
     return data?.user?.email ?? undefined
   }
 
+  // ── Conciliacion (CIERRE 5b) ── ANTES DE TODO, CON O SIN FRENO ──
+  // Aislada: si revienta, los barridos A/B/C corren igual.
+  try {
+    resumen.conciliacion = await conciliarCobros(admin, alertas)
+  } catch {
+    console.error('[cron/suscripciones] la conciliacion lanzo; se sigue con los barridos')
+    resumen.fallidos++
+  }
+
   // ── Barrido A: aplicar cambios agendados (F4.b-1) ── PRIMERO SIEMPRE ──
   // El filtro SQL acota; la decision final la toma la regla pura (misma
   // convencion de fechas que el resto del repo, sin depender del casteo de
@@ -139,140 +163,152 @@ export async function GET(request: Request) {
   //  2. (F4.c-5) una CANCELACION que vence hoy tiene que estar aplicada ANTES
   //     de que el barrido C mire la fila. Cobrarle a alguien el plan que
   //     cancelo es el peor bug de este archivo, y se evita aqui.
-  const { data: programados, error: errProgramados } = await admin
-    .from('restaurantes')
-    .select('id, plan, plan_programado, fecha_cambio_programado, usuario_id, cobro_automatico')
-    .not('plan_programado', 'is', null)
-    .lte('fecha_cambio_programado', hoy)
+  // Aislado (C-9): un throw aqui no se lleva los barridos siguientes.
+  try {
+    const { data: programados, error: errProgramados } = await admin
+      .from('restaurantes')
+      .select('id, plan, plan_programado, fecha_cambio_programado, usuario_id, cobro_automatico')
+      .not('plan_programado', 'is', null)
+      .lte('fecha_cambio_programado', hoy)
 
-  if (errProgramados) {
-    // No aborta la corrida: el barrido B es independiente y puede salvarse.
-    console.error('[cron/suscripciones] lectura de cambios agendados fallo:', errProgramados.message)
-    resumen.fallidos++
-  }
+    if (errProgramados) {
+      // No aborta la corrida: el barrido B es independiente y puede salvarse.
+      console.error('[cron/suscripciones] lectura de cambios agendados fallo:', errProgramados.message)
+      resumen.fallidos++
+    }
 
-  for (const fila of programados ?? []) {
-    if (!cambioProgramadoVencido(fila.fecha_cambio_programado, hoy)) continue
-    const planNuevo = fila.plan_programado as string
-    const planAnterior = (fila.plan as string | null) ?? 'gratis'
+    for (const fila of programados ?? []) {
+      try {
+        if (!cambioProgramadoVencido(fila.fecha_cambio_programado, hoy)) continue
+        const planNuevo = fila.plan_programado as string
+        const planAnterior = (fila.plan as string | null) ?? 'gratis'
 
-    // VALIDACION ANTES DE ESCRIBIR (D-CRIT-1). plan_programado es una columna
-    // que el dueno puede escribir desde su sesion; aplicarla tal cual convertia
-    // al cron en la forma de regalarse un plan pago. Aqui SOLO se aplica una
-    // bajada estricta segun la lista cerrada de lib/planes. El mismo plan se
-    // limpia sin tocar plan (no hay nada que aplicar); cualquier otra cosa
-    // (subida, string desconocido) no se escribe y se cuenta como fallo.
-    if (!esBajadaDePlan(fila.plan as string | null, planNuevo)) {
-      if (planNuevo === fila.plan) {
-        const { data: limpiadas, error: errLimpiar } = await admin
+        // VALIDACION ANTES DE ESCRIBIR (D-CRIT-1). plan_programado es una columna
+        // que el dueno puede escribir desde su sesion; aplicarla tal cual convertia
+        // al cron en la forma de regalarse un plan pago. Aqui SOLO se aplica una
+        // bajada estricta segun la lista cerrada de lib/planes. El mismo plan se
+        // limpia sin tocar plan (no hay nada que aplicar); cualquier otra cosa
+        // (subida, string desconocido) no se escribe y se cuenta como fallo.
+        if (!esBajadaDePlan(fila.plan as string | null, planNuevo)) {
+          if (planNuevo === fila.plan) {
+            const { data: limpiadas, error: errLimpiar } = await admin
+              .from('restaurantes')
+              .update({ plan_programado: null, fecha_cambio_programado: null })
+              .eq('id', fila.id)
+              .eq('plan', fila.plan)
+              .eq('plan_programado', fila.plan_programado)
+              .eq('fecha_cambio_programado', fila.fecha_cambio_programado)
+              .select('id')
+            if (errLimpiar) {
+              console.error(`[cron/suscripciones] limpiar plan_programado fallo restaurante=${fila.id}:`, errLimpiar.message)
+              resumen.fallidos++
+            } else if (!limpiadas || limpiadas.length === 0) {
+              console.info(`[cron/suscripciones] fila cambio entre lectura y escritura restaurante=${fila.id}`)
+            } else {
+              console.info(`[cron/suscripciones] plan_programado igual al plan actual, limpiado restaurante=${fila.id} plan=${planNuevo}`)
+            }
+            continue
+          }
+          console.error(
+            `[cron/suscripciones] plan_programado invalido restaurante=${fila.id} actual=${fila.plan} programado=${planNuevo}`
+          )
+          resumen.fallidos++
+          continue
+        }
+
+        // DESARME AL APLICAR (F4.c-5). Cancelar ya apaga el cobro automatico en el
+        // momento de cancelar (/suscripcion), asi que aqui casi siempre no hay nada
+        // que apagar. Esta rama existe para las filas que se agendaron ANTES de esa
+        // regla y para cualquier camino futuro que agende una bajada sin pasar por
+        // esa pantalla: el sitio donde la cancelacion SE APLICA es el ultimo que
+        // puede garantizar que nadie termina en gratis con la bandera armada.
+        // Solo para bajadas a gratis: un cambio agendado ENTRE planes pagos (que
+        // hoy no existe) no es una cancelacion y no debe tocar el opt-in.
+        const desarmaCobro = planNuevo === 'gratis' && fila.cobro_automatico === true
+
+        // ESCRITURA CONDICIONAL (D-CRIT-3): el update exige que la fila siga siendo
+        // la que se leyo (plan, plan_programado y fecha). Si un pago APPROVED entro
+        // a mitad del barrido, el webhook ya limpio plan_programado y aqui no se
+        // escribe nada: aplicar la bajada vieja dejaria en gratis a alguien que
+        // acaba de pagar, y nada lo restauraria.
+        // fila.plan nunca es null aqui: esBajadaDePlan(null, x) es false.
+        const { data: aplicadas, error } = await admin
           .from('restaurantes')
-          .update({ plan_programado: null, fecha_cambio_programado: null })
+          .update({
+            plan: planNuevo,
+            plan_programado: null,
+            fecha_cambio_programado: null,
+            ...(desarmaCobro ? { cobro_automatico: false, cobro_automatico_desde: null } : {}),
+          })
           .eq('id', fila.id)
           .eq('plan', fila.plan)
           .eq('plan_programado', fila.plan_programado)
           .eq('fecha_cambio_programado', fila.fecha_cambio_programado)
           .select('id')
-        if (errLimpiar) {
-          console.error(`[cron/suscripciones] limpiar plan_programado fallo restaurante=${fila.id}:`, errLimpiar.message)
+        if (error) {
+          // Una fila rota no puede tumbar el barrido: se cuenta y se sigue.
+          console.error(`[cron/suscripciones] aplicar cambio fallo restaurante=${fila.id}:`, error.message)
           resumen.fallidos++
-        } else if (!limpiadas || limpiadas.length === 0) {
-          console.info(`[cron/suscripciones] fila cambio entre lectura y escritura restaurante=${fila.id}`)
-        } else {
-          console.info(`[cron/suscripciones] plan_programado igual al plan actual, limpiado restaurante=${fila.id} plan=${planNuevo}`)
+          continue
         }
-        continue
-      }
-      console.error(
-        `[cron/suscripciones] plan_programado invalido restaurante=${fila.id} actual=${fila.plan} programado=${planNuevo}`
-      )
-      resumen.fallidos++
-      continue
-    }
+        if (!aplicadas || aplicadas.length === 0) {
+          // Sin correo ni evidencia: no paso nada que contar.
+          console.info(`[cron/suscripciones] fila cambio entre lectura y escritura restaurante=${fila.id}`)
+          continue
+        }
+        resumen.aplicados++
 
-    // DESARME AL APLICAR (F4.c-5). Cancelar ya apaga el cobro automatico en el
-    // momento de cancelar (/suscripcion), asi que aqui casi siempre no hay nada
-    // que apagar. Esta rama existe para las filas que se agendaron ANTES de esa
-    // regla y para cualquier camino futuro que agende una bajada sin pasar por
-    // esa pantalla: el sitio donde la cancelacion SE APLICA es el ultimo que
-    // puede garantizar que nadie termina en gratis con la bandera armada.
-    // Solo para bajadas a gratis: un cambio agendado ENTRE planes pagos (que
-    // hoy no existe) no es una cancelacion y no debe tocar el opt-in.
-    const desarmaCobro = planNuevo === 'gratis' && fila.cobro_automatico === true
+        // Evidencia del desarme, con el MISMO peso que le da la ruta del opt-in:
+        // toda salida del cobro automatico deja una fila REVOCADO en la bitacora
+        // append-only, sin importar quien la ejecute. Se enlaza la fuente viva si
+        // existe (aqui puede no haberla: quitar el metodo tambien apaga el opt-in).
+        // Si el insert falla NO se revierte el desarme — dejar a alguien con el
+        // cobro armado porque no pudimos escribir un log es peor que perder
+        // evidencia; misma decision que en /api/wompi/cobro-automatico.
+        if (desarmaCobro) {
+          const { data: fuenteViva } = await admin
+            .from('fuentes_pago')
+            .select('id')
+            .eq('restaurante_id', fila.id)
+            .eq('estado', 'AVAILABLE')
+            .eq('predeterminada', true)
+            .maybeSingle()
+          const { error: errConsent } = await admin.from('consentimientos_pago').insert(
+            construirConsentimiento({
+              restauranteId: fila.id as string,
+              fuentePagoId: fuenteViva?.id ?? null,
+              evento: 'REVOCADO',
+              motivo: 'suscripcion_cancelada',
+            })
+          )
+          if (errConsent) {
+            console.error(`[cron/suscripciones] consentimiento REVOCADO fallo restaurante=${fila.id}:`, errConsent.message)
+          }
+          console.info(`[cron/suscripciones] cobro automatico apagado al aplicar cancelacion restaurante=${fila.id}`)
+        }
 
-    // ESCRITURA CONDICIONAL (D-CRIT-3): el update exige que la fila siga siendo
-    // la que se leyo (plan, plan_programado y fecha). Si un pago APPROVED entro
-    // a mitad del barrido, el webhook ya limpio plan_programado y aqui no se
-    // escribe nada: aplicar la bajada vieja dejaria en gratis a alguien que
-    // acaba de pagar, y nada lo restauraria.
-    // fila.plan nunca es null aqui: esBajadaDePlan(null, x) es false.
-    const { data: aplicadas, error } = await admin
-      .from('restaurantes')
-      .update({
-        plan: planNuevo,
-        plan_programado: null,
-        fecha_cambio_programado: null,
-        ...(desarmaCobro ? { cobro_automatico: false, cobro_automatico_desde: null } : {}),
-      })
-      .eq('id', fila.id)
-      .eq('plan', fila.plan)
-      .eq('plan_programado', fila.plan_programado)
-      .eq('fecha_cambio_programado', fila.fecha_cambio_programado)
-      .select('id')
-    if (error) {
-      // Una fila rota no puede tumbar el barrido: se cuenta y se sigue.
-      console.error(`[cron/suscripciones] aplicar cambio fallo restaurante=${fila.id}:`, error.message)
-      resumen.fallidos++
-      continue
-    }
-    if (!aplicadas || aplicadas.length === 0) {
-      // Sin correo ni evidencia: no paso nada que contar.
-      console.info(`[cron/suscripciones] fila cambio entre lectura y escritura restaurante=${fila.id}`)
-      continue
-    }
-    resumen.aplicados++
-
-    // Evidencia del desarme, con el MISMO peso que le da la ruta del opt-in:
-    // toda salida del cobro automatico deja una fila REVOCADO en la bitacora
-    // append-only, sin importar quien la ejecute. Se enlaza la fuente viva si
-    // existe (aqui puede no haberla: quitar el metodo tambien apaga el opt-in).
-    // Si el insert falla NO se revierte el desarme — dejar a alguien con el
-    // cobro armado porque no pudimos escribir un log es peor que perder
-    // evidencia; misma decision que en /api/wompi/cobro-automatico.
-    if (desarmaCobro) {
-      const { data: fuenteViva } = await admin
-        .from('fuentes_pago')
-        .select('id')
-        .eq('restaurante_id', fila.id)
-        .eq('estado', 'AVAILABLE')
-        .eq('predeterminada', true)
-        .maybeSingle()
-      const { error: errConsent } = await admin.from('consentimientos_pago').insert(
-        construirConsentimiento({
-          restauranteId: fila.id as string,
-          fuentePagoId: fuenteViva?.id ?? null,
-          evento: 'REVOCADO',
-          motivo: 'suscripcion_cancelada',
-        })
-      )
-      if (errConsent) {
-        console.error(`[cron/suscripciones] consentimiento REVOCADO fallo restaurante=${fila.id}:`, errConsent.message)
-      }
-      console.info(`[cron/suscripciones] cobro automatico apagado al aplicar cancelacion restaurante=${fila.id}`)
-    }
-
-    const to = await emailDelDueno(fila.usuario_id as string | null)
-    if (to) {
-      try {
-        await notificarCambioAplicado({ to, planAnterior, planNuevo })
+        const to = await emailDelDueno(fila.usuario_id as string | null)
+        if (to) {
+          try {
+            await notificarCambioAplicado({ to, planAnterior, planNuevo })
+          } catch {
+            // El cambio ya se aplico: el correo nunca revierte ni aborta.
+            resumen.correosFallidos++
+            console.error(`[cron/suscripciones] email de cambio aplicado fallo restaurante=${fila.id}`)
+          }
+        } else {
+          resumen.correosFallidos++
+          console.error(`[cron/suscripciones] sin destinatario para cambio aplicado restaurante=${fila.id}`)
+        }
       } catch {
-        // El cambio ya se aplico: el correo nunca revierte ni aborta.
-        resumen.correosFallidos++
-        console.error(`[cron/suscripciones] email de cambio aplicado fallo restaurante=${fila.id}`)
+        // Una fila que lanza no corta el resto del barrido.
+        console.error(`[cron/suscripciones] fila de cambio agendado lanzo restaurante=${fila.id}`)
+        resumen.fallidos++
       }
-    } else {
-      resumen.correosFallidos++
-      console.error(`[cron/suscripciones] sin destinatario para cambio aplicado restaurante=${fila.id}`)
     }
+  } catch {
+    console.error('[cron/suscripciones] el barrido de cambios agendados lanzo; se sigue con el siguiente')
+    resumen.fallidos++
   }
 
   // ── Barrido B: expirar planes pagos vencidos ── SEGUNDO ──
@@ -280,58 +316,70 @@ export async function GET(request: Request) {
   // califica aqui, asi que nadie recibe dos correos por el mismo evento.
   // Y ANTES de C: asi una fila ya vencida esta en gratis cuando C la mira, y C
   // nunca cobra una suscripcion caducada.
-  const { data: vencidos, error: errVencidos } = await admin
-    .from('restaurantes')
-    .select('id, plan, plan_expira, usuario_id')
-    .neq('plan', 'gratis')
-    .not('plan_expira', 'is', null)
-    .lt('plan_expira', hoy)
-
-  if (errVencidos) {
-    console.error('[cron/suscripciones] lectura de vencidos fallo:', errVencidos.message)
-    resumen.fallidos++
-  }
-
-  for (const fila of vencidos ?? []) {
-    if (!debeExpirar(fila.plan as string, fila.plan_expira as string, hoy)) continue
-    const planAnterior = fila.plan as string
-
-    // plan_expira NO se limpia: queda como registro historico de hasta cuando
-    // estuvo pago (lo lee /suscripcion para decir "Tu plan venció el ...").
-    //
-    // ESCRITURA CONDICIONAL (D-CRIT-3): el mismo predicado que eligio la fila.
-    // Si una renovacion APPROVED movio plan_expira mientras el barrido mandaba
-    // correos, la fila ya no esta vencida y no se baja a gratis.
-    const { data: expiradas, error } = await admin
+  // Aislado (C-9): un throw aqui no se lleva los barridos siguientes.
+  try {
+    const { data: vencidos, error: errVencidos } = await admin
       .from('restaurantes')
-      .update({ plan: 'gratis' })
-      .eq('id', fila.id)
+      .select('id, plan, plan_expira, usuario_id')
       .neq('plan', 'gratis')
+      .not('plan_expira', 'is', null)
       .lt('plan_expira', hoy)
-      .select('id')
-    if (error) {
-      console.error(`[cron/suscripciones] expirar fallo restaurante=${fila.id}:`, error.message)
-      resumen.fallidos++
-      continue
-    }
-    if (!expiradas || expiradas.length === 0) {
-      console.info(`[cron/suscripciones] fila cambio entre lectura y escritura restaurante=${fila.id}`)
-      continue
-    }
-    resumen.expirados++
 
-    const to = await emailDelDueno(fila.usuario_id as string | null)
-    if (to) {
-      try {
-        await notificarPlanVencido({ to, planAnterior })
-      } catch {
-        resumen.correosFallidos++
-        console.error(`[cron/suscripciones] email de vencimiento fallo restaurante=${fila.id}`)
-      }
-    } else {
-      resumen.correosFallidos++
-      console.error(`[cron/suscripciones] sin destinatario para vencimiento restaurante=${fila.id}`)
+    if (errVencidos) {
+      console.error('[cron/suscripciones] lectura de vencidos fallo:', errVencidos.message)
+      resumen.fallidos++
     }
+
+    for (const fila of vencidos ?? []) {
+      try {
+        if (!debeExpirar(fila.plan as string, fila.plan_expira as string, hoy)) continue
+        const planAnterior = fila.plan as string
+
+        // plan_expira NO se limpia: queda como registro historico de hasta cuando
+        // estuvo pago (lo lee /suscripcion para decir "Tu plan venció el ...").
+        //
+        // ESCRITURA CONDICIONAL (D-CRIT-3): el mismo predicado que eligio la fila.
+        // Si una renovacion APPROVED movio plan_expira mientras el barrido mandaba
+        // correos, la fila ya no esta vencida y no se baja a gratis.
+        const { data: expiradas, error } = await admin
+          .from('restaurantes')
+          .update({ plan: 'gratis' })
+          .eq('id', fila.id)
+          .neq('plan', 'gratis')
+          .lt('plan_expira', hoy)
+          .select('id')
+        if (error) {
+          console.error(`[cron/suscripciones] expirar fallo restaurante=${fila.id}:`, error.message)
+          resumen.fallidos++
+          continue
+        }
+        if (!expiradas || expiradas.length === 0) {
+          console.info(`[cron/suscripciones] fila cambio entre lectura y escritura restaurante=${fila.id}`)
+          continue
+        }
+        resumen.expirados++
+
+        const to = await emailDelDueno(fila.usuario_id as string | null)
+        if (to) {
+          try {
+            await notificarPlanVencido({ to, planAnterior })
+          } catch {
+            resumen.correosFallidos++
+            console.error(`[cron/suscripciones] email de vencimiento fallo restaurante=${fila.id}`)
+          }
+        } else {
+          resumen.correosFallidos++
+          console.error(`[cron/suscripciones] sin destinatario para vencimiento restaurante=${fila.id}`)
+        }
+      } catch {
+        // Una fila que lanza no corta el resto del barrido.
+        console.error(`[cron/suscripciones] fila de vencimiento lanzo restaurante=${fila.id}`)
+        resumen.fallidos++
+      }
+    }
+  } catch {
+    console.error('[cron/suscripciones] el barrido de vencimientos lanzo; se sigue con el siguiente')
+    resumen.fallidos++
   }
 
   // ── Barrido C: INICIAR el cobro automatico (F4.c-5) ── TERCERO, SIEMPRE ──
@@ -363,8 +411,19 @@ export async function GET(request: Request) {
       // enviada"): mejor no tocar a nadie que quemarle el latch a cada fila.
       console.error('[cron/suscripciones] falta WOMPI_INTEGRITY_SECRET; no se intenta ningun cobro')
       resumen.fallidos++
+    } else if (!entornoWompiActual().ok) {
+      // Sin entorno coherente pedir() no manda el POST y devuelve 500, que el
+      // barrido leeria como "resultado desconocido" en cada fila. Se corta aqui.
+      console.error('[cron/suscripciones] entorno de Wompi no resuelto; no se intenta ningun cobro')
+      resumen.fallidos++
     } else {
-      await barridoCobros(secretoIntegridad)
+      // Aislado: un throw aqui no se lleva la linea de resumen ni la alerta.
+      try {
+        await barridoCobros(secretoIntegridad)
+      } catch {
+        console.error('[cron/suscripciones] el barrido de cobros lanzo')
+        resumen.fallidos++
+      }
     }
   } else {
     console.error('[cron/suscripciones] sin llave privada; no se intenta ningun cobro')
@@ -375,15 +434,21 @@ export async function GET(request: Request) {
     // El filtro SQL solo ACOTA (baratamente) y jamas decide: la palabra final es
     // siempre de debeCobrarse, que es pura y esta testeada. Se piden filas con
     // cobro automatico y vencimiento dentro de la ventana [hoy, hoy+N].
+    // Las dos lecturas llevan UN reintento (CIERRE 5b): un error transitorio
+    // aqui significa "nadie se renueva hoy".
     const limite = sumarDias(hoy, DIAS_ANTES_DE_COBRAR)
-    const { data: candidatos, error: errCandidatos } = await admin
-      .from('restaurantes')
-      .select('id, plan, periodo_plan, plan_expira, cobro_automatico, plan_programado, usuario_id')
-      .eq('cobro_automatico', true)
-      .neq('plan', 'gratis')
-      .not('plan_expira', 'is', null)
-      .gte('plan_expira', hoy)
-      .lte('plan_expira', limite)
+    const leerCandidatos = () =>
+      admin
+        .from('restaurantes')
+        .select('id, plan, periodo_plan, plan_expira, cobro_automatico, plan_programado, usuario_id')
+        .eq('cobro_automatico', true)
+        .neq('plan', 'gratis')
+        .not('plan_expira', 'is', null)
+        .gte('plan_expira', hoy)
+        .lte('plan_expira', limite)
+    let lecturaCandidatos = await leerCandidatos()
+    if (lecturaCandidatos.error) lecturaCandidatos = await leerCandidatos()
+    const { data: candidatos, error: errCandidatos } = lecturaCandidatos
 
     if (errCandidatos) {
       console.error('[cron/suscripciones] lectura de candidatos a cobro fallo:', errCandidatos.message)
@@ -397,12 +462,16 @@ export async function GET(request: Request) {
     // y una consulta que se rompe en silencio aqui significa "nadie se renueva"
     // sin ningun error visible. Dos consultas explicitas, N filas, 2 viajes.
     const ids = candidatos.map((f) => f.id as string)
-    const { data: fuentes, error: errFuentes } = await admin
-      .from('fuentes_pago')
-      .select('id, restaurante_id, estado, predeterminada, wompi_payment_source_id, ultimo_cobro_periodo')
-      .in('restaurante_id', ids)
-      .eq('estado', 'AVAILABLE')
-      .eq('predeterminada', true)
+    const leerFuentes = () =>
+      admin
+        .from('fuentes_pago')
+        .select('id, restaurante_id, estado, predeterminada, wompi_payment_source_id, ultimo_cobro_periodo')
+        .in('restaurante_id', ids)
+        .eq('estado', 'AVAILABLE')
+        .eq('predeterminada', true)
+    let lecturaFuentes = await leerFuentes()
+    if (lecturaFuentes.error) lecturaFuentes = await leerFuentes()
+    const { data: fuentes, error: errFuentes } = lecturaFuentes
 
     if (errFuentes) {
       console.error('[cron/suscripciones] lectura de fuentes de pago fallo:', errFuentes.message)
@@ -428,10 +497,24 @@ export async function GET(request: Request) {
     }
 
     for (const fila of candidatos) {
-      const restauranteId = fila.id as string
-      const fuente = porRestaurante.get(restauranteId) ?? null
+      // Una fila rota JAMAS tumba el barrido: el resto de la gente tiene que
+      // poder renovarse aunque esta fila explote. Si explota despues del
+      // reclamo, la fila queda INICIADO y la conciliacion la ve en una hora.
+      try {
+        await cobrarFila(fila, porRestaurante.get(fila.id as string) ?? null)
+      } catch {
+        console.error(`[cron/suscripciones] fila de cobro lanzo restaurante=${fila.id}`)
+        resumen.fallidos++
+      }
+    }
 
-      if (!debeCobrarse({ ...fila, fuente }, hoy)) continue
+    async function cobrarFila(
+      fila: NonNullable<typeof candidatos>[number],
+      fuente: (FuenteCobrable & { id: string }) | null
+    ) {
+      const restauranteId = fila.id as string
+
+      if (!debeCobrarse({ ...fila, fuente }, hoy)) return
 
       // A partir de aqui los tipos ya estan garantizados por la regla.
       const plan = fila.plan as Plan
@@ -441,15 +524,26 @@ export async function GET(request: Request) {
       const paymentSourceId = fuente!.wompi_payment_source_id as number
       const fuenteId = fuente!.id
 
+      // La referencia se arma ANTES del reclamo y se guarda EN el reclamo
+      // (CIERRE 5b): es determinista (periodo, no timestamp), asi que la que
+      // queda en la fila es exactamente la que va a ver Wompi, y la
+      // conciliacion puede verificar que la transaccion es la nuestra.
+      const reference = construirReferenciaAutomatica({
+        restauranteId,
+        plan,
+        periodo,
+        periodoFacturado,
+      })
+
       // ── RECLAMO DEL PERIODO, ANTES DE TOCAR A WOMPI ──
       // Compare-and-swap sobre ultimo_cobro_periodo: si dos corridas del cron se
       // solapan, solo UNA se lleva el periodo y la otra ve 0 filas y se va.
       // Marcar ANTES de cobrar es deliberado y asimetrico: si el proceso muere
-      // entre el reclamo y el POST, esta fila NO se cobra este periodo y el
-      // usuario renueva a mano. Al reves (marcar despues) una caida entre el
-      // POST y la escritura dejaria la puerta abierta a un segundo cobro
-      // manana. Perder una renovacion se arregla con un correo; cobrar dos
-      // veces se arregla devolviendo plata.
+      // entre el reclamo y el POST, esta fila NO se cobra este periodo (y la
+      // conciliacion la pasa a REVISION por no tener tx id). Al reves (marcar
+      // despues) una caida entre el POST y la escritura dejaria la puerta
+      // abierta a un segundo cobro manana. Perder una renovacion se arregla con
+      // un correo; cobrar dos veces se arregla devolviendo plata.
       // periodoFacturado sale de fechaCalendario: es 'YYYY-MM-DD' validado, por
       // eso puede interpolarse en el filtro .or() sin riesgo.
       const marcaTiempo = new Date().toISOString()
@@ -460,6 +554,8 @@ export async function GET(request: Request) {
           ultimo_cobro_estado: 'INICIADO',
           ultimo_cobro_error: null,
           ultimo_cobro_en: marcaTiempo,
+          ultimo_cobro_referencia: reference,
+          ultimo_cobro_tx_id: null,
           updated_at: marcaTiempo,
         })
         .eq('id', fuenteId)
@@ -470,13 +566,13 @@ export async function GET(request: Request) {
       if (errReclamo) {
         console.error(`[cron/suscripciones] reclamo de cobro fallo restaurante=${restauranteId}:`, errReclamo.message)
         resumen.fallidos++
-        continue
+        return
       }
       if (!reclamada || reclamada.length === 0) {
         // Otra corrida ya se llevo este periodo. Es la idempotencia
         // funcionando, no un fallo: ni se cuenta ni se avisa.
         console.info(`[cron/suscripciones] cobro ya reclamado restaurante=${restauranteId}`)
-        continue
+        return
       }
 
       // Destinatario y customer_email SIEMPRE desde NUESTROS datos. Wompi exige
@@ -484,70 +580,49 @@ export async function GET(request: Request) {
       // un payload (misma regla de identidad que el webhook y /api/emails).
       const email = await emailDelDueno(fila.usuario_id as string | null)
 
+      // Rechazo DEFINITIVO (no hubo cobro): FALLIDO por el camino compartido
+      // (lib/pagos/cobroFallido), y el correo al dueno SOLO si este llamador
+      // gano el compare-and-swap. El latch no se suelta y facturas no se toca:
+      // ver el encabezado de ese modulo.
       const fallar = async (razon: string) => {
-        // El latch NO se suelta: la politica v1 es SIN escalera de reintentos
-        // (F4-DECISIONES). Queda registrado que se intento y fallo, y el usuario
-        // se entera por correo para pagar a mano mientras su plan sigue vivo.
-        //
-        // ── UN FALLO NO ESCRIBE EN facturas. NUNCA. ──
-        // Tentador ("queda el rastro del intento") y equivocado, porque el
-        // webhook decide por AUSENCIA: inserta solo `if (!existente)`, buscando
-        // facturas.numero == reference (wompi/eventos). Una factura 'rechazada'
-        // escrita aqui ocuparia esa referencia PARA SIEMPRE, y como la
-        // referencia automatica es determinista (periodo, no timestamp), el
-        // evento real que llegue despues por ese mismo periodo — incluido un
-        // APPROVED tardio — ya no podria insertar su factura: el usuario
-        // quedaria pagado, con plan otorgado y con un documento que dice
-        // "rechazada" como unico registro de su cobro.
-        // El rastro del intento vive en fuentes_pago (ultimo_cobro_*), que es
-        // estado operativo y se sobreescribe. facturas es el libro contable: lo
-        // escribe UNICAMENTE quien vio el desenlace de la transaccion, o sea el
-        // webhook.
         resumen.cobrosFallidos++
         console.error(`[cron/suscripciones] cobro fallido restaurante=${restauranteId} causa=${razon}`)
-        const { error: errMarca } = await admin
-          .from('fuentes_pago')
-          .update({
-            ultimo_cobro_estado: 'FALLIDO',
-            // Codigo corto de causa: nunca el cuerpo de Wompi, que puede traer
-            // datos del usuario.
-            ultimo_cobro_error: razon.slice(0, 60),
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', fuenteId)
-        if (errMarca) console.error(`[cron/suscripciones] marca de fallo no se pudo escribir restaurante=${restauranteId}`)
+        const r = await fallarCobroAutomatico(admin, {
+          fuenteId,
+          restauranteId,
+          periodoFacturado,
+          destino: 'FALLIDO',
+          motivo: razon,
+          etiqueta: 'cron/suscripciones',
+          aviso: { plan, periodo, destino: email ?? null },
+        })
+        if (r.correo === 'sin_destinatario' || r.correo === 'fallo') resumen.correosFallidos++
+      }
 
-        if (!email) {
-          resumen.correosFallidos++
-          console.error(`[cron/suscripciones] sin destinatario para cobro fallido restaurante=${restauranteId}`)
-          return
-        }
-        try {
-          await notificarCobroFallido({
-            to: email,
-            plan,
-            monto: precioDe(plan, periodo),
-            planExpira: periodoFacturado,
-          })
-        } catch {
-          resumen.correosFallidos++
-          console.error(`[cron/suscripciones] email de cobro fallido no se envio restaurante=${restauranteId}`)
-        }
+      // Resultado DESCONOCIDO (el cobro pudo haber entrado): REVISION, SIN
+      // correo al dueno (decirle "no se te cobro nada" podria ser falso) y a la
+      // alerta del admin de esta corrida.
+      const revisar = async (motivo: string) => {
+        resumen.cobrosRevision++
+        console.error(`[cron/suscripciones] cobro en REVISION restaurante=${restauranteId} causa=${motivo}`)
+        const r = await fallarCobroAutomatico(admin, {
+          fuenteId,
+          restauranteId,
+          periodoFacturado,
+          destino: 'REVISION',
+          motivo,
+          etiqueta: 'cron/suscripciones',
+        })
+        if (r.marca === 'marcado') alertas.push({ restauranteId, motivo, referencia: reference, txId: null })
       }
 
       if (!email) {
         // Sin correo del dueno no hay customer_email valido que mandarle a
         // Wompi. Se trata como fallo (y el aviso, obviamente, tampoco sale).
         await fallar('sin email del dueno')
-        continue
+        return
       }
 
-      const reference = construirReferenciaAutomatica({
-        restauranteId,
-        plan,
-        periodo,
-        periodoFacturado,
-      })
       const signature = firmaIntegridad({
         reference,
         amountInCents: montoCentavos,
@@ -555,36 +630,63 @@ export async function GET(request: Request) {
         secret: secretoIntegridad,
       })
 
-      let cobro
+      let post
       try {
-        cobro = await cobrarConFuente(
-          { amountInCents: montoCentavos, reference, customerEmail: email, paymentSourceId, signature },
-          'cron/suscripciones'
+        post = clasificarPost(
+          await cobrarConFuente(
+            { amountInCents: montoCentavos, reference, customerEmail: email, paymentSourceId, signature },
+            'cron/suscripciones'
+          )
         )
-      } catch (err) {
-        // Una fila rota JAMAS tumba el barrido: el resto de la gente tiene que
-        // poder renovarse aunque esta fila explote.
-        await fallar(err instanceof Error ? err.name : 'excepcion')
-        continue
+      } catch {
+        post = clasificarPost({ excepcion: true })
       }
 
-      if (!cobro.ok) {
-        // El 422 por referencia repetida cae aqui y es CORRECTO que asi sea: la
-        // proteccion anti-doble-cobro de Wompi hizo su trabajo, no hay nada que
-        // reintentar, y el usuario debe enterarse igual porque su renovacion no
-        // ocurrio en esta corrida.
-        await fallar(`transactions ${cobro.status} ${cobro.mensaje}`)
-        continue
+      switch (post.tipo) {
+        case 'desconocido':
+          // Red caida, excepcion o >= 500: la peticion pudo llegar a Wompi.
+          await revisar(post.motivo)
+          return
+        case 'rechazado':
+          // 4xx. El 422 por referencia repetida cae aqui y es CORRECTO que asi
+          // sea: la proteccion anti-doble-cobro de Wompi hizo su trabajo, no hay
+          // nada que reintentar, y el usuario debe enterarse igual porque su
+          // renovacion no ocurrio en esta corrida.
+          await fallar(post.motivo)
+          return
+        case 'sin_tx_id':
+          // 201 sin un id usable: hubo transaccion y no la podemos seguir.
+          await revisar(MOTIVO_SIN_TX_ID)
+          return
+        case 'iniciado':
+          break
       }
 
       // 201 con status PENDING. Esto NO es "cobrado" y NO otorga nada: el plan
-      // lo escribe el webhook cuando la transaccion llegue a APPROVED. Se
-      // loguea el id de la transaccion (de Wompi, no personal) para poder
-      // rastrear la pareja cron->webhook en produccion.
+      // lo escribe el webhook (o la conciliacion) cuando la transaccion llegue
+      // a APPROVED. El tx id se guarda con compare-and-swap sobre la referencia
+      // de ESTE reclamo y un tx id todavia vacio: si el webhook ya cerro la
+      // fila no se pisa nada que importe, y si esta escritura falla la fila
+      // queda INICIADO sin tx id y la conciliacion la pasa a REVISION.
       resumen.cobrosIniciados++
+      const { data: conTx, error: errTx } = await admin
+        .from('fuentes_pago')
+        .update({ ultimo_cobro_tx_id: post.txId, updated_at: new Date().toISOString() })
+        .eq('id', fuenteId)
+        .eq('ultimo_cobro_periodo', periodoFacturado)
+        .eq('ultimo_cobro_referencia', reference)
+        .is('ultimo_cobro_tx_id', null)
+        .select('id')
+      if (errTx) {
+        console.error(`[cron/suscripciones] tx id no se pudo guardar restaurante=${restauranteId}:`, errTx.message)
+      } else if (!conTx || conTx.length === 0) {
+        console.info(`[cron/suscripciones] tx id no guardado, la fila ya cambio restaurante=${restauranteId}`)
+      }
+      // El id de la transaccion es de Wompi, no personal: permite rastrear la
+      // pareja cron->webhook en produccion.
       console.info(
         `[cron/suscripciones] cobro iniciado restaurante=${restauranteId} plan=${plan} ` +
-          `periodo=${periodo} tx=${cobro.datos?.id ?? 'sin id'} estado=${cobro.datos?.status ?? 'sin estado'}`
+          `periodo=${periodo} tx=${post.txId} estado=${post.estadoWompi}`
       )
     }
   }
@@ -594,9 +696,13 @@ export async function GET(request: Request) {
   console.info(
     `[cron/suscripciones] fecha=${resumen.fecha} aplicados=${resumen.aplicados} ` +
       `expirados=${resumen.expirados} cobrosIniciados=${resumen.cobrosIniciados} ` +
-      `cobrosFallidos=${resumen.cobrosFallidos} fallidos=${resumen.fallidos} ` +
-      `correosFallidos=${resumen.correosFallidos}`
+      `cobrosFallidos=${resumen.cobrosFallidos} cobrosRevision=${resumen.cobrosRevision} ` +
+      `fallidos=${resumen.fallidos} correosFallidos=${resumen.correosFallidos} alertas=${alertas.length}`
   )
+
+  // UN correo por corrida al admin con todo lo que entro a REVISION. Nunca lanza.
+  const alerta = await enviarAlertaRevision(alertas, 'cron/suscripciones')
+  if (alerta === 'fallo' || alerta === 'sin_destino') resumen.correosFallidos++
 
   return NextResponse.json({ ok: true, ...resumen, cobroAutomaticoHabilitado: cobroHabilitado }, { status: 200 })
 }

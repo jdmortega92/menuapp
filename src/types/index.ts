@@ -411,10 +411,23 @@ export interface FuentePago {
    *  redes independientes para el unico error que cuesta plata.
    *  Opcional: columna nueva, las filas de F4.c-4 llegan sin ella. */
   ultimo_cobro_periodo?: string | null
-  /** INICIADO = se le entrego el cobro a Wompi y el resultado lo dira el webhook
-   *  (NO significa cobrado). FALLIDO = no se pudo ni iniciar. No hay 'COBRADO':
-   *  el cron nunca sabe eso, y ponerlo aqui invitaria a leerlo como autorizacion. */
-  ultimo_cobro_estado?: 'INICIADO' | 'FALLIDO' | null
+  /** Ver lib/pagos/cobroEstado (CIERRE 5b).
+   *  INICIADO = el cron reclamo el periodo y le entrego (o va a entregar) el
+   *  cobro a Wompi. NO significa cobrado.
+   *  APROBADO = un APPROVED paso por el camino compartido (webhook, retorno o
+   *  conciliacion). La escribe SOLO quien vio el desenlace, nunca el cron.
+   *  FALLIDO = rechazo definitivo: no se cobro; el dueno recibe el correo.
+   *  REVISION = no sabemos si se cobro, o algo no cuadra. Sin correo al dueno;
+   *  va en la alerta a ALERTAS_EMAIL de esa corrida.
+   *  No hay 'COBRADO': el cron nunca sabe eso por si mismo. */
+  ultimo_cobro_estado?: 'INICIADO' | 'FALLIDO' | 'APROBADO' | 'REVISION' | null
+  /** Referencia automatica de ESTE intento. Se guarda en el reclamo, antes del
+   *  POST. NULL en filas de antes de 5b. */
+  ultimo_cobro_referencia?: string | null
+  /** data.id de POST /v1/transactions ('<digitos>-<digitos>-<digitos>'). Se
+   *  guarda despues del 201; es con lo que la conciliacion consulta a Wompi.
+   *  NULL si el POST no respondio o la escritura fallo. */
+  ultimo_cobro_tx_id?: string | null
   /** Causa corta del ultimo fallo, para diagnostico. NUNCA el cuerpo de error de
    *  Wompi: puede traer datos del usuario. */
   ultimo_cobro_error?: string | null
