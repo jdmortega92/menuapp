@@ -193,8 +193,8 @@ export const MOTIVO_ESTADO_CAMBIO = 'estado cambio'
  *  referencia lleva escrito. Si algo cambio (un upgrade manual, un cambio de
  *  periodo, otra renovacion, un vencimiento del barrido B) aplicar el cobro
  *  viejo encima otorgaria un plan que ya no corresponde: REVISION y nada se
- *  aplica. El webhook no pasa por aqui; esto es solo para el APPROVED que
- *  llega tarde por la conciliacion.
+ *  aplica. Desde CIERRE 6a el webhook y el retorno tambien pasan por aqui, a
+ *  traves de decidirCobroAutomatico (C-15).
  *  Entre esta lectura y el RPC aplicar_pago_aprobado vuelve a exigir la fila
  *  como se leyo (MA409 -> conflicto -> se reintenta y esta guarda decide). */
 export function decidirAntesDeAplicar(
@@ -214,6 +214,25 @@ export function decidirAntesDeAplicar(
     return { accion: 'revision', motivo: MOTIVO_ESTADO_CAMBIO }
   }
   return { accion: 'aplicar' }
+}
+
+export const MOTIVO_CAMBIO_AGENDADO = 'cambio agendado'
+
+/** Guarda de TODO APPROVED con referencia automatica, por cualquier camino
+ *  (CIERRE 6a). Lo de decidirAntesDeAplicar (C-15: un cobro viejo no pisa un
+ *  upgrade manual) mas un cambio agendado pendiente: un cobro que el usuario
+ *  no pidio no puede borrar su cancelacion (C-5; aplicar_pago_aprobado limpia
+ *  plan_programado sin mirarlo). La ventana entre esta lectura y el RPC queda
+ *  abierta hasta que el RPC exija plan_programado (cierre 6b). */
+export function decidirCobroAutomatico(
+  reference: string | undefined,
+  restauranteId: string,
+  rest: EstadoRestaurante & { plan_programado?: string | null }
+): { accion: 'aplicar' } | { accion: 'revision'; motivo: string } {
+  const d = decidirAntesDeAplicar(reference, restauranteId, rest)
+  if (d.accion === 'revision') return d
+  if (rest.plan_programado) return { accion: 'revision', motivo: MOTIVO_CAMBIO_AGENDADO }
+  return d
 }
 
 /** Tercer paso, tras el camino compartido del APPROVED. 'aplicado' y
@@ -236,5 +255,9 @@ export function decidirTrasAplicar(r: ResultadoAplicar): CierreAprobado {
       return { accion: 'revision', motivo: 'aprobado con referencia invalida' }
     case 'restaurante_inexistente':
       return { accion: 'revision', motivo: 'aprobado sin restaurante' }
+    // La guarda del camino compartido no aplico: la conciliacion marca y alerta
+    // (con origen 'conciliacion' el camino compartido no escribe la marca).
+    case 'estado_cambio':
+      return { accion: 'revision', motivo: r.motivo }
   }
 }

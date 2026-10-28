@@ -6,14 +6,23 @@ import Icono from '@/components/ui/Icono'
 import Boton from '@/components/ui/Boton'
 import MetodoPago from '@/components/suscripcion/MetodoPago'
 import ConfirmarEliminar from '@/components/menu-admin/ConfirmarEliminar'
+import Modal from '@/components/ui/Modal'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks'
 import { useFuentePago } from '@/hooks/data/useFuentePago'
 import { formatoPrecio } from '@/lib/precio'
 import { LISTA_PLANES, PLANES, ahorroAnual, precioDe, type Periodo } from '@/lib/planes'
 import { fechaColombia, fechaLargaColombia } from '@/lib/fechas'
-import { fechaCancelacionProgramada } from '@/lib/suscripciones'
-import { calcularPlanExpira } from '@/lib/planExpira'
+import { DIAS_ANTES_DE_COBRAR, fechaCancelacionProgramada, restarDias } from '@/lib/suscripciones'
+import {
+  calcularVencimientoCompra,
+  clasificarCambio,
+  esperaVencimiento,
+  etiquetaPlan,
+  nombreConPeriodo,
+  textoEsperaVencimiento,
+  type EstadoPlan,
+} from '@/lib/cambioPlan'
 import { cobroAutomaticoHabilitado } from '@/lib/frenoCobro'
 import {
   desbloqueosConfirmados,
@@ -70,6 +79,13 @@ export default function SuscripcionPage() {
   const [errorCancelar, setErrorCancelar] = useState('')
   // Reactivar tambien puede fallar, y hasta CIERRE 1 fallaba en silencio.
   const [errorReactivar, setErrorReactivar] = useState('')
+  // CIERRE 6a: ningun pago sale al primer clic. 'confirmar' muestra precio,
+  // nuevo vencimiento y dias extra antes de ir a Wompi; 'espera' explica que
+  // una bajada se elige al vencer (sin prometer un cambio agendado).
+  const [hojaPlan, setHojaPlan] = useState<{ tipo: 'confirmar' | 'espera'; plan: Plan; periodo: Periodo } | null>(null)
+  // El checkout fallaba en silencio (solo consola); desde 6a puede negarse a
+  // proposito (cobro automatico en vuelo, bajada) y el usuario tiene que verlo.
+  const [errorPago, setErrorPago] = useState('')
   // Mientras algo esta en vuelo se deshabilitan TODOS los botones (evita dobles
   // cobros), pero solo el del plan en vuelo cambia de label.
   const cambiando = planEnProceso !== null
@@ -77,6 +93,13 @@ export default function SuscripcionPage() {
   // periodo_plan es texto libre en DB: se estrecha a Periodo aquí (todo lo que no
   // sea 'anual' cuenta como mensual) para poder compararlo y tarifarlo sin casts.
   const periodoActual: Periodo = rest?.periodo_plan === 'anual' ? 'anual' : 'mensual'
+  // La fila TAL CUAL (sin estrechar) para lib/cambioPlan: es la misma forma que
+  // lee el camino compartido del pago, asi la hoja anuncia lo que se aplicara.
+  const estadoActual: EstadoPlan = {
+    plan: rest?.plan ?? 'gratis',
+    periodo: rest?.periodo_plan ?? null,
+    planExpira: rest?.plan_expira ?? null,
+  }
   // Un plan pago con fecha de renovación vigente (comparación de fechas CALENDARIO
   // en COT, ambas 'YYYY-MM-DD'). Sin plan_expira se asume activo: el plan pago ya
   // está escrito y la fecha es opcional en filas anteriores al webhook.
@@ -250,9 +273,11 @@ export default function SuscripcionPage() {
     return () => window.removeEventListener('pageshow', alRestaurar)
   }, [])
 
-  // Ruteo del boton: bajar a gratis es cambio directo; subir a un plan pago
-  // pasa por Wompi (F4.a-2) y NO escribe el plan aqui (lo confirma el webhook).
-  function cambiarPlan(nuevoPlan: Plan) {
+  // Ruteo del boton: bajar a gratis es cambio directo; un plan pago pasa por
+  // Wompi (F4.a-2) y NO escribe el plan aqui (lo confirma el webhook).
+  // CIERRE 6a: el pago abre primero la hoja de confirmacion, y una bajada con
+  // tiempo pagado abre la hoja informativa (el checkout la rechazaria con 409).
+  function cambiarPlan(nuevoPlan: Plan, periodoCompra: Periodo = periodo) {
     if (!rest?.id) return
     // Bajar a Gratis NO se ejecuta al primer clic: abre la hoja compartida.
     // bajarAGratis solo corre desde su onConfirm, asi que cerrar sin confirmar
@@ -261,7 +286,11 @@ export default function SuscripcionPage() {
       setConfirmarCancelar(true)
       return
     }
-    void iniciarPagoWompi(nuevoPlan)
+    setErrorPago('')
+    const objetivo = { plan: nuevoPlan, periodo: periodoCompra }
+    const clase = clasificarCambio(estadoActual, objetivo, fechaColombia())
+    const tipo = esperaVencimiento(clase, estadoActual, fechaColombia()) ? 'espera' : 'confirmar'
+    setHojaPlan({ tipo, ...objetivo })
   }
 
   // Cancelar NO es bajar de plan (F4.b-1). Con tiempo pagado por delante el
@@ -368,17 +397,28 @@ export default function SuscripcionPage() {
     setReactivando(false)
   }
 
-  async function iniciarPagoWompi(nuevoPlan: Plan) {
+  async function iniciarPagoWompi(nuevoPlan: Plan, periodoCompra: Periodo) {
     setPlanEnProceso(nuevoPlan)
+    setErrorPago('')
     try {
       const res = await fetch('/api/wompi/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plan: nuevoPlan, periodo }),
+        body: JSON.stringify({ plan: nuevoPlan, periodo: periodoCompra }),
       })
-      const data = await res.json()
+      const data = await res.json().catch(() => null)
       if (!res.ok || !data?.url) {
-        console.error('[suscripcion] checkout Wompi fallo:', data?.error)
+        // Un 409 es una negativa ESPERADA (no un fallo): console.error abriria
+        // el overlay de errores de Next en dev.
+        if (res.status === 409) console.info('[suscripcion] checkout rechazado (409):', data?.error)
+        else console.error('[suscripcion] checkout Wompi fallo:', data?.error)
+        // El 409 trae un mensaje para el usuario (cobro automatico en vuelo,
+        // bajada que espera al vencimiento); los demas errores son tecnicos.
+        setErrorPago(
+          res.status === 409 && typeof data?.error === 'string'
+            ? data.error
+            : 'No pudimos iniciar el pago. Intenta de nuevo.'
+        )
         setPlanEnProceso(null)
         return
       }
@@ -389,6 +429,7 @@ export default function SuscripcionPage() {
       window.location.href = data.url
     } catch (err) {
       console.error('[suscripcion] error iniciando pago:', err)
+      setErrorPago('No pudimos iniciar el pago. Intenta de nuevo.')
       setPlanEnProceso(null)
     }
   }
@@ -431,6 +472,26 @@ export default function SuscripcionPage() {
   const nombrePlanActual = planes.find(p => p.id === planActual)?.nombre ?? planActual
   const nombrePlanProgramado =
     planes.find(p => p.id === rest?.plan_programado)?.nombre ?? rest?.plan_programado ?? ''
+
+  // Datos de la hoja abierta (CIERRE 6a), todo desde lib/cambioPlan: la misma
+  // cuenta que repite el camino compartido del pago al aplicar.
+  const compraHoja = hojaPlan ? calcularVencimientoCompra(estadoActual, hojaPlan) : null
+  const hoja = hojaPlan && compraHoja
+    ? {
+        titulo: etiquetaPlan(clasificarCambio(estadoActual, hojaPlan, fechaColombia()), hojaPlan, estadoActual),
+        compra: compraHoja,
+        precio: precioDe(hojaPlan.plan, hojaPlan.periodo),
+        actualTexto: nombreConPeriodo(planActual, periodoActual),
+        proximoCobro: restarDias(compraHoja.planExpira, DIAS_ANTES_DE_COBRAR),
+      }
+    : null
+  const estiloLineaHoja = { fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px', lineHeight: 1.5 }
+  const cerrarHoja = () => setHojaPlan(null)
+  const confirmarHoja = () => {
+    if (!hojaPlan) return
+    setHojaPlan(null)
+    void iniciarPagoWompi(hojaPlan.plan, hojaPlan.periodo)
+  }
 
   return (
     <div style={{ background: 'var(--bg-primary)', minHeight: '100vh' }}>
@@ -629,12 +690,30 @@ export default function SuscripcionPage() {
           </div>
         </div>
 
+        {/* Error del checkout (CIERRE 6a): antes solo iba a consola. */}
+        {errorPago && (
+          <div style={{ padding: '0 20px', marginBottom: '12px' }}>
+            <div role="alert" style={{
+              background: 'var(--color-danger-light)', border: '1px solid var(--color-danger)',
+              borderRadius: 'var(--radius-md)', padding: '12px 14px',
+              fontSize: '13px', color: 'var(--color-danger)', lineHeight: 1.5,
+            }}>
+              {errorPago}
+            </div>
+          </div>
+        )}
+
         {/* Planes */}
         <div id="planes" />
         {planes.map((plan) => {
           // "Actual" exige plan Y periodo: con el toggle en anual, un pro mensual
-          // NO es el plan actual (y por eso debe poder contratarse).
-          const esActual = plan.id === planActual && periodo === periodoActual
+          // NO es el plan actual (y por eso debe poder contratarse). CIERRE 6a:
+          // lo decide clasificarCambio, la misma regla que aplica el checkout
+          // (Gratis es la card actual de quien esta en Gratis en los dos
+          // periodos del toggle).
+          const objetivoCard = { plan: plan.id, periodo }
+          const claseCard = clasificarCambio(estadoActual, objetivoCard, fechaColombia())
+          const esActual = claseCard === 'renovacion'
           const precio = periodo === 'mensual' ? plan.precioMensual : Math.round(plan.precioAnual / 12)
           const precioTotal = periodo === 'anual' ? plan.precioAnual : null
 
@@ -661,7 +740,7 @@ export default function SuscripcionPage() {
                       {precio === 0 ? '$0' : `$${formatoPrecio(precio)}`}
                       {precio > 0 && <span style={{ fontSize: '12px', fontWeight: 400, color: 'var(--text-secondary)' }}>/mes</span>}
                     </div>
-                    {precioTotal && precio > 0 && (
+                    {precioTotal !== null && precioTotal > 0 && (
                       <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>
                         ${formatoPrecio(precioTotal)}/año
                       </div>
@@ -695,8 +774,10 @@ export default function SuscripcionPage() {
                     style={{ width: '100%', marginTop: '10px' }}
                     disabled={cambiando}>
                     {/* Solo el plan EN VUELO cambia de label; los demas quedan
-                        deshabilitados con su texto normal (Boton los atenua). */}
-                    {planEnProceso === plan.id ? 'Cambiando...' : plan.id === 'gratis' ? 'Bajar a Gratis' : `Subir a ${plan.nombre}`}
+                        deshabilitados con su texto normal (Boton los atenua).
+                        CIERRE 6a: el texto sale de la clase del cambio (antes
+                        un Pro veia "Subir a Básico"). */}
+                    {planEnProceso === plan.id ? 'Cambiando...' : etiquetaPlan(claseCard, objetivoCard, estadoActual)}
                   </Boton>
                 )}
 
@@ -706,15 +787,16 @@ export default function SuscripcionPage() {
                     correo "Pagar mi plan") no tenía cómo. Usa el checkout de
                     siempre con el mismo plan+periodo; el webhook lo trata como
                     renovación y SUMA sobre plan_expira. El nuevo vencimiento se
-                    calcula con la MISMA función que usa el webhook. */}
+                    calcula con la MISMA función que usa el webhook. Desde 6a
+                    también pasa por la hoja de confirmación. */}
                 {esActual && plan.id !== 'gratis' && (() => {
                   const nuevoVencimiento = fechaLargaColombia(
-                    calcularPlanExpira(periodoActual, new Date(), rest?.plan_expira ?? null)
+                    calcularVencimientoCompra(estadoActual, objetivoCard).planExpira
                   )
                   return (
                     <>
                       <Boton variante="primario"
-                        onClick={() => iniciarPagoWompi(plan.id)}
+                        onClick={() => cambiarPlan(plan.id, periodo)}
                         style={{ width: '100%', marginTop: '10px' }}
                         disabled={cambiando}>
                         {planEnProceso === plan.id ? 'Renovando...' : 'Renovar'}
@@ -825,6 +907,70 @@ export default function SuscripcionPage() {
               </div>
             )}
           </ConfirmarEliminar>
+        )}
+
+        {/* CIERRE 6a: hoja de CONFIRMACION antes de ir a Wompi. Todo sale de
+            lib/cambioPlan, la misma cuenta que hace el camino compartido del
+            pago; el servidor la repite sobre la fila del momento en que el
+            pago se aplica, por eso se avisa que es "para hoy". */}
+        {hojaPlan?.tipo === 'confirmar' && hoja && (
+          <Modal isOpen onClose={cerrarHoja} title={hoja.titulo} maxWidth={460}>
+            <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '12px' }}>
+              Plan {nombreConPeriodo(hojaPlan.plan, hojaPlan.periodo)}: ${formatoPrecio(hoja.precio)}
+              {hojaPlan.periodo === 'anual' ? '/año' : '/mes'}
+            </div>
+            <div style={estiloLineaHoja}>Pagas hoy ${formatoPrecio(hoja.precio)}.</div>
+            {hoja.compra.planExpira && (
+              <div style={estiloLineaHoja}>Nuevo vencimiento: {fechaLargaColombia(hoja.compra.planExpira)}.</div>
+            )}
+            {hoja.compra.diasCredito > 0 && (
+              <div style={estiloLineaHoja}>
+                Incluye {hoja.compra.diasCredito} {hoja.compra.diasCredito === 1 ? 'día extra' : 'días extra'} por lo que te
+                quedaba de tu plan {hoja.actualTexto}.
+              </div>
+            )}
+            {hayCambioProgramado && <div style={estiloLineaHoja}>Se cancela la baja programada.</div>}
+            {renuevaAutomatico && hoja.proximoCobro && (
+              <div style={estiloLineaHoja}>
+                Tu renovación automática sigue activa: el próximo cobro será de ${formatoPrecio(hoja.precio)} el{' '}
+                {fechaLargaColombia(hoja.proximoCobro)}.
+              </div>
+            )}
+            <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginBottom: '16px', lineHeight: 1.45 }}>
+              Calculado para hoy. Si el pago se confirma otro día, la fecha se ajusta.
+            </div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <Boton variante="primario" onClick={confirmarHoja} style={{ flex: 1 }}>
+                Ir a pagar
+              </Boton>
+              <Boton variante="secundario" onClick={cerrarHoja} style={{ flex: 1 }}>
+                Volver
+              </Boton>
+            </div>
+          </Modal>
+        )}
+
+        {/* CIERRE 6a: hoja INFORMATIVA de una bajada con tiempo pagado. NO
+            promete un cambio agendado (eso es 6b): solo dice hasta cuando sigue
+            el plan y que el otro se elige al vencer. */}
+        {hojaPlan?.tipo === 'espera' && hoja && (
+          <Modal isOpen onClose={cerrarHoja} title={hoja.titulo} maxWidth={460}>
+            <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '10px', lineHeight: 1.5 }}>
+              {textoEsperaVencimiento(
+                hoja.actualTexto,
+                fechaLargaColombia(expiraVigente),
+                nombreConPeriodo(hojaPlan.plan, hojaPlan.periodo)
+              )}
+            </div>
+            {renuevaAutomatico && (
+              <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '10px', lineHeight: 1.5 }}>
+                Si no quieres que se renueve como {hoja.actualTexto}, desactiva la renovación automática.
+              </div>
+            )}
+            <Boton variante="secundario" onClick={cerrarHoja} style={{ width: '100%', marginTop: '6px' }}>
+              Entendido
+            </Boton>
+          </Modal>
         )}
 
       </div>

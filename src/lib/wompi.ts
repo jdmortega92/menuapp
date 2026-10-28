@@ -111,6 +111,9 @@ export function construirUrlCheckout(p: {
   signature: string
   redirectUrl: string
   customerEmail?: string
+  /** ISO 8601 UTC ('2023-06-09T20:28:50.000Z'). Si viene, TIENE que ser el
+   *  mismo valor que entro en firmaIntegridad (CIERRE 6a). */
+  expirationTime?: string
 }): string {
   const params: [string, string][] = [
     ['public-key', p.publicKey],
@@ -120,6 +123,7 @@ export function construirUrlCheckout(p: {
     ['signature:integrity', p.signature],
     ['redirect-url', p.redirectUrl],
   ]
+  if (p.expirationTime) params.push(['expiration-time', p.expirationTime])
   if (p.customerEmail) params.push(['customer-data:email', p.customerEmail])
   const qs = params.map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&')
   return `https://checkout.wompi.co/p/?${qs}`
@@ -130,7 +134,9 @@ export function construirUrlCheckout(p: {
 // y mismo periodo). Solo en ese caso el tiempo pagado se acumula: pagar dos
 // veces el mismo servicio jamas puede costarle dias al usuario.
 // UPGRADE (otro plan) o CAMBIO DE PERIODO (mismo plan, otro periodo) = ciclo
-// NUEVO desde hoy, sin prorrateo ni arrastre (decision F4, ROADMAP-FIXES.md:636).
+// NUEVO desde hoy. Desde CIERRE 6a ya no es "sin prorrateo": lo no usado del
+// plan pago vigente se convierte en dias extra (lib/cambioPlan, que aplica esta
+// misma igualdad de plan y periodo en calcularVencimientoCompra).
 export function esRenovacion(p: {
   plan: Plan
   periodo: Periodo

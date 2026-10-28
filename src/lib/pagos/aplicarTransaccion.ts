@@ -12,18 +12,20 @@
 
 import { createAdminClient } from '@/lib/supabase-admin'
 import {
-  calcularPlanExpira,
   esReferenciaAutomatica,
-  esRenovacion,
   parsearReferencia,
   periodoDeReferenciaAutomatica,
   type WompiTransaction,
 } from '@/lib/wompi'
 import { centavosDe, precioDe } from '@/lib/planes'
 import { fechaColombia } from '@/lib/fechas'
+import { calcularVencimientoCompra } from '@/lib/cambioPlan'
 import { notificarPlanActivo, notificarRenovacionCobrada } from '@/lib/email/notificaciones'
+import { enviarAlertaRevision } from '@/lib/email/alertaAdmin'
 import { esIdTransaccionValido, motivoMontoInvalido, type ResultadoAplicar } from './transaccion'
 import { FILTRO_ORIGEN_APROBADO } from './cobroEstado'
+import { decidirCobroAutomatico } from './conciliacion'
+import { fallarCobroAutomatico, type MarcaFallo } from './cobroFallido'
 
 export type OrigenPago = 'webhook' | 'retorno' | 'conciliacion'
 
@@ -88,13 +90,32 @@ export async function aplicarTransaccionAprobada(
   // es una renovacion, y usuario_id como unica fuente valida del destinatario.
   const { data: restPrev } = await admin
     .from('restaurantes')
-    .select('plan, periodo_plan, plan_expira, usuario_id')
+    .select('plan, periodo_plan, plan_expira, plan_programado, usuario_id')
     .eq('id', restauranteId)
     .maybeSingle()
   if (!restPrev) {
     // Reintentar no crea el restaurante: queda en el log para revisar.
     console.error(`[${etq}] restaurante no existe reference=${reference} restaurante=${restauranteId}`)
     return { tipo: 'restaurante_inexistente' }
+  }
+
+  // GUARDA DEL COBRO AUTOMATICO (CIERRE 6a, C-15 y C-5). Un cobro automatico
+  // solo renueva la fila TAL COMO SE COBRO: mismo plan, periodo y plan_expira
+  // que la referencia, y sin cambio agendado. Si el usuario subio de plan a mano
+  // mientras el cobro viajaba, aplicar la referencia vieja lo bajaria; si
+  // cancelo, aplicar_pago_aprobado le borraria la cancelacion. Nada se escribe
+  // en restaurantes ni en facturas: la plata entro y la resuelve un humano.
+  if (esReferenciaAutomatica(reference)) {
+    const guarda = decidirCobroAutomatico(reference, restauranteId, restPrev)
+    if (guarda.accion === 'revision') {
+      console.error(`[${etq}] cobro automatico no corresponde a la fila reference=${reference} motivo=${guarda.motivo}`)
+      // La conciliacion marca y alerta por su cuenta (decidirTrasAplicar).
+      if (origen === 'conciliacion') return { tipo: 'estado_cambio', motivo: guarda.motivo }
+      const marca = await marcarRevisionCobroAutomatico(admin, transaction, restauranteId, guarda.motivo, etq)
+      // Sin marca escrita, 500: Wompi reentrega y se vuelve a intentar.
+      if (marca === 'error') return { tipo: 'error' }
+      return { tipo: 'estado_cambio', motivo: guarda.motivo }
+    }
   }
   // El plan REAL de la fila antes del RPC, sin default: el retorno lo devuelve
   // para decidir el aviso de desbloqueo, y un 'gratis' inventado lo dispararia.
@@ -103,18 +124,21 @@ export async function aplicarTransaccionAprobada(
   const usuarioId = restPrev?.usuario_id as string | undefined
 
   // F4.b-1 (bug B): renovar lo MISMO acumula sobre el vencimiento vigente (no
-  // se queman los dias que quedaban); upgrade o cambio de periodo arrancan
-  // ciclo nuevo desde hoy (decision F4, sin prorrateo).
-  const renovacion = esRenovacion({
-    plan,
-    periodo,
-    planActual: restPrev?.plan as string | undefined,
-    periodoActual: restPrev?.periodo_plan as string | undefined,
-  })
-  const planExpira = calcularPlanExpira(
-    periodo,
-    new Date(),
-    renovacion ? (restPrev?.plan_expira as string | null | undefined) : null
+  // se queman los dias que quedaban). CIERRE 6a: cualquier otra compra arranca
+  // ciclo nuevo desde hoy MAS los dias que vale lo no usado del plan pago
+  // vigente (lib/cambioPlan; reemplaza la decision F4 "sin prorrateo"). Se
+  // calcula AQUI, sobre la fila leida justo antes del RPC, y no al abrir el
+  // checkout: aplicar_pago_aprobado solo escribe si plan, periodo y
+  // plan_expira siguen como se leyeron, asi que el credito es el de la fila
+  // que de verdad se reemplaza (MA409 -> se recalcula sobre la nueva).
+  const { planExpira, diasCredito } = calcularVencimientoCompra(
+    {
+      plan: restPrev.plan as string | null,
+      periodo: restPrev.periodo_plan as string | null,
+      planExpira: restPrev.plan_expira as string | null,
+    },
+    { plan, periodo },
+    new Date()
   )
   // FACTURA + PLAN EN UNA SOLA TRANSACCION (CIERRE 3, C-1 / D-HIGH-2): la
   // funcion inserta la factura con ON CONFLICT (numero) DO NOTHING y solo si
@@ -206,7 +230,57 @@ export async function aplicarTransaccionAprobada(
     }
   }
 
-  return { tipo: 'aplicado', plan, periodo, planAnterior, planExpira }
+  return { tipo: 'aplicado', plan, periodo, planAnterior, planExpira, diasCredito }
+}
+
+// ── REVISION por la guarda del cobro automatico (CIERRE 6a) ──────────────
+// Por el camino compartido de fallo (CAS desde NULL o INICIADO, sin correo al
+// dueno: no sabemos que decirle). Se marca la fila que reclamo ESE periodo.
+// Alerta al admin solo si esta entrega gano la marca (las reentregas no
+// re-alertan) o si no hay fila que marcar (la plata entro igual).
+async function marcarRevisionCobroAutomatico(
+  admin: ReturnType<typeof createAdminClient>,
+  transaction: WompiTransaction,
+  restauranteId: string,
+  motivo: string,
+  etq: string
+): Promise<MarcaFallo | 'sin_fuente'> {
+  const reference = transaction.reference as string
+  const periodoFacturado = periodoDeReferenciaAutomatica(reference)
+  const txId = esIdTransaccionValido(transaction.id) ? transaction.id : null
+  const alertar = () =>
+    enviarAlertaRevision([{ restauranteId, motivo, referencia: reference, txId }], etq, 'pago')
+
+  const { data: fuentes, error } = await admin
+    .from('fuentes_pago')
+    .select('id')
+    .eq('restaurante_id', restauranteId)
+    .eq('ultimo_cobro_periodo', periodoFacturado)
+  if (error) {
+    console.error(`[${etq}] lectura de la fuente para REVISION fallo restaurante=${restauranteId}:`, error.message)
+    return 'error'
+  }
+  if (!fuentes || fuentes.length === 0) {
+    console.error(`[${etq}] cobro automatico sin fuente que marcar restaurante=${restauranteId} periodo=${periodoFacturado}`)
+    await alertar()
+    return 'sin_fuente'
+  }
+
+  let resultado: MarcaFallo = 'ya_registrado'
+  for (const f of fuentes) {
+    const { marca } = await fallarCobroAutomatico(admin, {
+      fuenteId: f.id as string,
+      restauranteId,
+      periodoFacturado,
+      destino: 'REVISION',
+      motivo,
+      etiqueta: etq,
+    })
+    if (marca === 'marcado') resultado = 'marcado'
+    else if (marca === 'error' && resultado !== 'marcado') resultado = 'error'
+  }
+  if (resultado === 'marcado') await alertar()
+  return resultado
 }
 
 // ── Marca de exito del cobro automatico (CIERRE 5b) ──────────────────────

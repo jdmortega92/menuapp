@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { CONTACTO_EMAIL } from '@/lib/contacto'
 
 export default function LegalPage() {
   const router = useRouter()
@@ -72,7 +73,7 @@ export default function LegalPage() {
             <p style={{ marginBottom: '16px' }}>Estos términos se rigen por las leyes de la República de Colombia. Cualquier disputa se resolverá ante los tribunales competentes de la ciudad de Popayán, Cauca.</p>
 
             <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '8px' }}>12. Contacto</div>
-            <p style={{ marginBottom: '16px' }}>Para preguntas sobre estos términos, escríbenos a soporte@menuapp.co</p>
+            <p style={{ marginBottom: '16px' }}>Para preguntas sobre estos términos, escríbenos a {CONTACTO_EMAIL}</p>
           </div>
         )}
 
@@ -117,7 +118,7 @@ export default function LegalPage() {
             <p style={{ marginBottom: '16px' }}>Podemos actualizar esta política periódicamente. Te notificaremos por correo electrónico sobre cambios significativos. La fecha de última actualización se indica al inicio de este documento.</p>
 
             <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '8px' }}>12. Contacto y quejas</div>
-            <p style={{ marginBottom: '16px' }}>Para ejercer tus derechos como titular de datos o presentar quejas relacionadas con el tratamiento de tus datos personales, escríbenos a: soporte@menuapp.co. También puedes presentar quejas ante la Superintendencia de Industria y Comercio (SIC) en www.sic.gov.co.</p>
+            <p style={{ marginBottom: '16px' }}>Para ejercer tus derechos como titular de datos o presentar quejas relacionadas con el tratamiento de tus datos personales, escríbenos a: {CONTACTO_EMAIL}. También puedes presentar quejas ante la Superintendencia de Industria y Comercio (SIC) en www.sic.gov.co.</p>
           </div>
         )}
 

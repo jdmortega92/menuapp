@@ -40,8 +40,14 @@ export function motivoMontoInvalido(
 export type ResultadoAplicar =
   /** planAnterior: el plan de la fila leido ANTES del RPC, tal cual (null si no
    *  vino). Sin default a 'gratis': de este valor depende el aviso de desbloqueo. */
-  | { tipo: 'aplicado'; plan: Plan; periodo: Periodo; planAnterior: string | null; planExpira: string }
+  /** diasCredito (CIERRE 6a): dias extra por el plan pago que quedaba. El
+   *  camino compartido siempre lo llena; es opcional solo por los llamadores
+   *  que arman el resultado a mano. */
+  | { tipo: 'aplicado'; plan: Plan; periodo: Periodo; planAnterior: string | null; planExpira: string; diasCredito?: number }
   | { tipo: 'duplicado' }
+  /** Cobro AUTOMATICO que ya no corresponde a la fila (CIERRE 6a, C-15/C-5):
+   *  no se escribio nada en restaurantes ni facturas; queda en REVISION. */
+  | { tipo: 'estado_cambio'; motivo: string }
   | { tipo: 'conflicto' }
   | { tipo: 'monto_invalido' }
   | { tipo: 'referencia_invalida' }
@@ -61,6 +67,9 @@ export function respuestaWebhook(r: ResultadoAplicar): { status: number; body: R
     case 'referencia_invalida':
     case 'restaurante_inexistente':
       return { status: 200, body: { recibido: true } }
+    // Plata cobrada que un humano tiene que resolver: reintentar no cambia nada.
+    case 'estado_cambio':
+      return { status: 200, body: { recibido: true, resultado: 'estado_cambio' } }
     case 'conflicto':
     case 'error':
       return { status: 500, body: { error: 'DB' } }
