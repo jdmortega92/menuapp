@@ -498,6 +498,30 @@ Decision 2026-07-03: Julian mantiene $15k/$29k mensual ($150k/$290k anual, ~2 me
 
 ## Items
 
+### AUD-5b Conciliacion de cobros automaticos (CIERRE 5b) - CLOSED
+- **Closed**: 2026-10-27. Migracion 20261027000000_cobro_reconciliacion.sql aplicada en produccion antes del deploy.
+- **Hecho**:
+  - fuentes_pago: columnas ultimo_cobro_tx_id y ultimo_cobro_referencia; ultimo_cobro_estado admite APROBADO y REVISION; indice unico parcial del tx id e indice parcial de INICIADO; anon sin acceso y authenticated solo lectura.
+  - Cron: conciliacion primero, aunque el freno este puesto, de filas INICIADO con mas de 1 hora: factura primero, consulta a Wompi con la llave privada, guarda de estado antes de aplicar, rechazos por el camino compartido de fallo y lo dudoso a REVISION. PENDING pasa a REVISION a los 7 dias. Maximo 200 filas por corrida.
+  - Referencia guardada en el reclamo y tx id guardado despues del POST con CAS. Un POST con resultado desconocido va a REVISION sin correo al dueno.
+  - C-8: marca APROBADO en el camino compartido. D-MED-5: FALLIDO solo desde NULL, INICIADO o REVISION, y el correo al dueno solo si gano el CAS. C-9: cada barrido y cada fila aislados; un reintento en las lecturas de candidatos y fuentes.
+  - Alerta: un correo por corrida a ALERTAS_EMAIL con las filas que entraron a REVISION. Variable agregada en Vercel y en .env.local.
+- **Hallazgos corregidos antes del commit**:
+  - Faltaba la guarda de estado antes de aplicar.
+  - Los barridos A y B no estaban aislados.
+  - Factura primero para evitar alertas falsas cuando el webhook ya aplico.
+  - Texto de la alerta con tildes y singular o plural.
+- **Smoke**:
+  - Local, con filas sembradas en el restaurante de prueba: sin tx id -> REVISION y alerta; tx inexistente -> REVISION consulta 404 y alerta; cobro de hace 10 minutos -> sin cambios; fila ya en REVISION -> sin cambios ni alerta; pago manual aprobado -> REVISION referencia no automatica y plan sin cambios.
+  - Produccion: una corrida manual del cron encontro una fila de prueba que quedo INICIADO por un error en la limpieza del smoke, la paso a REVISION y la alerta llego al correo. Fila restaurada a mano: FALLIDO, webhook ERROR, 2026-08-06.
+  - Tests 677 -> 737.
+- **Datos**: fila de prueba 361b6e3e-669c-43ce-9dee-9e4b399f0fcf: revocada_en quedo con la hora del smoke (el valor original se perdio) y ultimo_cobro_periodo se restauro por deduccion a 2026-08-07, sin factura que lo confirme. Sin efecto: es una fuente VOIDED de prueba.
+- **Pendiente**:
+  - Cierre 5c: busqueda de transacciones por referencia para el resultado desconocido del POST; guarda contra bajar de plan desde el webhook; fuentes duplicadas por periodo en datos viejos; pantalla para filas en REVISION; gracia en el barrido B para filas en REVISION.
+  - Cierre 9 o 15: probar con un cobro automatico real la marca APROBADO y la conciliacion aplicada.
+  - Proceso: en un smoke con respaldo, nunca borrar el respaldo antes de verificar la limpieza.
+- **Commit**: 8880f2e.
+
 ### AUD-5a Confirmacion del pago al volver de Wompi (CIERRE 5a) - CLOSED
 - **Closed**: 2026-10-27. Sin SQL.
 - **Hecho**:
